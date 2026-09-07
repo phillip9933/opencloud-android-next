@@ -1,0 +1,51 @@
+name: Quality and visual regression
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, tests, goldens, and debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Verify formatting
+        run: ./gradlew ktlintCheck --no-daemon
+
+      - name: Run static analysis
+        run: ./gradlew detekt --no-daemon
+
+      - name: Verify Compose goldens
+        run: ./gradlew :app:verifyRoborazziDebug --no-daemon
+
+      - name: Build and run unit tests
+        run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+
+      - name: Upload reports and visual diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports-and-visual-diffs
+          if-no-files-found: ignore
+          path: |
+            **/build/reports/**
+            **/build/outputs/roborazzi/**
+            app/build/outputs/apk/debug/app-debug.apk

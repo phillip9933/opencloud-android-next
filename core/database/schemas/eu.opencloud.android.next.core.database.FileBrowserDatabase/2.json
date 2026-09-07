@@ -1,0 +1,236 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "d4fa704b9555d8f58d76e6ad6a20c697",
+    "entities": [
+      {
+        "tableName": "spaces",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`accountId` TEXT NOT NULL, `driveId` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `description` TEXT, `ownerName` TEXT, `rootId` TEXT NOT NULL, `rootWebDavUrl` TEXT, `rootETag` TEXT, `quotaBytes` INTEGER, `isDisabled` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, PRIMARY KEY(`accountId`, `driveId`))",
+        "fields": [
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "driveId",
+            "columnName": "driveId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ownerName",
+            "columnName": "ownerName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rootId",
+            "columnName": "rootId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rootWebDavUrl",
+            "columnName": "rootWebDavUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "rootETag",
+            "columnName": "rootETag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "quotaBytes",
+            "columnName": "quotaBytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDisabled",
+            "columnName": "isDisabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "isDeleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "accountId",
+            "driveId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_spaces_accountId_name",
+            "unique": false,
+            "columnNames": [
+              "accountId",
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_spaces_accountId_name` ON `${TABLE_NAME}` (`accountId`, `name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "resources",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`accountId` TEXT NOT NULL, `spaceId` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `parentId` TEXT, `path` TEXT NOT NULL, `name` TEXT NOT NULL, `kind` TEXT NOT NULL, `mimeType` TEXT, `sizeBytes` INTEGER NOT NULL, `eTag` TEXT, `modifiedAtEpochMillis` INTEGER NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `isFavorite` INTEGER NOT NULL, `hasLocalCopy` INTEGER NOT NULL, `localPath` TEXT, `offlinePinned` INTEGER NOT NULL, PRIMARY KEY(`accountId`, `spaceId`, `remoteId`))",
+        "fields": [
+          {
+            "fieldPath": "accountId",
+            "columnName": "accountId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spaceId",
+            "columnName": "spaceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentId",
+            "columnName": "parentId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eTag",
+            "columnName": "eTag",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "modifiedAtEpochMillis",
+            "columnName": "modifiedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFavorite",
+            "columnName": "isFavorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hasLocalCopy",
+            "columnName": "hasLocalCopy",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPath",
+            "columnName": "localPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "offlinePinned",
+            "columnName": "offlinePinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "accountId",
+            "spaceId",
+            "remoteId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_resources_accountId_spaceId_parentId_name",
+            "unique": true,
+            "columnNames": [
+              "accountId",
+              "spaceId",
+              "parentId",
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_resources_accountId_spaceId_parentId_name` ON `${TABLE_NAME}` (`accountId`, `spaceId`, `parentId`, `name`)"
+          },
+          {
+            "name": "index_resources_accountId_spaceId_parentId",
+            "unique": false,
+            "columnNames": [
+              "accountId",
+              "spaceId",
+              "parentId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_resources_accountId_spaceId_parentId` ON `${TABLE_NAME}` (`accountId`, `spaceId`, `parentId`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd4fa704b9555d8f58d76e6ad6a20c697')"
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+build:
+  maxIssues: 0
+
+config:
+  validation: true
+  warningsAsErrors: true
+
+style:
+  MagicNumber:
+    active: false
+  WildcardImport:
+    active: false
+  UnusedPrivateMember:
+    ignoreAnnotated:
+      - Preview
+  MaxLineLength:
+    active: false
+  FunctionOnlyReturningConstant:
+    active: false
+
+complexity:
+  LongMethod:
+    threshold: 120
+  TooManyFunctions:
+    active: false
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated:
+      - Composable
+      - Preview
+
+formatting:
+  active: false
+
+Compose:
+  ComposableAnnotationNaming:
+    active: true
+  ComposableNaming:
+    active: true
+  CompositionLocalAllowlist:
+    active: true
+    allowedCompositionLocals: LocalOpenCloudExtendedColors
+  Material2:
+    active: true
+  PreviewPublic:
+    active: true

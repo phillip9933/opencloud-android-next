@@ -1,0 +1,59 @@
+package eu.opencloud.android.next.core.model.auth
+
+const val OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID = "OpenCloudAndroid"
+
+data class Account(
+    val id: String,
+    val serverUrl: String,
+    val userId: String,
+    val displayName: String,
+    val authenticationType: AuthenticationType,
+)
+
+enum class AuthenticationType {
+    BASIC,
+    OIDC,
+}
+
+data class UserProfile(
+    val id: String,
+    val displayName: String,
+    val email: String?,
+)
+
+data class ServerCapabilities(
+    val version: String?,
+    val sharingEnabled: Boolean,
+    val publicSharingEnabled: Boolean,
+    val spacesEnabled: Boolean,
+    val tusSupported: Boolean,
+)
+
+data class OidcConfiguration(
+    val issuer: String,
+    val authorizationEndpoint: String,
+    val tokenEndpoint: String,
+    val registrationEndpoint: String?,
+    val clientId: String?,
+    val scopes: List<String>,
+)
+
+data class WebFingerMetadata(
+    val issuer: String?,
+    val clientId: String?,
+    val scopes: List<String>?,
+)
+
+data class AuthTokens(
+    val accessToken: String,
+    val refreshToken: String?,
+    val expiresAtEpochSeconds: Long,
+    val tokenType: String,
+    val scope: String?,
+)
+
+data class PkceRequest(
+    val authorizationUrl: String,
+    val state: String,
+    val codeVerifier: String,
+)
