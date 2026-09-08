@@ -3,8 +3,11 @@ package eu.opencloud.android.next.feature.auth
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
+import eu.opencloud.android.next.core.model.auth.AuthTokens
+import eu.opencloud.android.next.core.model.auth.AuthenticationType
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
 import eu.opencloud.android.next.core.network.OpenCloudApi
 import eu.opencloud.android.next.core.security.KeystoreCredentialStore
@@ -24,12 +27,27 @@ class AuthViewModel(
 ) : AndroidViewModel(application) {
     private val tlsPolicy = TlsPolicy(application)
     private val fileStore = FileBrowserStore(FileBrowserDatabase.create(application))
+    private val credentialStore = KeystoreCredentialStore(application)
     private var repository = repositoryFor("")
     private var discovery: DiscoveryResult? = null
     private var pkce: eu.opencloud.android.next.core.model.auth.PkceRequest? = null
 
-    private val mutableState = MutableStateFlow(AuthUiState())
+    private val mutableState = MutableStateFlow(AuthUiState(isRestoringSession = true))
     val state: StateFlow<AuthUiState> = mutableState.asStateFlow()
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val account =
+                fileStore.activeAccounts().firstOrNull { saved ->
+                    hasUsablePersistedCredential(saved, credentialStore, System.currentTimeMillis() / 1000)
+                }
+            mutableState.value =
+                mutableState.value.copy(
+                    activeAccountId = account?.id,
+                    isRestoringSession = false,
+                )
+        }
+    }
 
     fun discover(serverInput: String) =
         launchAuth {
@@ -144,13 +162,19 @@ class AuthViewModel(
         val baseClient = OkHttpClient.Builder().followRedirects(false).build()
         return AuthRepository(
             OpenCloudApi(tlsPolicy.applyTo(baseClient, serverUrl)),
-            KeystoreCredentialStore(getApplication()),
+            credentialStore,
         )
     }
 
     private suspend fun setSession(session: AuthenticatedSession) {
-        fileStore.saveAccount(session.account, session.capabilities)
-        mutableState.value = mutableState.value.copy(session = session, isLoading = false)
+        fileStore.saveAccount(session.account, session.capabilities, session.oidcConfiguration)
+        mutableState.value =
+            mutableState.value.copy(
+                session = session,
+                activeAccountId = session.account.id,
+                isLoading = false,
+                isRestoringSession = false,
+            )
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -175,6 +199,8 @@ data class AuthUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val session: AuthenticatedSession? = null,
+    val activeAccountId: String? = null,
+    val isRestoringSession: Boolean = false,
 )
 
 enum class AuthenticationMode {
@@ -189,3 +215,17 @@ private fun Throwable.toAuthError(): String =
         message?.contains("HTTP 401") == true -> "The server rejected these credentials."
         else -> message ?: "Unable to connect to the server."
     }
+
+internal fun hasUsablePersistedCredential(
+    account: AccountEntity,
+    credentialStore: eu.opencloud.android.next.core.security.CredentialStore,
+    nowEpochSeconds: Long,
+): Boolean =
+    when (account.authenticationType) {
+        AuthenticationType.BASIC.name -> credentialStore.readBasicPassword(account.id) != null
+        AuthenticationType.OIDC.name -> credentialStore.readTokens(account.id).isUsable(nowEpochSeconds)
+        else -> false
+    }
+
+private fun AuthTokens?.isUsable(nowEpochSeconds: Long): Boolean =
+    this != null && (expiresAtEpochSeconds > nowEpochSeconds || !refreshToken.isNullOrBlank())

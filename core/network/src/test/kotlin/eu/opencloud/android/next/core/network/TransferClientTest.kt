@@ -64,6 +64,25 @@ class TransferClientTest {
         val url = client.createTusUpload(server.url("uploads").toString(), "Bearer token", 5, "filename ZmlsZS50eHQ=")
         assertEquals(2, client.tusOffset(url, "Bearer token"))
         assertEquals(5, client.patchTus(url, "Bearer token", 2, 3, { ByteArrayInputStream("llo".toByteArray()) }, {}))
+        server.takeRequest()
+        server.takeRequest()
+        assertEquals("llo", server.takeRequest().body.readUtf8())
+    }
+
+    @Test
+    fun `tus patch writes only the declared chunk length`() {
+        server.enqueue(MockResponse().setResponseCode(204).setHeader("Upload-Offset", "3"))
+
+        client.patchTus(
+            server.url("uploads/1").toString(),
+            "Bearer token",
+            0,
+            3,
+            { ByteArrayInputStream("abcdef".toByteArray()) },
+            {},
+        )
+
+        assertEquals("abc", server.takeRequest().body.readUtf8())
     }
 
     @Test
@@ -74,5 +93,19 @@ class TransferClientTest {
                 ByteArrayInputStream(byteArrayOf())
             }, {})
         }
+    }
+
+    @Test
+    fun `create collection issues MKCOL and accepts an existing collection`() {
+        server.enqueue(MockResponse().setResponseCode(201))
+        server.enqueue(MockResponse().setResponseCode(405))
+
+        client.createCollection(server.url("Camera Uploads").toString(), "Bearer token")
+        client.createCollection(server.url("Camera Uploads/2026").toString(), "Bearer token")
+
+        val created = server.takeRequest()
+        assertEquals("MKCOL", created.method)
+        assertEquals("Bearer token", created.getHeader("Authorization"))
+        assertEquals("MKCOL", server.takeRequest().method)
     }
 }

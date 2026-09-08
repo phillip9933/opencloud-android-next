@@ -17,6 +17,12 @@ import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.TransferDirection
 import eu.opencloud.android.next.core.database.TransferEntity
+import eu.opencloud.android.next.core.database.TransferState
+import eu.opencloud.android.next.core.model.ResourceKind
+import eu.opencloud.android.next.core.network.TransferClient
+import eu.opencloud.android.next.core.security.TlsPolicy
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -30,6 +36,7 @@ class TransferManager(
         spaceId: String,
         parentPath: String?,
         source: Uri,
+        deleteSourceAfterSuccess: Boolean = false,
     ): String {
         require(source.scheme == "content" || source.scheme == "file") { "Choose a readable local file." }
         val metadata = sourceMetadata(source)
@@ -49,6 +56,7 @@ class TransferManager(
                 displayName = name,
                 mimeType = metadata.mimeType,
                 bytesTotal = metadata.size,
+                deleteSourceAfterSuccess = deleteSourceAfterSuccess,
                 createdAtEpochMillis = now,
                 updatedAtEpochMillis = now,
             )
@@ -85,6 +93,135 @@ class TransferManager(
         return transfer.id
     }
 
+    suspend fun makeAvailableOffline(resource: ResourceEntity) {
+        store.setOfflinePinned(resource, true)
+        if (resource.kind.name == "FOLDER") {
+            val request =
+                OneTimeWorkRequestBuilder<OfflineSyncWorker>()
+                    .setInputData(
+                        workDataOf(
+                            OfflineSyncWorker.ACCOUNT_ID to resource.accountId,
+                            OfflineSyncWorker.SPACE_ID to resource.spaceId,
+                            OfflineSyncWorker.RESOURCE_ID to resource.remoteId,
+                        ),
+                    ).setConstraints(networkConstraints())
+                    .build()
+            workManager.enqueueUniqueWork(
+                "offline-${resource.accountId}-${resource.spaceId}-${resource.remoteId}",
+                ExistingWorkPolicy.REPLACE,
+                request,
+            )
+        } else {
+            enqueueDownload(resource, true)
+        }
+    }
+
+    suspend fun createFolder(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        name: String,
+    ) {
+        val normalizedName = name.trim().requireValidSegment()
+        val account = requireNotNull(store.account(accountId)) { "The account is unavailable." }
+        val space = requireNotNull(store.space(accountId, spaceId)) { "The space is unavailable." }
+        val parent = parentId?.let { requireNotNull(store.resource(accountId, spaceId, it)) }
+        require(parent == null || parent.kind == ResourceKind.FOLDER) { "Choose a folder as the parent." }
+        val destinationPath = "${parent?.path?.trimEnd('/').orEmpty()}/$normalizedName"
+        val root =
+            space.rootWebDavUrl?.takeIf(String::isNotBlank)
+                ?: "${account.serverUrl.trimEnd('/')}/remote.php/dav/files/${Uri.encode(account.userId)}"
+        val client = TransferClient(TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl))
+        val authorization = WorkerAuthorizationProvider(context).authorization(account)
+        client.createCollection(root.childUrl(destinationPath), authorization)
+        store.createFolder(accountId, spaceId, parentId, normalizedName)
+    }
+
+    fun refreshAccount(accountId: String): UUID {
+        val request =
+            OneTimeWorkRequestBuilder<AccountDiscoveryWorker>()
+                .setInputData(
+                    workDataOf(
+                        AccountDiscoveryWorker.ACCOUNT_ID to accountId,
+                    ),
+                ).setConstraints(networkConstraints())
+                .build()
+        workManager.enqueueUniqueWork("discover-$accountId", ExistingWorkPolicy.REPLACE, request)
+        return request.id
+    }
+
+    fun refreshFolder(
+        accountId: String,
+        spaceId: String,
+        folderId: String?,
+    ): UUID {
+        val request =
+            OneTimeWorkRequestBuilder<FolderDiscoveryWorker>()
+                .setInputData(
+                    workDataOf(
+                        FolderDiscoveryWorker.ACCOUNT_ID to accountId,
+                        FolderDiscoveryWorker.SPACE_ID to spaceId,
+                        FolderDiscoveryWorker.FOLDER_ID to folderId,
+                    ),
+                ).setConstraints(networkConstraints())
+                .build()
+        workManager.enqueueUniqueWork(
+            "folder-$accountId-$spaceId-${folderId ?: "root"}",
+            ExistingWorkPolicy.REPLACE,
+            request,
+        )
+        return request.id
+    }
+
+    suspend fun retryConflict(
+        transfer: TransferEntity,
+        overwrite: Boolean,
+        keepBoth: Boolean = false,
+    ) {
+        val destination = if (keepBoth) conflictCopyPath(transfer.destinationPath) else transfer.destinationPath
+        val reset =
+            transfer.copy(
+                destinationPath = destination,
+                displayName = destination.substringAfterLast('/'),
+                state = TransferState.QUEUED.name,
+                error = null,
+                overwrite = overwrite,
+                workId = null,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+            )
+        store.updateTransfer(reset)
+        enqueueUploadWork(reset, ExistingWorkPolicy.REPLACE)
+    }
+
+    suspend fun cancelConflict(transfer: TransferEntity) {
+        store.updateTransfer(
+            transfer.copy(
+                state = TransferState.CANCELLED.name,
+                error = null,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    suspend fun saveBackup(configuration: eu.opencloud.android.next.core.database.FolderBackupEntity) {
+        store.saveBackup(configuration)
+        scheduleBackups()
+        val immediate =
+            OneTimeWorkRequestBuilder<FolderBackupScanWorker>()
+                .setConstraints(backupConstraints(BuildConfig.DEBUG))
+                .build()
+        workManager.enqueueUniqueWork(BACKUP_SCAN_WORK, ExistingWorkPolicy.REPLACE, immediate)
+    }
+
+    fun scheduleBackups() {
+        val request =
+            PeriodicWorkRequestBuilder<FolderBackupScanWorker>(
+                15,
+                TimeUnit.MINUTES,
+            ).setConstraints(backupConstraints(BuildConfig.DEBUG)).build()
+        workManager.enqueueUniquePeriodicWork(BACKUP_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
+    }
+
     suspend fun reconcile() {
         store.pendingTransfers().forEach { transfer ->
             if (transfer.direction ==
@@ -100,9 +237,19 @@ class TransferManager(
     fun scheduleCleanup() {
         val request = PeriodicWorkRequestBuilder<CacheCleanupWorker>(1, TimeUnit.DAYS).build()
         workManager.enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+        val offline =
+            PeriodicWorkRequestBuilder<OfflineSyncWorker>(
+                15,
+                TimeUnit.MINUTES,
+            ).setConstraints(networkConstraints()).build()
+        workManager.enqueueUniquePeriodicWork(OFFLINE_WORK, ExistingPeriodicWorkPolicy.UPDATE, offline)
+        scheduleBackups()
     }
 
-    private suspend fun enqueueUploadWork(transfer: TransferEntity) {
+    private suspend fun enqueueUploadWork(
+        transfer: TransferEntity,
+        policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP,
+    ) {
         val request =
             OneTimeWorkRequestBuilder<UploadWorker>()
                 .setInputData(workDataOf(TransferWorker.TRANSFER_ID to transfer.id))
@@ -112,7 +259,7 @@ class TransferManager(
         store.updateTransfer(
             transfer.copy(workId = request.id.toString(), updatedAtEpochMillis = System.currentTimeMillis()),
         )
-        workManager.enqueueUniqueWork("transfer-${transfer.id}", ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork("transfer-${transfer.id}", policy, request)
     }
 
     private suspend fun enqueueDownloadWork(transfer: TransferEntity) {
@@ -173,7 +320,38 @@ class TransferManager(
 
     private companion object {
         const val CLEANUP_WORK = "opencloud-cache-cleanup"
+        const val OFFLINE_WORK = "opencloud-offline-sync"
+        const val BACKUP_WORK = "opencloud-folder-backups"
+        const val BACKUP_SCAN_WORK = "opencloud-folder-backup-scan"
     }
+}
+
+private fun networkConstraints() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+private fun String.childUrl(path: String): String =
+    toHttpUrl()
+        .newBuilder()
+        .apply {
+            path
+                .trim('/')
+                .split('/')
+                .filter(String::isNotBlank)
+                .forEach(::addPathSegment)
+        }.build()
+        .toString()
+
+internal fun backupConstraints(debug: Boolean): Constraints =
+    Constraints
+        .Builder()
+        .setRequiredNetworkType(if (debug) NetworkType.CONNECTED else NetworkType.UNMETERED)
+        .setRequiresCharging(!debug)
+        .build()
+
+private fun conflictCopyPath(path: String): String {
+    val name = path.substringAfterLast('/')
+    val parent = path.substringBeforeLast('/', "")
+    val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
+    return "$parent/${name.substring(0, dot)} (conflict copy)${name.substring(dot)}"
 }
 
 private fun String.requireValidSegment(): String {

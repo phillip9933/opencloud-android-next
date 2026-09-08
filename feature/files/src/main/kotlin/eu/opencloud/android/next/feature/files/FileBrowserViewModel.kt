@@ -2,14 +2,19 @@ package eu.opencloud.android.next.feature.files
 
 import android.app.Application
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
+import eu.opencloud.android.next.core.database.FolderBackupEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.model.ResourceKind
+import eu.opencloud.android.next.core.sync.DISCOVERY_ERROR
 import eu.opencloud.android.next.core.sync.TransferManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,6 +26,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FileBrowserViewModel(
@@ -28,8 +34,10 @@ class FileBrowserViewModel(
 ) : AndroidViewModel(application) {
     private val store = FileBrowserStore(FileBrowserDatabase.create(application))
     private val transfers = TransferManager(application, store)
+    private val workManager = WorkManager.getInstance(application)
     private val mutableState = MutableStateFlow(FileBrowserUiState())
     private val activeLocation = MutableStateFlow<BrowserLocation?>(null)
+    private val backupPickerLocation = MutableStateFlow<BrowserLocation?>(null)
     val state: StateFlow<FileBrowserUiState> = mutableState.asStateFlow()
 
     private var accountId: String? = null
@@ -45,6 +53,15 @@ class FileBrowserViewModel(
                     reduce { copy(resources = resources) }
                 }
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            backupPickerLocation
+                .filterNotNull()
+                .flatMapLatest { location ->
+                    store.observeChildren(location.accountId, location.spaceId, location.folderId)
+                }.collectLatest { resources ->
+                    reduce { copy(backupPickerResources = resources.filter { it.kind == ResourceKind.FOLDER }) }
+                }
+        }
     }
 
     fun load(accountId: String) {
@@ -56,9 +73,13 @@ class FileBrowserViewModel(
                     reduce { copy(transfers = transfers) }
                 }
             }
+            launch {
+                store.observeBackups(accountId).collectLatest { backups ->
+                    reduce { copy(backups = backups) }
+                }
+            }
             launch { transfers.reconcile() }
-            runCatching { store.ensureSeeded(accountId) }
-                .onFailure { reduce { copy(error = it.message ?: "Unable to open local files.") } }
+            observeDiscovery(transfers.refreshAccount(accountId))
             store.observeSpaces(accountId).collectLatest { spaces ->
                 val selectedSpace =
                     mutableState.value.spaceId?.let { selectedId -> spaces.find { it.driveId == selectedId } }
@@ -79,6 +100,7 @@ class FileBrowserViewModel(
     fun selectSpace(spaceId: String) {
         reduce { copy(spaceId = spaceId, currentFolderId = null, folderTrail = emptyList(), selectedIds = emptySet()) }
         setActiveLocation(spaceId, null)
+        accountId?.let { observeDiscovery(transfers.refreshFolder(it, spaceId, null)) }
     }
 
     fun open(resource: ResourceEntity) {
@@ -92,6 +114,7 @@ class FileBrowserViewModel(
             )
         }
         setActiveLocation(resource.spaceId, resource.remoteId)
+        accountId?.let { observeDiscovery(transfers.refreshFolder(it, resource.spaceId, resource.remoteId)) }
     }
 
     fun navigateUp() {
@@ -100,6 +123,9 @@ class FileBrowserViewModel(
         val nextTrail = trail.dropLast(1)
         reduce { copy(currentFolderId = nextTrail.lastOrNull()?.id, folderTrail = nextTrail, selectedIds = emptySet()) }
         state.value.spaceId?.let { spaceId -> setActiveLocation(spaceId, nextTrail.lastOrNull()?.id) }
+        state.value.spaceId?.let { spaceId ->
+            accountId?.let { observeDiscovery(transfers.refreshFolder(it, spaceId, nextTrail.lastOrNull()?.id)) }
+        }
     }
 
     fun setLayout(layout: BrowserLayout) = reduce { copy(layout = layout) }
@@ -117,7 +143,7 @@ class FileBrowserViewModel(
     fun dismissActions() = reduce { copy(actionResource = null) }
 
     fun createFolder(name: String) =
-        mutate { account, space, parent -> store.createFolder(account, space, parent, name) }
+        mutate { account, space, parent -> transfers.createFolder(account, space, parent, name) }
 
     fun createSpace(name: String) {
         val account = accountId ?: return
@@ -157,7 +183,116 @@ class FileBrowserViewModel(
 
     fun download(resource: ResourceEntity) = enqueueDownload(resource, offlinePin = false)
 
-    fun makeAvailableOffline(resource: ResourceEntity) = enqueueDownload(resource, offlinePin = true)
+    fun makeAvailableOffline(resource: ResourceEntity) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { transfers.makeAvailableOffline(resource) } }
+                .onSuccess { reduce { copy(actionResource = null, message = "Offline synchronization queued.") } }
+                .onFailure { reduce { copy(error = it.message ?: "Offline synchronization could not be queued.") } }
+        }
+    }
+
+    @Suppress("LongParameterList")
+    fun saveBackup(
+        sourceTreeUri: Uri,
+        destinationPath: String,
+        mediaType: String,
+        wifiOnly: Boolean,
+        chargingOnly: Boolean,
+        deleteAfterUpload: Boolean,
+    ) {
+        val account = accountId ?: return
+        val space = state.value.spaceId ?: return
+        viewModelScope.launch {
+            val backup =
+                FolderBackupEntity(
+                    UUID.randomUUID().toString(),
+                    account,
+                    space,
+                    sourceTreeUri.toString(),
+                    sourceDirectoryName(sourceTreeUri),
+                    destinationPath
+                        .ifBlank {
+                            "/Camera Uploads"
+                        },
+                    mediaType,
+                    wifiOnly,
+                    chargingOnly,
+                    deleteAfterUpload,
+                )
+            runCatching { withContext(Dispatchers.IO) { transfers.saveBackup(backup) } }
+                .onSuccess { reduce { copy(message = "Folder backup configured.") } }
+                .onFailure { reduce { copy(error = it.message ?: "The folder backup could not be saved.") } }
+        }
+    }
+
+    fun deleteBackup(id: String) {
+        viewModelScope.launch(Dispatchers.IO) { store.deleteBackup(id) }
+    }
+
+    fun openBackupPicker() {
+        val account = accountId ?: return
+        val space = state.value.spaceId ?: return
+        reduce { copy(backupPickerTrail = emptyList(), backupPickerResources = emptyList()) }
+        backupPickerLocation.value = BrowserLocation(account, space, null)
+        observeDiscovery(transfers.refreshFolder(account, space, null))
+    }
+
+    fun openBackupPickerFolder(folder: ResourceEntity) {
+        if (folder.kind != ResourceKind.FOLDER) return
+        val account = accountId ?: return
+        reduce {
+            copy(
+                backupPickerTrail = backupPickerTrail + BackupFolderCrumb(folder.remoteId, folder.name, folder.path),
+                backupPickerResources = emptyList(),
+            )
+        }
+        backupPickerLocation.value = BrowserLocation(account, folder.spaceId, folder.remoteId)
+        observeDiscovery(transfers.refreshFolder(account, folder.spaceId, folder.remoteId))
+    }
+
+    fun navigateBackupPickerUp() {
+        val account = accountId ?: return
+        val space = state.value.spaceId ?: return
+        val nextTrail = state.value.backupPickerTrail.dropLast(1)
+        reduce { copy(backupPickerTrail = nextTrail, backupPickerResources = emptyList()) }
+        backupPickerLocation.value = BrowserLocation(account, space, nextTrail.lastOrNull()?.id)
+        observeDiscovery(transfers.refreshFolder(account, space, nextTrail.lastOrNull()?.id))
+    }
+
+    fun createBackupPickerFolder(name: String) {
+        val account = accountId ?: return
+        val space = state.value.spaceId ?: return
+        val parentId =
+            state.value.backupPickerTrail
+                .lastOrNull()
+                ?.id
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { transfers.createFolder(account, space, parentId, name) } }
+                .onFailure { reduce { copy(error = it.message ?: "The destination folder could not be created.") } }
+        }
+    }
+
+    fun resolveConflict(
+        transfer: TransferEntity,
+        decision: ConflictDecision,
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    when (decision) {
+                        ConflictDecision.REPLACE -> transfers.retryConflict(transfer, overwrite = true)
+                        ConflictDecision.KEEP_BOTH ->
+                            transfers.retryConflict(
+                                transfer,
+                                overwrite = false,
+                                keepBoth = true,
+                            )
+                        ConflictDecision.CANCEL -> transfers.cancelConflict(transfer)
+                    }
+                }
+            }.onFailure { reduce { copy(error = it.message ?: "The conflict decision could not be applied.") } }
+        }
+    }
 
     private fun enqueueDownload(
         resource: ResourceEntity,
@@ -180,6 +315,17 @@ class FileBrowserViewModel(
         reduce { copy(message = "This global navigation action is not available in the file browser preview yet.") }
 
     fun clearMessage() = reduce { copy(message = null, error = null) }
+
+    private fun observeDiscovery(workId: UUID) {
+        viewModelScope.launch {
+            workManager.getWorkInfoByIdFlow(workId).collectLatest { workInfo ->
+                if (workInfo?.state == WorkInfo.State.FAILED) {
+                    val message = workInfo.outputData.getString(DISCOVERY_ERROR)
+                    reduce { copy(error = message ?: "Remote discovery failed.") }
+                }
+            }
+        }
+    }
 
     private fun setActiveLocation(
         spaceId: String,
@@ -208,7 +354,35 @@ class FileBrowserViewModel(
     private fun reduce(transform: FileBrowserUiState.() -> FileBrowserUiState) {
         mutableState.value = mutableState.value.transform()
     }
+
+    private fun sourceDirectoryName(treeUri: Uri): String {
+        val displayName =
+            runCatching {
+                val documentUri =
+                    DocumentsContract.buildDocumentUriUsingTree(
+                        treeUri,
+                        DocumentsContract.getTreeDocumentId(treeUri),
+                    )
+                getApplication<Application>()
+                    .contentResolver
+                    .query(
+                        documentUri,
+                        arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                        null,
+                        null,
+                        null,
+                    )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            }.getOrNull()
+        return displayName?.takeIf(String::isNotBlank) ?: sourceNameFromTreeUri(treeUri.toString())
+    }
 }
+
+internal fun sourceNameFromTreeUri(sourceTreeUri: String): String =
+    Uri
+        .decode(Uri.parse(sourceTreeUri).lastPathSegment.orEmpty())
+        .substringAfterLast(':')
+        .substringAfterLast('/')
+        .ifBlank { "Folder" }
 
 data class FileBrowserUiState(
     val spaces: List<SpaceEntity> = emptyList(),
@@ -217,6 +391,9 @@ data class FileBrowserUiState(
     val folderTrail: List<FolderCrumb> = emptyList(),
     val resources: List<ResourceEntity> = emptyList(),
     val transfers: List<TransferEntity> = emptyList(),
+    val backups: List<FolderBackupEntity> = emptyList(),
+    val backupPickerTrail: List<BackupFolderCrumb> = emptyList(),
+    val backupPickerResources: List<ResourceEntity> = emptyList(),
     val layout: BrowserLayout = BrowserLayout.DEFAULT_TABLE,
     val selectedIds: Set<String> = emptySet(),
     val actionResource: ResourceEntity? = null,
@@ -227,6 +404,12 @@ data class FileBrowserUiState(
 data class FolderCrumb(
     val id: String,
     val name: String,
+)
+
+data class BackupFolderCrumb(
+    val id: String,
+    val name: String,
+    val path: String,
 )
 
 private data class BrowserLocation(
@@ -240,3 +423,5 @@ enum class BrowserLayout {
     CONDENSED_TABLE,
     TILES,
 }
+
+enum class ConflictDecision { REPLACE, KEEP_BOTH, CANCEL }

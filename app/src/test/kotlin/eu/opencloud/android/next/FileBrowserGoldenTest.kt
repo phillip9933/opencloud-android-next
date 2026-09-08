@@ -7,15 +7,22 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
+import eu.opencloud.android.next.core.database.FolderBackupEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.SpaceEntity
+import eu.opencloud.android.next.core.database.TransferDirection
+import eu.opencloud.android.next.core.database.TransferEntity
+import eu.opencloud.android.next.core.database.TransferState
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudTheme
 import eu.opencloud.android.next.core.model.ResourceKind
+import eu.opencloud.android.next.feature.files.BackupFolderCrumb
 import eu.opencloud.android.next.feature.files.BrowserLayout
 import eu.opencloud.android.next.feature.files.FileBrowserScreen
 import eu.opencloud.android.next.feature.files.FileBrowserUiState
+import eu.opencloud.android.next.feature.files.FolderBackupSettingsContent
 import eu.opencloud.android.next.feature.files.FolderCrumb
 import org.junit.Rule
 import org.junit.Test
@@ -80,6 +87,121 @@ class FileBrowserGoldenTest {
         }
 
     @Test
+    fun fileBrowserBackupSettings_matchesGolden() {
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                FolderBackupSettingsContent(
+                    backups =
+                        listOf(
+                            FolderBackupEntity(
+                                id = "camera-backup",
+                                accountId = "account",
+                                spaceId = "personal",
+                                sourceTreeUri = "content://provider/tree/primary%3ADCIM",
+                                sourceDisplayName = "DCIM",
+                                destinationPath = "/Camera Uploads",
+                                mediaType = "IMAGE",
+                                wifiOnly = true,
+                                chargingOnly = true,
+                                deleteAfterUpload = false,
+                            ),
+                        ),
+                    onDismiss = {},
+                    onAdd = {},
+                    onDelete = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Folder & camera backup").fetchSemanticsNode()
+        composeRule.onRoot().captureRoboImage(
+            filePath = "file_browser_backup_settings",
+            roborazziOptions = browserRoborazziOptions(),
+        )
+    }
+
+    @Test
+    fun fileBrowserBackupSettings_scrollsToLastActivePair() {
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                FolderBackupSettingsContent(
+                    backups =
+                        (1..6).map { index ->
+                            FolderBackupEntity(
+                                id = "backup-$index",
+                                accountId = "account",
+                                spaceId = "personal",
+                                sourceTreeUri = "content://provider/tree/primary%3AFolder$index",
+                                sourceDisplayName = "Folder $index",
+                                destinationPath = "/Backups/Folder $index",
+                                mediaType = "ALL",
+                                wifiOnly = false,
+                                chargingOnly = false,
+                                deleteAfterUpload = false,
+                            )
+                        },
+                    onDismiss = {},
+                    onAdd = {},
+                    onDelete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Active backup configurations").performScrollToIndex(5)
+        composeRule.onNodeWithText("Folder 6").fetchSemanticsNode()
+        composeRule.onNodeWithText("/Backups/Folder 6").fetchSemanticsNode()
+        composeRule.onNodeWithText("Remote destination").fetchSemanticsNode()
+        composeRule.onNodeWithText("Choose source folder").fetchSemanticsNode()
+    }
+
+    @Test
+    fun fileBrowserBackupFolderPicker_matchesGolden() {
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                FolderBackupSettingsContent(
+                    backups = emptyList(),
+                    pickerTrail = listOf(BackupFolderCrumb("photos", "Photos", "/Photos")),
+                    pickerFolders = listOf(resource("camera", "Camera", ResourceKind.FOLDER, parentId = "photos")),
+                    onDismiss = {},
+                    onAdd = {},
+                    onDelete = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Select folder").performClick()
+        composeRule.onNodeWithText("Select remote folder").fetchSemanticsNode()
+        composeRule.onRoot().captureRoboImage(
+            filePath = "file_browser_backup_folder_picker",
+            roborazziOptions = browserRoborazziOptions(),
+        )
+    }
+
+    @Test
+    fun fileBrowserConflict_matchesGolden() =
+        capture(
+            browserState(
+                transfers =
+                    listOf(
+                        TransferEntity(
+                            id = "conflict",
+                            accountId = "account",
+                            spaceId = "personal",
+                            resourceId = null,
+                            direction = TransferDirection.UPLOAD.name,
+                            sourceUri = "content://example/photo.jpg",
+                            destinationPath = "/Photo.jpg",
+                            displayName = "Photo.jpg",
+                            mimeType = "image/jpeg",
+                            bytesTotal = 42,
+                            state = TransferState.CONFLICT.name,
+                            createdAtEpochMillis = 0,
+                            updatedAtEpochMillis = 0,
+                        ),
+                    ),
+            ),
+            "file_browser_upload_conflict",
+        )
+
+    @Test
     fun fileBrowserSortOptions_matchesGolden() =
         capture(browserState(), "file_browser_sort_options") {
             composeRule.onNodeWithText("Name").performClick()
@@ -137,6 +259,13 @@ class FileBrowserGoldenTest {
                     onUpload = {},
                     onDownload = {},
                     onMakeAvailableOffline = {},
+                    onAddBackup = {},
+                    onDeleteBackup = {},
+                    onOpenBackupPicker = {},
+                    onOpenBackupPickerFolder = {},
+                    onNavigateBackupPickerUp = {},
+                    onCreateBackupPickerFolder = {},
+                    onResolveConflict = { _, _ -> },
                     onClearMessage = {},
                     onGlobalAction = {},
                 )
@@ -147,23 +276,26 @@ class FileBrowserGoldenTest {
         composeRule.onRoot().captureRoboImage(
             filePath = fileName,
             // Robolectric anti-aliasing varies by a few host-rendered pixels; layout and color changes still fail.
-            roborazziOptions =
-                RoborazziOptions(
-                    compareOptions =
-                        RoborazziOptions.CompareOptions(
-                            resultValidator = { result ->
-                                result.pixelDifferences.toFloat() / result.pixelCount <= 0.001f
-                            },
-                        ),
-                ),
+            roborazziOptions = browserRoborazziOptions(),
         )
     }
+
+    private fun browserRoborazziOptions() =
+        RoborazziOptions(
+            compareOptions =
+                RoborazziOptions.CompareOptions(
+                    resultValidator = { result ->
+                        result.pixelDifferences.toFloat() / result.pixelCount <= 0.001f
+                    },
+                ),
+        )
 
     private fun browserState(
         layout: BrowserLayout = BrowserLayout.DEFAULT_TABLE,
         selectedIds: Set<String> = emptySet(),
         actionResource: ResourceEntity? = null,
         folderTrail: List<FolderCrumb> = emptyList(),
+        transfers: List<TransferEntity> = emptyList(),
     ) = FileBrowserUiState(
         spaces =
             listOf(
@@ -186,6 +318,7 @@ class FileBrowserGoldenTest {
         selectedIds = selectedIds,
         actionResource = actionResource,
         folderTrail = folderTrail,
+        transfers = transfers,
     )
 
     private fun sampleResources() =
@@ -200,5 +333,6 @@ class FileBrowserGoldenTest {
         name: String,
         kind: ResourceKind,
         size: Long = 0,
-    ) = ResourceEntity("account", "personal", id, null, "/$name", name, kind, null, size, null, 0, 0)
+        parentId: String? = null,
+    ) = ResourceEntity("account", "personal", id, parentId, "/$name", name, kind, null, size, null, 0, 0)
 }

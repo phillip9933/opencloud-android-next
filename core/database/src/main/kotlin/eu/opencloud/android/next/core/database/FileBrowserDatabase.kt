@@ -23,8 +23,14 @@ import eu.opencloud.android.next.core.model.auth.ServerCapabilities
 import kotlinx.coroutines.flow.Flow
 
 @Database(
-    entities = [AccountEntity::class, SpaceEntity::class, ResourceEntity::class, TransferEntity::class],
-    version = 3,
+    entities = [
+        AccountEntity::class,
+        SpaceEntity::class,
+        ResourceEntity::class,
+        TransferEntity::class,
+        FolderBackupEntity::class,
+    ],
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(FileBrowserConverters::class)
@@ -37,6 +43,8 @@ abstract class FileBrowserDatabase : RoomDatabase() {
 
     abstract fun transferDao(): TransferDao
 
+    abstract fun folderBackupDao(): FolderBackupDao
+
     companion object {
         @Volatile
         private var instance: FileBrowserDatabase? = null
@@ -48,7 +56,7 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                         context.applicationContext,
                         FileBrowserDatabase::class.java,
                         "opencloud-file-browser.db",
-                    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }
@@ -89,6 +97,39 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                     )
                 }
             }
+
+        private val MIGRATION_3_4 =
+            object : Migration(3, 4) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `oidcIssuer` TEXT")
+                    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `oidcTokenEndpoint` TEXT")
+                    db.execSQL(
+                        "ALTER TABLE `transfers` ADD COLUMN `deleteSourceAfterSuccess` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `folder_backups` (`id` TEXT NOT NULL, " +
+                            "`accountId` TEXT NOT NULL, `spaceId` TEXT NOT NULL, `sourceTreeUri` TEXT NOT NULL, " +
+                            "`destinationPath` TEXT NOT NULL, " +
+                            "`mediaType` TEXT NOT NULL, `wifiOnly` INTEGER NOT NULL, " +
+                            "`chargingOnly` INTEGER NOT NULL, " +
+                            "`deleteAfterUpload` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, " +
+                            "`lastSafeScanEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+                    )
+                    db.execSQL(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS `index_folder_backups_accountId_sourceTreeUri_mediaType` " +
+                            "ON `folder_backups` (`accountId`, `sourceTreeUri`, `mediaType`)",
+                    )
+                }
+            }
+
+        private val MIGRATION_4_5 =
+            object : Migration(4, 5) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "ALTER TABLE `folder_backups` ADD COLUMN `sourceDisplayName` TEXT NOT NULL DEFAULT ''",
+                    )
+                }
+            }
     }
 }
 
@@ -109,6 +150,8 @@ data class AccountEntity(
     val authenticationType: String,
     val tusSupported: Boolean,
     val isActive: Boolean = true,
+    val oidcIssuer: String? = null,
+    val oidcTokenEndpoint: String? = null,
 )
 
 @Entity(
@@ -182,6 +225,7 @@ data class TransferEntity(
     val workId: String? = null,
     val overwrite: Boolean = false,
     val offlinePin: Boolean = false,
+    val deleteSourceAfterSuccess: Boolean = false,
     val tusUrl: String? = null,
     val tusOffset: Long = 0,
     val attemptCount: Int = 0,
@@ -192,6 +236,25 @@ data class TransferEntity(
 enum class TransferDirection { UPLOAD, DOWNLOAD }
 
 enum class TransferState { QUEUED, RUNNING, RETRY, CONFLICT, SUCCEEDED, FAILED, CANCELLED }
+
+@Entity(
+    tableName = "folder_backups",
+    indices = [Index(value = ["accountId", "sourceTreeUri", "mediaType"], unique = true)],
+)
+data class FolderBackupEntity(
+    @androidx.room.PrimaryKey val id: String,
+    val accountId: String,
+    val spaceId: String,
+    val sourceTreeUri: String,
+    val sourceDisplayName: String = "",
+    val destinationPath: String,
+    val mediaType: String,
+    val wifiOnly: Boolean,
+    val chargingOnly: Boolean,
+    val deleteAfterUpload: Boolean,
+    val enabled: Boolean = true,
+    val lastSafeScanEpochMillis: Long = 0,
+)
 
 @Dao
 interface AccountDao {
@@ -227,6 +290,9 @@ interface SpaceDao {
         accountId: String,
         spaceId: String,
     ): SpaceEntity?
+
+    @Delete
+    suspend fun delete(space: SpaceEntity)
 }
 
 @Dao
@@ -294,6 +360,20 @@ interface ResourceDao {
         offlinePinned: Boolean,
     )
 
+    @Query(
+        "UPDATE resources SET offlinePinned = :pinned " +
+            "WHERE accountId = :accountId AND spaceId = :spaceId AND remoteId = :resourceId",
+    )
+    suspend fun setOfflinePinned(
+        accountId: String,
+        spaceId: String,
+        resourceId: String,
+        pinned: Boolean,
+    )
+
+    @Query("SELECT * FROM resources WHERE offlinePinned = 1")
+    suspend fun findOfflinePinned(): List<ResourceEntity>
+
     @Delete
     suspend fun delete(resource: ResourceEntity)
 
@@ -353,6 +433,27 @@ interface TransferDao {
 
     @Query("DELETE FROM transfers WHERE state = 'SUCCEEDED' AND updatedAtEpochMillis < :beforeEpochMillis")
     suspend fun deleteSuccessfulBefore(beforeEpochMillis: Long)
+
+    @Query("SELECT * FROM transfers WHERE state = 'CONFLICT' ORDER BY updatedAtEpochMillis DESC")
+    fun observeConflicts(): Flow<List<TransferEntity>>
+}
+
+@Dao
+interface FolderBackupDao {
+    @Query("SELECT * FROM folder_backups WHERE accountId = :accountId ORDER BY mediaType")
+    fun observeForAccount(accountId: String): Flow<List<FolderBackupEntity>>
+
+    @Query("SELECT * FROM folder_backups WHERE enabled = 1")
+    suspend fun findEnabled(): List<FolderBackupEntity>
+
+    @Query("SELECT * FROM folder_backups WHERE id = :id LIMIT 1")
+    suspend fun findById(id: String): FolderBackupEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(configuration: FolderBackupEntity)
+
+    @Query("DELETE FROM folder_backups WHERE id = :id")
+    suspend fun delete(id: String)
 }
 
 class FileBrowserStore(
@@ -361,10 +462,12 @@ class FileBrowserStore(
     private val spaces = database.spaceDao()
     private val resources = database.resourceDao()
     private val transfers = database.transferDao()
+    private val backups = database.folderBackupDao()
 
     suspend fun saveAccount(
         account: Account,
         capabilities: ServerCapabilities,
+        oidcConfiguration: eu.opencloud.android.next.core.model.auth.OidcConfiguration? = null,
     ) = database.accountDao().upsert(
         AccountEntity(
             id = account.id,
@@ -373,6 +476,8 @@ class FileBrowserStore(
             displayName = account.displayName,
             authenticationType = account.authenticationType.name,
             tusSupported = capabilities.tusSupported,
+            oidcIssuer = oidcConfiguration?.issuer,
+            oidcTokenEndpoint = oidcConfiguration?.tokenEndpoint,
         ),
     )
 
@@ -385,6 +490,8 @@ class FileBrowserStore(
     ): Flow<List<ResourceEntity>> = resources.observeChildren(accountId, spaceId, parentId)
 
     fun observeTransfers(accountId: String): Flow<List<TransferEntity>> = transfers.observeForAccount(accountId)
+
+    fun observeBackups(accountId: String): Flow<List<FolderBackupEntity>> = backups.observeForAccount(accountId)
 
     suspend fun account(accountId: String): AccountEntity? = database.accountDao().findById(accountId)
 
@@ -470,13 +577,62 @@ class FileBrowserStore(
 
     suspend fun deleteSuccessfulTransfers(beforeEpochMillis: Long) = transfers.deleteSuccessfulBefore(beforeEpochMillis)
 
-    suspend fun ensureSeeded(accountId: String) {
-        if (spaces.count(accountId) > 0) return
+    suspend fun enabledBackups(): List<FolderBackupEntity> = backups.findEnabled()
+
+    suspend fun backup(id: String): FolderBackupEntity? = backups.findById(id)
+
+    suspend fun saveBackup(configuration: FolderBackupEntity) = backups.upsert(configuration)
+
+    suspend fun deleteBackup(id: String) = backups.delete(id)
+
+    suspend fun setOfflinePinned(
+        resource: ResourceEntity,
+        pinned: Boolean,
+    ) = resources.setOfflinePinned(resource.accountId, resource.spaceId, resource.remoteId, pinned)
+
+    suspend fun offlinePinnedResources(): List<ResourceEntity> = resources.findOfflinePinned()
+
+    suspend fun replaceRemoteSpaces(
+        accountId: String,
+        snapshot: List<SpaceEntity>,
+    ) {
         database.withTransaction {
-            if (spaces.count(accountId) > 0) return@withTransaction
-            val now = System.currentTimeMillis()
-            spaces.upsertAll(seedSpaces(accountId))
-            resources.insertAll(seedResources(accountId, now))
+            val incomingIds = snapshot.mapTo(mutableSetOf()) { it.driveId }
+            spaces.findSpaces(accountId).filterNot { it.driveId in incomingIds }.forEach { stale ->
+                resources.deleteAll(accountId, stale.driveId)
+                spaces.delete(stale)
+            }
+            spaces.upsertAll(snapshot)
+        }
+    }
+
+    suspend fun replaceFolderSnapshot(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        snapshot: List<ResourceEntity>,
+    ) {
+        database.withTransaction {
+            val existing = resources.findChildren(accountId, spaceId, parentId)
+            val incomingIds = snapshot.mapTo(mutableSetOf()) { it.remoteId }
+            existing.filterNot { it.remoteId in incomingIds }.forEach { stale ->
+                if (stale.kind ==
+                    ResourceKind.FOLDER
+                ) {
+                    resources.deleteDescendants(accountId, spaceId, "${stale.path}/%")
+                }
+                resources.delete(stale)
+            }
+            snapshot.forEach { remote ->
+                val local = resources.findById(accountId, spaceId, remote.remoteId)
+                resources.upsert(
+                    remote.copy(
+                        hasLocalCopy = local?.hasLocalCopy ?: false,
+                        localPath = local?.localPath,
+                        offlinePinned = local?.offlinePinned ?: false,
+                    ),
+                )
+            }
         }
     }
 
@@ -597,42 +753,6 @@ class FileBrowserStore(
         }
     }
 
-    private fun seedSpaces(accountId: String) =
-        listOf(
-            SpaceEntity(
-                accountId,
-                PERSONAL_SPACE_ID,
-                "Personal",
-                "personal",
-                "Your private files",
-                null,
-                "root",
-                null,
-                null,
-                null,
-            ),
-        )
-
-    private fun seedResources(
-        accountId: String,
-        timestamp: Long,
-    ) = seedDefinitions.map { definition ->
-        ResourceEntity(
-            accountId,
-            definition.spaceId,
-            definition.remoteId,
-            definition.parentId,
-            definition.path,
-            definition.name,
-            definition.kind,
-            definition.mimeType,
-            definition.sizeBytes,
-            null,
-            timestamp,
-            timestamp,
-        )
-    }
-
     private fun newResource(
         accountId: String,
         spaceId: String,
@@ -653,56 +773,7 @@ class FileBrowserStore(
         System.currentTimeMillis(),
         System.currentTimeMillis(),
     )
-
-    private companion object {
-        const val PERSONAL_SPACE_ID = "personal"
-
-        val seedDefinitions =
-            listOf(
-                SeedResource(PERSONAL_SPACE_ID, "documents", null, "/Documents", "Documents", ResourceKind.FOLDER),
-                SeedResource(PERSONAL_SPACE_ID, "photos", null, "/Photos", "Photos", ResourceKind.FOLDER),
-                SeedResource(
-                    PERSONAL_SPACE_ID,
-                    "welcome",
-                    null,
-                    "/Welcome to OpenCloud.pdf",
-                    "Welcome to OpenCloud.pdf",
-                    ResourceKind.FILE,
-                    "application/pdf",
-                    1_258_291,
-                ),
-                SeedResource(
-                    PERSONAL_SPACE_ID,
-                    "plan",
-                    "documents",
-                    "/Documents/Project plan.md",
-                    "Project plan.md",
-                    ResourceKind.FILE,
-                    "text/markdown",
-                    24_150,
-                ),
-                SeedResource(
-                    PERSONAL_SPACE_ID,
-                    "meeting-notes",
-                    "documents",
-                    "/Documents/Meeting notes",
-                    "Meeting notes",
-                    ResourceKind.FOLDER,
-                ),
-            )
-    }
 }
-
-private data class SeedResource(
-    val spaceId: String,
-    val remoteId: String,
-    val parentId: String?,
-    val path: String,
-    val name: String,
-    val kind: ResourceKind,
-    val mimeType: String? = null,
-    val sizeBytes: Long = 0,
-)
 
 private fun ResourceEntity?.childPath(name: String): String = "${this?.path?.trimEnd('/') ?: ""}/$name"
 

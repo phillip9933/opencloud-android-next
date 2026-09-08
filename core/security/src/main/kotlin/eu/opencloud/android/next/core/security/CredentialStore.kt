@@ -13,6 +13,13 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 interface CredentialStore {
+    fun saveBasicUsername(
+        accountId: String,
+        username: String,
+    )
+
+    fun readBasicUsername(accountId: String): String?
+
     fun saveBasicPassword(
         accountId: String,
         password: String,
@@ -34,6 +41,16 @@ class KeystoreCredentialStore(
     context: Context,
 ) : CredentialStore {
     private val preferences = context.getSharedPreferences("secure_credentials", Context.MODE_PRIVATE)
+
+    override fun saveBasicUsername(
+        accountId: String,
+        username: String,
+    ) {
+        preferences.edit().putString("basic.username.$accountId", encrypt(username)).apply()
+    }
+
+    override fun readBasicUsername(accountId: String): String? =
+        preferences.getString("basic.username.$accountId", null)?.let(::decrypt)
 
     override fun saveBasicPassword(
         accountId: String,
@@ -79,6 +96,7 @@ class KeystoreCredentialStore(
     override fun remove(accountId: String) {
         preferences
             .edit()
+            .remove("basic.username.$accountId")
             .remove("basic.$accountId")
             .remove("tokens.$accountId")
             .apply()

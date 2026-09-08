@@ -15,11 +15,9 @@ import eu.opencloud.android.next.core.network.TransferClient
 import eu.opencloud.android.next.core.network.TransferConflictException
 import eu.opencloud.android.next.core.network.TransferHttpException
 import eu.opencloud.android.next.core.network.TusOffsetException
-import eu.opencloud.android.next.core.security.KeystoreCredentialStore
 import eu.opencloud.android.next.core.security.TlsPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Credentials
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.io.File
@@ -33,7 +31,7 @@ abstract class TransferWorker(
 ) : CoroutineWorker(context, params) {
     protected val store = FileBrowserStore(FileBrowserDatabase.create(context))
 
-    @Suppress("TooGenericExceptionCaught")
+    @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
     final override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
             val id = inputData.getString(TRANSFER_ID) ?: return@withContext Result.failure()
@@ -51,7 +49,24 @@ abstract class TransferWorker(
                 )
             store.updateTransfer(running)
             try {
-                execute(running, account, space, client(account), authorization(account))
+                if (running.bytesTotal >= TransferNotifications.LARGE_TRANSFER_BYTES) {
+                    setForeground(
+                        TransferNotifications.foregroundInfo(
+                            applicationContext,
+                            running.id,
+                            running.displayName,
+                            running.bytesTransferred,
+                            running.bytesTotal,
+                        ),
+                    )
+                }
+                execute(
+                    running,
+                    account,
+                    space,
+                    client(account),
+                    WorkerAuthorizationProvider(applicationContext).authorization(account),
+                )
                 val latest = store.transfer(running.id) ?: running
                 store.updateTransfer(
                     latest.copy(
@@ -60,6 +75,7 @@ abstract class TransferWorker(
                         updatedAtEpochMillis = now(),
                     ),
                 )
+                deleteSourceAfterSuccess(running)
                 notifyDocumentsProvider()
                 Result.success()
             } catch (_: TransferConflictException) {
@@ -105,6 +121,34 @@ abstract class TransferWorker(
         store.updateTransfer(
             transfer.copy(bytesTransferred = bytes, tusOffset = bytes, tusUrl = tusUrl, updatedAtEpochMillis = now()),
         )
+        if (transfer.bytesTotal >= TransferNotifications.LARGE_TRANSFER_BYTES) {
+            setForeground(
+                TransferNotifications.foregroundInfo(
+                    applicationContext,
+                    transfer.id,
+                    transfer.displayName,
+                    bytes,
+                    transfer.bytesTotal,
+                ),
+            )
+        }
+    }
+
+    protected fun updateForegroundProgress(
+        transfer: TransferEntity,
+        bytes: Long,
+    ) {
+        if (transfer.bytesTotal >= TransferNotifications.LARGE_TRANSFER_BYTES) {
+            setForegroundAsync(
+                TransferNotifications.foregroundInfo(
+                    applicationContext,
+                    transfer.id,
+                    transfer.displayName,
+                    bytes,
+                    transfer.bytesTotal,
+                ),
+            )
+        }
     }
 
     private suspend fun fail(
@@ -122,19 +166,6 @@ abstract class TransferWorker(
         return TransferClient(TlsPolicy(applicationContext).applyTo(base, account.serverUrl))
     }
 
-    private fun authorization(account: AccountEntity): String {
-        val credentials = KeystoreCredentialStore(applicationContext)
-        return if (account.authenticationType == "BASIC") {
-            Credentials.basic(account.userId, requireNotNull(credentials.readBasicPassword(account.id)))
-        } else {
-            val tokens = requireNotNull(credentials.readTokens(account.id))
-            require(
-                tokens.expiresAtEpochSeconds > System.currentTimeMillis() / 1000,
-            ) { "Sign in again to continue transfers." }
-            "${tokens.tokenType} ${tokens.accessToken}"
-        }
-    }
-
     private fun Throwable.isRetryable() =
         this is java.io.IOException ||
             this is TusOffsetException ||
@@ -147,6 +178,18 @@ abstract class TransferWorker(
         }
 
     protected fun now() = System.currentTimeMillis()
+
+    private fun deleteSourceAfterSuccess(transfer: TransferEntity) {
+        if (!transfer.deleteSourceAfterSuccess) return
+        runCatching {
+            val source = Uri.parse(transfer.sourceUri)
+            if (source.scheme == "content") {
+                DocumentsContract.deleteDocument(applicationContext.contentResolver, source)
+            } else if (source.scheme == "file") {
+                File(requireNotNull(source.path)).delete()
+            }
+        }
+    }
 
     private fun notifyDocumentsProvider() {
         applicationContext.contentResolver.notifyChange(
@@ -179,13 +222,13 @@ class UploadWorker(
             applicationContext.contentResolver.openInputStream(sourceUri)
                 ?: error("The selected file is no longer readable.")
         }
-        val eTag =
+        val upload: suspend () -> String? = {
             if (account.tusSupported && transfer.bytesTotal >= TUS_THRESHOLD) {
                 uploadTus(
                     transfer,
+                    account,
                     root.childUrl(transfer.destinationPath.substringBeforeLast('/', "")),
                     client,
-                    authorization,
                     source,
                 )
                 null
@@ -197,25 +240,52 @@ class UploadWorker(
                     transfer.bytesTotal,
                     transfer.overwrite,
                     source,
-                ) {}
+                ) { bytes -> updateForegroundProgress(transfer, bytes) }
+            }
+        }
+        val eTag =
+            try {
+                upload()
+            } catch (exception: TransferHttpException) {
+                if (exception.statusCode != 404) throw exception
+                createMissingDestinationDirectories(
+                    root = root,
+                    destinationPath = transfer.destinationPath,
+                    client = client,
+                    authorization = authorization,
+                )
+                upload()
             }
         checkpoint(transfer, transfer.bytesTotal)
         store.completeUpload(transfer, eTag)
     }
 
-    private suspend fun uploadTus(
-        transfer: TransferEntity,
-        collectionUrl: String,
+    private fun createMissingDestinationDirectories(
+        root: String,
+        destinationPath: String,
         client: TransferClient,
         authorization: String,
+    ) {
+        destinationCollectionPaths(destinationPath).forEach { path ->
+            client.createCollection(root.childUrl(path), authorization)
+        }
+    }
+
+    private suspend fun uploadTus(
+        transfer: TransferEntity,
+        account: AccountEntity,
+        collectionUrl: String,
+        client: TransferClient,
         source: () -> java.io.InputStream,
     ) {
         val metadata = "filename ${Base64.getEncoder().encodeToString(transfer.displayName.toByteArray())}"
+        var authorization = WorkerAuthorizationProvider(applicationContext).authorization(account)
         val url = transfer.tusUrl ?: client.createTusUpload(collectionUrl, authorization, transfer.bytesTotal, metadata)
         var offset = if (transfer.tusUrl == null) 0 else client.tusOffset(url, authorization)
         checkpoint(transfer, offset, url)
         while (offset < transfer.bytesTotal) {
-            val remaining = transfer.bytesTotal - offset
+            authorization = WorkerAuthorizationProvider(applicationContext).authorization(account)
+            val remaining = minOf(transfer.bytesTotal - offset, TUS_CHUNK_BYTES)
             val input = source().also { it.skipFully(offset) }
             val next = client.patchTus(url, authorization, offset, remaining, { input }) {}
             require(next > offset && next <= transfer.bytesTotal) { "The TUS server returned an invalid offset." }
@@ -226,7 +296,18 @@ class UploadWorker(
 
     private companion object {
         const val TUS_THRESHOLD = 10L * 1024 * 1024
+        const val TUS_CHUNK_BYTES = 10L * 1024 * 1024
     }
+}
+
+internal fun destinationCollectionPaths(destinationPath: String): List<String> {
+    val segments =
+        destinationPath
+            .trim('/')
+            .split('/')
+            .filter(String::isNotBlank)
+            .dropLast(1)
+    return segments.indices.map { index -> "/${segments.take(index + 1).joinToString("/")}" }
 }
 
 class DownloadWorker(
@@ -264,6 +345,7 @@ class DownloadWorker(
                     if (count < 0) break
                     output.write(buffer, 0, count)
                     downloaded += count
+                    updateForegroundProgress(transfer, downloaded)
                 }
             }
         }

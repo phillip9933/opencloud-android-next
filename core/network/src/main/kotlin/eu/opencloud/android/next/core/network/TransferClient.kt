@@ -65,6 +65,22 @@ class TransferClient(
         }
     }
 
+    fun createCollection(
+        url: String,
+        authorization: String,
+    ) {
+        val request =
+            Request
+                .Builder()
+                .url(url)
+                .header("Authorization", authorization)
+                .method("MKCOL", EMPTY_BODY)
+                .build()
+        client.newCall(request).execute().use { response ->
+            requireSuccessful(response, setOf(201, 405))
+        }
+    }
+
     fun createTusUpload(
         endpoint: String,
         authorization: String,
@@ -146,9 +162,9 @@ class TransferClient(
             source().use { input ->
                 val buffer = ByteArray(BUFFER_SIZE)
                 var written = 0L
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
+                while (written < length) {
+                    val count = input.read(buffer, 0, minOf(buffer.size.toLong(), length - written).toInt())
+                    if (count < 0) error("The transfer source ended before its declared length.")
                     sink.write(buffer, 0, count)
                     written += count
                     onProgress(written)
@@ -184,7 +200,13 @@ class TransferClient(
 
 class TransferHttpException(
     val statusCode: Int,
-) : IllegalStateException("HTTP $statusCode")
+    responseBody: String? = null,
+) : IllegalStateException(
+        buildString {
+            append("HTTP $statusCode")
+            responseBody?.takeIf(String::isNotBlank)?.let { append(": $it") }
+        },
+    )
 
 class TransferConflictException : IllegalStateException("The destination already contains an item with this name.")
 

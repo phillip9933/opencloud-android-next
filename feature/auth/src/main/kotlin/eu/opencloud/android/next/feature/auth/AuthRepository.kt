@@ -47,6 +47,7 @@ class AuthRepository(
                 profile.displayName,
                 AuthenticationType.BASIC,
             )
+        credentialStore.saveBasicUsername(account.id, username)
         credentialStore.saveBasicPassword(account.id, password)
         val authorization = okhttp3.Credentials.basic(username, password)
         return AuthenticatedSession(account, profile, api.capabilities(serverUrl, authorization))
@@ -92,7 +93,12 @@ class AuthRepository(
                 AuthenticationType.OIDC,
             )
         credentialStore.saveTokens(account.id, tokens)
-        return AuthenticatedSession(account, profile, api.capabilities(serverUrl, "Bearer ${tokens.accessToken}"))
+        return AuthenticatedSession(
+            account,
+            profile,
+            api.capabilities(serverUrl, "Bearer ${tokens.accessToken}"),
+            configuration,
+        )
     }
 
     suspend fun refreshIfNeeded(
@@ -107,9 +113,17 @@ class AuthRepository(
                 return current
             }
             val refreshToken = current.refreshToken ?: return null
-            api.refresh(configuration, refreshToken).also { refreshed ->
-                credentialStore.saveTokens(account.id, refreshed)
-            }
+            api
+                .refresh(configuration, refreshToken)
+                .let { refreshed ->
+                    if (refreshed.refreshToken ==
+                        null
+                    ) {
+                        refreshed.copy(refreshToken = refreshToken)
+                    } else {
+                        refreshed
+                    }
+                }.also { refreshed -> credentialStore.saveTokens(account.id, refreshed) }
         }
 
     private fun accountId(
@@ -137,4 +151,5 @@ data class AuthenticatedSession(
     val account: Account,
     val profile: UserProfile,
     val capabilities: ServerCapabilities,
+    val oidcConfiguration: OidcConfiguration? = null,
 )

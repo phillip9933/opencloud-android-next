@@ -78,6 +78,10 @@ android {
     }
 }
 
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "1g"
+}
+
 dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))

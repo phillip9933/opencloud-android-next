@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -92,8 +93,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.opencloud.android.next.core.database.FolderBackupEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
@@ -124,6 +127,28 @@ fun FileBrowserRoute(
                 viewModel.upload(selected)
             }
         }
+    var pendingBackup by remember { mutableStateOf<BackupDraft?>(null) }
+    val backupLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            val draft = pendingBackup
+            if (uri != null && draft != null) {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }
+                viewModel.saveBackup(
+                    uri,
+                    draft.destinationPath,
+                    draft.mediaType,
+                    draft.wifiOnly,
+                    draft.chargingOnly,
+                    draft.deleteAfterUpload,
+                )
+            }
+            pendingBackup = null
+        }
     viewModel.load(accountId)
     FileBrowserScreen(
         accountId = accountId,
@@ -147,6 +172,16 @@ fun FileBrowserRoute(
         onUpload = { uploadLauncher.launch(arrayOf("*/*")) },
         onDownload = viewModel::download,
         onMakeAvailableOffline = viewModel::makeAvailableOffline,
+        onAddBackup = { draft ->
+            pendingBackup = draft
+            backupLauncher.launch(null)
+        },
+        onDeleteBackup = viewModel::deleteBackup,
+        onOpenBackupPicker = viewModel::openBackupPicker,
+        onOpenBackupPickerFolder = viewModel::openBackupPickerFolder,
+        onNavigateBackupPickerUp = viewModel::navigateBackupPickerUp,
+        onCreateBackupPickerFolder = viewModel::createBackupPickerFolder,
+        onResolveConflict = viewModel::resolveConflict,
         onClearMessage = viewModel::clearMessage,
         onGlobalAction = viewModel::showGlobalActionUnavailable,
     )
@@ -176,6 +211,13 @@ fun FileBrowserScreen(
     onUpload: () -> Unit,
     onDownload: (ResourceEntity) -> Unit,
     onMakeAvailableOffline: (ResourceEntity) -> Unit,
+    onAddBackup: (BackupDraft) -> Unit,
+    onDeleteBackup: (String) -> Unit,
+    onOpenBackupPicker: () -> Unit,
+    onOpenBackupPickerFolder: (ResourceEntity) -> Unit,
+    onNavigateBackupPickerUp: () -> Unit,
+    onCreateBackupPickerFolder: (String) -> Unit,
+    onResolveConflict: (TransferEntity, ConflictDecision) -> Unit,
     onClearMessage: () -> Unit,
     onGlobalAction: () -> Unit,
     modifier: Modifier = Modifier,
@@ -186,6 +228,7 @@ fun FileBrowserScreen(
     var sortAscending by remember { mutableStateOf(true) }
     var showSortMenu by remember { mutableStateOf(false) }
     var showAccountInformation by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val selectionMode = state.selectedIds.isNotEmpty()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -209,7 +252,7 @@ fun FileBrowserScreen(
                 },
                 onSettings = {
                     scope.launch { drawerState.close() }
-                    onGlobalAction()
+                    showSettings = true
                 },
             )
         },
@@ -303,6 +346,23 @@ fun FileBrowserScreen(
 
     if (showAccountInformation) {
         AccountInformationDialog(accountId = accountId, onDismiss = { showAccountInformation = false })
+    }
+    if (showSettings) {
+        FolderBackupSettingsDialog(
+            backups = state.backups,
+            pickerTrail = state.backupPickerTrail,
+            pickerFolders = state.backupPickerResources,
+            onDismiss = { showSettings = false },
+            onAdd = onAddBackup,
+            onDelete = onDeleteBackup,
+            onOpenPicker = onOpenBackupPicker,
+            onOpenFolder = onOpenBackupPickerFolder,
+            onNavigateUp = onNavigateBackupPickerUp,
+            onCreateFolder = onCreateBackupPickerFolder,
+        )
+    }
+    state.transfers.firstOrNull { it.state == TransferState.CONFLICT.name }?.let { conflict ->
+        ConflictResolutionDialog(conflict = conflict, onDecision = { onResolveConflict(conflict, it) })
     }
     state.message?.let { BrowserNotice("Notice", it, onClearMessage) }
     state.error?.let { BrowserNotice("File operation", it, onClearMessage) }
@@ -864,6 +924,274 @@ private fun AccountInformationDialog(
 )
 
 @Composable
+private fun ConflictResolutionDialog(
+    conflict: TransferEntity,
+    onDecision: (ConflictDecision) -> Unit,
+) = AlertDialog(
+    onDismissRequest = {},
+    title = { Text("Upload conflict") },
+    text = { Text("${conflict.displayName} already exists. Choose which version to keep.") },
+    confirmButton = { TextButton(onClick = { onDecision(ConflictDecision.REPLACE) }) { Text("Replace remote") } },
+    dismissButton = {
+        Row {
+            TextButton(onClick = { onDecision(ConflictDecision.KEEP_BOTH) }) { Text("Keep both") }
+            TextButton(onClick = { onDecision(ConflictDecision.CANCEL) }) { Text("Cancel upload") }
+        }
+    },
+)
+
+@Composable
+@Suppress("LongParameterList")
+fun FolderBackupSettingsDialog(
+    backups: List<FolderBackupEntity>,
+    pickerTrail: List<BackupFolderCrumb>,
+    pickerFolders: List<ResourceEntity>,
+    onDismiss: () -> Unit,
+    onAdd: (BackupDraft) -> Unit,
+    onDelete: (String) -> Unit,
+    onOpenPicker: () -> Unit,
+    onOpenFolder: (ResourceEntity) -> Unit,
+    onNavigateUp: () -> Unit,
+    onCreateFolder: (String) -> Unit,
+) = AlertDialog(
+    onDismissRequest = onDismiss,
+    text = {
+        FolderBackupSettingsContent(
+            backups = backups,
+            pickerTrail = pickerTrail,
+            pickerFolders = pickerFolders,
+            onDismiss = onDismiss,
+            onAdd = onAdd,
+            onDelete = onDelete,
+            onOpenPicker = onOpenPicker,
+            onOpenFolder = onOpenFolder,
+            onNavigateUp = onNavigateUp,
+            onCreateFolder = onCreateFolder,
+        )
+    },
+    confirmButton = {},
+)
+
+@Composable
+@Suppress("LongParameterList")
+fun FolderBackupSettingsContent(
+    backups: List<FolderBackupEntity>,
+    onDismiss: () -> Unit,
+    onAdd: (BackupDraft) -> Unit,
+    onDelete: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    pickerTrail: List<BackupFolderCrumb> = emptyList(),
+    pickerFolders: List<ResourceEntity> = emptyList(),
+    onOpenPicker: () -> Unit = {},
+    onOpenFolder: (ResourceEntity) -> Unit = {},
+    onNavigateUp: () -> Unit = {},
+    onCreateFolder: (String) -> Unit = {},
+) {
+    var destination by remember { mutableStateOf("/Camera Uploads") }
+    var showDestinationPicker by remember { mutableStateOf(false) }
+    var showCreateFolder by remember { mutableStateOf(false) }
+    var mediaType by remember { mutableStateOf("IMAGE") }
+    var wifiOnly by remember { mutableStateOf(true) }
+    var chargingOnly by remember { mutableStateOf(false) }
+    var deleteAfterUpload by remember { mutableStateOf(false) }
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs),
+    ) {
+        Text("Folder & camera backup", style = MaterialTheme.typography.headlineSmall)
+        Text("Remote destination", style = MaterialTheme.typography.labelLarge)
+        Text(destination, style = MaterialTheme.typography.bodyMedium)
+        TextButton(
+            onClick = {
+                onOpenPicker()
+                showDestinationPicker = true
+            },
+        ) { Text("Select folder") }
+        Text("File type", style = MaterialTheme.typography.labelLarge)
+        Row {
+            listOf("IMAGE" to "Photos", "VIDEO" to "Videos", "ALL" to "All files").forEach { (value, label) ->
+                TextButton(onClick = { mediaType = value }) {
+                    Text(
+                        if (mediaType == value) {
+                            "✓ $label"
+                        } else {
+                            label
+                        },
+                    )
+                }
+            }
+        }
+        BackupCheckbox("Wi-Fi only", wifiOnly) { wifiOnly = it }
+        BackupCheckbox("Only while charging", chargingOnly) { chargingOnly = it }
+        BackupCheckbox("Delete local file after upload", deleteAfterUpload) { deleteAfterUpload = it }
+        HorizontalDivider()
+        LazyColumn(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .semantics { contentDescription = "Active backup configurations" },
+        ) {
+            items(backups, key = { it.id }) { backup ->
+                BackupConfigurationItem(backup = backup, onDelete = { onDelete(backup.id) })
+            }
+        }
+        HorizontalDivider()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(
+                onClick = {
+                    onAdd(BackupDraft(destination, mediaType, wifiOnly, chargingOnly, deleteAfterUpload))
+                },
+            ) {
+                Text("Choose source folder")
+            }
+        }
+    }
+    if (showDestinationPicker) {
+        RemoteFolderPickerDialog(
+            trail = pickerTrail,
+            folders = pickerFolders,
+            onDismiss = { showDestinationPicker = false },
+            onOpenFolder = onOpenFolder,
+            onNavigateUp = onNavigateUp,
+            onCreateFolder = { showCreateFolder = true },
+            onSelect = {
+                destination = pickerTrail.lastOrNull()?.path ?: "/"
+                showDestinationPicker = false
+            },
+        )
+    }
+    if (showCreateFolder) {
+        NameDialog(
+            title = "New destination folder",
+            confirm = "Create",
+            onDismiss = { showCreateFolder = false },
+        ) { name ->
+            onCreateFolder(name)
+            showCreateFolder = false
+        }
+    }
+}
+
+@Composable
+private fun BackupConfigurationItem(
+    backup: FolderBackupEntity,
+    onDelete: () -> Unit,
+) = ListItem(
+    headlineContent = {
+        BackupPathLine(
+            label = "Local:",
+            value = backup.sourceDisplayName.ifBlank { sourceNameFromTreeUri(backup.sourceTreeUri) },
+        )
+    },
+    supportingContent = {
+        Column(verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXxs)) {
+            BackupPathLine(label = "Remote:", value = backup.destinationPath)
+            Text(
+                backupDetails(backup),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    },
+    trailingContent = {
+        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Remove backup") }
+    },
+)
+
+@Composable
+private fun BackupPathLine(
+    label: String,
+    value: String,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXxs)) {
+        Text(label, fontWeight = FontWeight.SemiBold)
+        Text(value)
+    }
+}
+
+internal fun backupDetails(backup: FolderBackupEntity): String {
+    val fileType =
+        when (backup.mediaType) {
+            "IMAGE" -> "Photos"
+            "VIDEO" -> "Videos"
+            else -> "All files"
+        }
+    val constraints =
+        buildList {
+            if (backup.wifiOnly) add("Wi-Fi only")
+            if (backup.chargingOnly) add("Charging")
+        }.ifEmpty { listOf("No restrictions") }
+    return "$fileType • ${constraints.joinToString(" • ")}"
+}
+
+@Composable
+@Suppress("LongParameterList")
+private fun RemoteFolderPickerDialog(
+    trail: List<BackupFolderCrumb>,
+    folders: List<ResourceEntity>,
+    onDismiss: () -> Unit,
+    onOpenFolder: (ResourceEntity) -> Unit,
+    onNavigateUp: () -> Unit,
+    onCreateFolder: () -> Unit,
+    onSelect: () -> Unit,
+) = AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Select remote folder") },
+    text = {
+        Column(verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs)) {
+            Text(
+                trail.lastOrNull()?.path ?: "/",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (trail.isNotEmpty()) {
+                ListItem(
+                    headlineContent = { Text("Up") },
+                    leadingContent = { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onNavigateUp, onLongClick = {}),
+                )
+            }
+            if (folders.isEmpty()) {
+                Text("No folders here", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                folders.forEach { folder ->
+                    ListItem(
+                        headlineContent = { Text(folder.name) },
+                        leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(onClick = { onOpenFolder(folder) }, onLongClick = {}),
+                    )
+                }
+            }
+            TextButton(onClick = onCreateFolder) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Text("New folder")
+            }
+        }
+    },
+    confirmButton = { TextButton(onClick = onSelect) { Text("Select this folder") } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+)
+
+@Composable
+private fun BackupCheckbox(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(label)
+    }
+}
+
+@Composable
 private fun NameDialog(
     title: String,
     confirm: String,
@@ -907,6 +1235,14 @@ private sealed interface BrowserDialog {
         val resource: ResourceEntity,
     ) : BrowserDialog
 }
+
+data class BackupDraft(
+    val destinationPath: String,
+    val mediaType: String,
+    val wifiOnly: Boolean,
+    val chargingOnly: Boolean,
+    val deleteAfterUpload: Boolean,
+)
 
 private enum class BrowserSortCriterion(
     val label: String,
