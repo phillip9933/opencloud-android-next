@@ -27,6 +27,7 @@ data class ServerCapabilities(
     val publicSharingEnabled: Boolean,
     val spacesEnabled: Boolean,
     val tusSupported: Boolean,
+    val remoteSearchUrl: String? = null,
 )
 
 data class OidcConfiguration(

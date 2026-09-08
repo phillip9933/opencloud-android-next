@@ -23,7 +23,6 @@ import okhttp3.OkHttpClient
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Base64
-import java.util.concurrent.TimeUnit
 
 abstract class TransferWorker(
     context: Context,
@@ -365,9 +364,6 @@ class CacheCleanupWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         File(applicationContext.cacheDir, "transfers").deleteRecursively()
-        FileBrowserStore(FileBrowserDatabase.create(applicationContext)).deleteSuccessfulTransfers(
-            System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7),
-        )
         return Result.success()
     }
 }

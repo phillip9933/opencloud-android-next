@@ -14,7 +14,7 @@ import eu.opencloud.android.next.core.security.TlsPolicy
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
 
-internal class WorkerAuthorizationProvider(
+class WorkerAuthorizationProvider(
     private val context: Context,
 ) {
     fun authorization(account: AccountEntity): String {

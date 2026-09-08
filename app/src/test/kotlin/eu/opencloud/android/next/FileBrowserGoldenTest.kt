@@ -2,12 +2,16 @@ package eu.opencloud.android.next
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTextInput
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.opencloud.android.next.core.database.FolderBackupEntity
@@ -38,6 +42,69 @@ class FileBrowserGoldenTest {
 
     @Test
     fun fileBrowserList_matchesGolden() = capture(browserState())
+
+    @Test
+    fun fileBrowserFixedSearch_acceptsQueryWithoutChangingLayout() {
+        var query = ""
+        render(
+            state = browserState(),
+            onSearchQueryChange = { query = it },
+        )
+
+        composeRule.onNodeWithContentDescription("Filter files").performTextInput("plan")
+        check(query == "plan")
+    }
+
+    @Test
+    fun fileBrowserActionSheet_hasSingleOfflineDownloadAction() {
+        render(state = browserState(actionResource = sampleResources().last()))
+        composeRule.onNodeWithText("Download for offline use").fetchSemanticsNode()
+        composeRule.onAllNodesWithText("Download").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Make available offline").assertCountEquals(0)
+    }
+
+    @Test
+    fun fileBrowserAvailabilityIndicators_areIconOnly() {
+        render(state = browserState())
+        composeRule.onAllNodesWithContentDescription("Cloud only").assertCountEquals(2)
+        composeRule.onAllNodesWithContentDescription("Available offline").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Cloud only").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Available offline").assertCountEquals(0)
+    }
+
+    @Test
+    fun fileBrowserSearchResults_matchesGolden() =
+        capture(
+            browserState(
+                searchQuery = "plan",
+                searchResults =
+                    listOf(
+                        resource("plans", "Plans", ResourceKind.FOLDER),
+                        resource("plan", "Quarterly plan.pdf", ResourceKind.FILE, 42),
+                    ),
+                remoteSearchSupported = true,
+            ),
+            fileName = "file_browser_search_results",
+        )
+
+    @Test
+    fun fileBrowserSearchFailureHeader_matchesGolden() =
+        capture(
+            searchFailureState(),
+            fileName = "file_browser_search_failure_header",
+        ) {
+            val bannerBottom =
+                composeRule
+                    .onNodeWithText("Transfer failed: Broken.pdf")
+                    .fetchSemanticsNode()
+                    .boundsInRoot.bottom
+            val firstResultTop =
+                composeRule
+                    .onNodeWithText("Plans")
+                    .fetchSemanticsNode()
+                    .boundsInRoot.top
+            check(firstResultTop >= bannerBottom)
+        }
 
     @Test
     fun fileBrowserGridSelection_matchesGolden() =
@@ -230,11 +297,28 @@ class FileBrowserGoldenTest {
         check(selectedLayout == BrowserLayout.TILES)
     }
 
+    @Suppress("LongParameterList")
     private fun capture(
         state: FileBrowserUiState,
         fileName: String = "file_browser_${state.layout}_${state.selectedIds.size}_${state.actionResource != null}",
         onSetLayout: (BrowserLayout) -> Unit = {},
+        onSearchQueryChange: (String) -> Unit = {},
         interaction: () -> Unit = {},
+    ) {
+        render(state, onSetLayout, onSearchQueryChange)
+        interaction()
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(
+            filePath = fileName,
+            // Robolectric anti-aliasing varies by a few host-rendered pixels; layout and color changes still fail.
+            roborazziOptions = browserRoborazziOptions(),
+        )
+    }
+
+    private fun render(
+        state: FileBrowserUiState,
+        onSetLayout: (BrowserLayout) -> Unit = {},
+        onSearchQueryChange: (String) -> Unit = {},
     ) {
         composeRule.activity.setContent {
             OpenCloudTheme {
@@ -248,6 +332,8 @@ class FileBrowserGoldenTest {
                     onSetLayout = onSetLayout,
                     onToggleSelection = {},
                     onClearSelection = {},
+                    onDownloadSelection = {},
+                    onDeleteSelection = {},
                     onShowActions = {},
                     onDismissActions = {},
                     onCreateFolder = {},
@@ -257,8 +343,7 @@ class FileBrowserGoldenTest {
                     onCopy = {},
                     onDelete = {},
                     onUpload = {},
-                    onDownload = {},
-                    onMakeAvailableOffline = {},
+                    onDownloadForOffline = {},
                     onAddBackup = {},
                     onDeleteBackup = {},
                     onOpenBackupPicker = {},
@@ -268,16 +353,12 @@ class FileBrowserGoldenTest {
                     onResolveConflict = { _, _ -> },
                     onClearMessage = {},
                     onGlobalAction = {},
+                    onSearchQueryChange = onSearchQueryChange,
+                    onOpenTransfers = {},
                 )
             }
         }
-        interaction()
         composeRule.waitForIdle()
-        composeRule.onRoot().captureRoboImage(
-            filePath = fileName,
-            // Robolectric anti-aliasing varies by a few host-rendered pixels; layout and color changes still fail.
-            roborazziOptions = browserRoborazziOptions(),
-        )
     }
 
     private fun browserRoborazziOptions() =
@@ -290,12 +371,16 @@ class FileBrowserGoldenTest {
                 ),
         )
 
+    @Suppress("LongParameterList")
     private fun browserState(
         layout: BrowserLayout = BrowserLayout.DEFAULT_TABLE,
         selectedIds: Set<String> = emptySet(),
         actionResource: ResourceEntity? = null,
         folderTrail: List<FolderCrumb> = emptyList(),
         transfers: List<TransferEntity> = emptyList(),
+        searchQuery: String = "",
+        searchResults: List<ResourceEntity> = emptyList(),
+        remoteSearchSupported: Boolean = false,
     ) = FileBrowserUiState(
         spaces =
             listOf(
@@ -319,13 +404,45 @@ class FileBrowserGoldenTest {
         actionResource = actionResource,
         folderTrail = folderTrail,
         transfers = transfers,
+        searchQuery = searchQuery,
+        searchResults = searchResults,
+        remoteSearchSupported = remoteSearchSupported,
     )
 
     private fun sampleResources() =
         listOf(
             resource("documents", "Documents", ResourceKind.FOLDER),
             resource("photos", "Photos", ResourceKind.FOLDER),
-            resource("welcome", "Welcome to OpenCloud.pdf", ResourceKind.FILE, 1_258_291),
+            resource("welcome", "Welcome to OpenCloud.pdf", ResourceKind.FILE, 1_258_291).copy(hasLocalCopy = true),
+        )
+
+    private fun searchFailureState() =
+        browserState(
+            searchQuery = "plan",
+            searchResults =
+                listOf(
+                    resource("plans", "Plans", ResourceKind.FOLDER),
+                    resource("plan", "Quarterly plan.pdf", ResourceKind.FILE, 42),
+                ),
+            transfers =
+                listOf(
+                    TransferEntity(
+                        id = "failed",
+                        accountId = "account",
+                        spaceId = "personal",
+                        resourceId = "broken",
+                        direction = TransferDirection.DOWNLOAD.name,
+                        sourceUri = null,
+                        destinationPath = "/Broken.pdf",
+                        displayName = "Broken.pdf",
+                        mimeType = "application/pdf",
+                        bytesTotal = 42,
+                        state = TransferState.FAILED.name,
+                        error = "Network connection lost.",
+                        createdAtEpochMillis = 0,
+                        updatedAtEpochMillis = 0,
+                    ),
+                ),
         )
 
     private fun resource(
@@ -334,5 +451,18 @@ class FileBrowserGoldenTest {
         kind: ResourceKind,
         size: Long = 0,
         parentId: String? = null,
-    ) = ResourceEntity("account", "personal", id, parentId, "/$name", name, kind, null, size, null, 0, 0)
+    ) = ResourceEntity(
+        "account",
+        "personal",
+        id,
+        parentId,
+        "/$name",
+        name,
+        kind,
+        null,
+        size,
+        null,
+        0,
+        0,
+    )
 }

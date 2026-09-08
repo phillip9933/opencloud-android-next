@@ -61,6 +61,7 @@ class OpenCloudApiTest {
 
         assertEquals("alice", profile.id)
         assertTrue(capabilities.sharingEnabled)
+        assertEquals("$baseUrl/remote.php/dav/spaces/", capabilities.remoteSearchUrl)
         assertEquals("Basic YWxpY2U6c2VjcmV0", server.takeRequest().getHeader("Authorization"))
         val capabilitiesRequest = server.takeRequest()
         assertEquals("true", capabilitiesRequest.getHeader("OCS-APIREQUEST"))
@@ -98,7 +99,7 @@ class OpenCloudApiTest {
         """{"ocs":{"data":{"id":"alice","display-name":"Alice","email":"alice@example.test"}}}"""
 
     private fun capabilitiesResponse() =
-        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"files":{"tus":{"enabled":true}},"files_sharing":{"api_enabled":true,"public":{"enabled":true}},"spaces":{"enabled":true}}}}}"""
+        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"dav":{"reports":["search-files"]},"files":{"tus":{"enabled":true}},"files_sharing":{"api_enabled":true,"public":{"enabled":true}},"spaces":{"enabled":true}}}}}"""
 
     private fun tokenResponse(
         accessToken: String,

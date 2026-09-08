@@ -193,6 +193,49 @@ class TransferManager(
         enqueueUploadWork(reset, ExistingWorkPolicy.REPLACE)
     }
 
+    suspend fun retry(transfer: TransferEntity) {
+        require(transfer.state == TransferState.FAILED.name || transfer.state == TransferState.CANCELLED.name) {
+            "Only failed or cancelled transfers can be retried."
+        }
+        val reset =
+            transfer.copy(
+                state = TransferState.QUEUED.name,
+                error = null,
+                workId = null,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+            )
+        store.updateTransfer(reset)
+        if (reset.direction == TransferDirection.UPLOAD.name) {
+            enqueueUploadWork(reset, ExistingWorkPolicy.REPLACE)
+        } else {
+            enqueueDownloadWork(reset, ExistingWorkPolicy.REPLACE)
+        }
+    }
+
+    suspend fun cancel(transfer: TransferEntity) {
+        transfer.workId?.let { workManager.cancelWorkById(UUID.fromString(it)) }
+        store.updateTransfer(
+            transfer.copy(
+                state = TransferState.CANCELLED.name,
+                error = null,
+                workId = null,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    suspend fun clearHistory(accountId: String) = store.clearTransferHistory(accountId)
+
+    suspend fun clearAll(
+        accountId: String,
+        transfers: List<TransferEntity>,
+    ) {
+        transfers.mapNotNull(TransferEntity::workId).forEach { workId ->
+            runCatching { workManager.cancelWorkById(UUID.fromString(workId)) }
+        }
+        store.clearTransfers(accountId)
+    }
+
     suspend fun cancelConflict(transfer: TransferEntity) {
         store.updateTransfer(
             transfer.copy(
@@ -262,7 +305,10 @@ class TransferManager(
         workManager.enqueueUniqueWork("transfer-${transfer.id}", policy, request)
     }
 
-    private suspend fun enqueueDownloadWork(transfer: TransferEntity) {
+    private suspend fun enqueueDownloadWork(
+        transfer: TransferEntity,
+        policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP,
+    ) {
         val request =
             OneTimeWorkRequestBuilder<DownloadWorker>()
                 .setInputData(workDataOf(TransferWorker.TRANSFER_ID to transfer.id))
@@ -272,7 +318,7 @@ class TransferManager(
         store.updateTransfer(
             transfer.copy(workId = request.id.toString(), updatedAtEpochMillis = System.currentTimeMillis()),
         )
-        workManager.enqueueUniqueWork("transfer-${transfer.id}", ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork("transfer-${transfer.id}", policy, request)
     }
 
     private fun sourceMetadata(uri: Uri): SourceMetadata {

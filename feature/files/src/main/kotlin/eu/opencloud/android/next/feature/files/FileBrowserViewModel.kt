@@ -15,7 +15,9 @@ import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.core.sync.DISCOVERY_ERROR
+import eu.opencloud.android.next.core.sync.SearchRepositoryResult
 import eu.opencloud.android.next.core.sync.TransferManager
+import eu.opencloud.android.next.core.sync.createSearchRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -34,10 +38,12 @@ class FileBrowserViewModel(
 ) : AndroidViewModel(application) {
     private val store = FileBrowserStore(FileBrowserDatabase.create(application))
     private val transfers = TransferManager(application, store)
+    private val searchRepository = createSearchRepository(application, store)
     private val workManager = WorkManager.getInstance(application)
     private val mutableState = MutableStateFlow(FileBrowserUiState())
     private val activeLocation = MutableStateFlow<BrowserLocation?>(null)
     private val backupPickerLocation = MutableStateFlow<BrowserLocation?>(null)
+    private val searchQuery = MutableStateFlow("")
     val state: StateFlow<FileBrowserUiState> = mutableState.asStateFlow()
 
     private var accountId: String? = null
@@ -51,6 +57,27 @@ class FileBrowserViewModel(
                     store.observeChildren(location.accountId, location.spaceId, location.folderId)
                 }.collectLatest { resources ->
                     reduce { copy(resources = resources) }
+                }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            searchQuery
+                .flatMapLatest { query ->
+                    val account = accountId
+                    if (account == null || query.isBlank()) {
+                        flowOf(SearchRepositoryResult(emptyList(), remoteSupported = false))
+                    } else {
+                        searchRepository.search(account, query)
+                    }
+                }.onStart { emit(SearchRepositoryResult(emptyList(), remoteSupported = false)) }
+                .collectLatest { result ->
+                    reduce {
+                        copy(
+                            searchResults = result.resources,
+                            remoteSearchSupported = result.remoteSupported,
+                            isRemoteSearchLoading = result.remoteLoading,
+                            remoteSearchError = result.remoteError,
+                        )
+                    }
                 }
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -138,6 +165,16 @@ class FileBrowserViewModel(
 
     fun clearSelection() = reduce { copy(selectedIds = emptySet()) }
 
+    fun downloadSelection() =
+        batchAction("Selected resources queued for offline access.") { resource ->
+            transfers.makeAvailableOffline(resource)
+        }
+
+    fun deleteSelected() =
+        batchAction("Selected resources deleted.") { resource ->
+            store.delete(resource.accountId, resource.spaceId, resource.remoteId)
+        }
+
     fun showActions(resource: ResourceEntity?) = reduce { copy(actionResource = resource) }
 
     fun dismissActions() = reduce { copy(actionResource = null) }
@@ -181,14 +218,17 @@ class FileBrowserViewModel(
         }
     }
 
-    fun download(resource: ResourceEntity) = enqueueDownload(resource, offlinePin = false)
-
-    fun makeAvailableOffline(resource: ResourceEntity) {
+    fun downloadForOffline(resource: ResourceEntity) {
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) { transfers.makeAvailableOffline(resource) } }
                 .onSuccess { reduce { copy(actionResource = null, message = "Offline synchronization queued.") } }
                 .onFailure { reduce { copy(error = it.message ?: "Offline synchronization could not be queued.") } }
         }
+    }
+
+    fun setSearchQuery(query: String) {
+        reduce { copy(searchQuery = query, remoteSearchError = null) }
+        searchQuery.value = query
     }
 
     @Suppress("LongParameterList")
@@ -294,23 +334,6 @@ class FileBrowserViewModel(
         }
     }
 
-    private fun enqueueDownload(
-        resource: ResourceEntity,
-        offlinePin: Boolean,
-    ) {
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { transfers.enqueueDownload(resource, offlinePin) } }
-                .onSuccess {
-                    reduce {
-                        copy(
-                            actionResource = null,
-                            message = if (offlinePin) "Available-offline download queued." else "Download queued.",
-                        )
-                    }
-                }.onFailure { reduce { copy(error = it.message ?: "The download could not be queued.") } }
-        }
-    }
-
     fun showGlobalActionUnavailable() =
         reduce { copy(message = "This global navigation action is not available in the file browser preview yet.") }
 
@@ -348,6 +371,22 @@ class FileBrowserViewModel(
                         )
                     }
                 }
+        }
+    }
+
+    private fun selectedResources(): List<ResourceEntity> =
+        state.value.resources.filter { it.remoteId in state.value.selectedIds }
+
+    private fun batchAction(
+        successMessage: String,
+        action: suspend (ResourceEntity) -> Unit,
+    ) {
+        val selected = selectedResources()
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { selected.forEach { action(it) } } }
+                .onSuccess { reduce { copy(selectedIds = emptySet(), message = successMessage) } }
+                .onFailure { reduce { copy(error = it.message ?: "The selected action could not be completed.") } }
         }
     }
 
@@ -396,6 +435,11 @@ data class FileBrowserUiState(
     val backupPickerResources: List<ResourceEntity> = emptyList(),
     val layout: BrowserLayout = BrowserLayout.DEFAULT_TABLE,
     val selectedIds: Set<String> = emptySet(),
+    val searchQuery: String = "",
+    val searchResults: List<ResourceEntity> = emptyList(),
+    val remoteSearchSupported: Boolean = false,
+    val isRemoteSearchLoading: Boolean = false,
+    val remoteSearchError: String? = null,
     val actionResource: ResourceEntity? = null,
     val message: String? = null,
     val error: String? = null,

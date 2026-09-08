@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,8 +32,10 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
@@ -42,9 +43,11 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -74,7 +77,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
@@ -110,6 +112,7 @@ import kotlinx.coroutines.launch
 fun FileBrowserRoute(
     accountId: String,
     releaseVersion: String,
+    destinations: FileBrowserDestinations,
     modifier: Modifier = Modifier,
     viewModel: FileBrowserViewModel = viewModel(),
 ) {
@@ -161,6 +164,8 @@ fun FileBrowserRoute(
         onSetLayout = viewModel::setLayout,
         onToggleSelection = viewModel::toggleSelection,
         onClearSelection = viewModel::clearSelection,
+        onDownloadSelection = viewModel::downloadSelection,
+        onDeleteSelection = viewModel::deleteSelected,
         onShowActions = viewModel::showActions,
         onDismissActions = viewModel::dismissActions,
         onCreateFolder = viewModel::createFolder,
@@ -170,8 +175,7 @@ fun FileBrowserRoute(
         onCopy = viewModel::copy,
         onDelete = viewModel::delete,
         onUpload = { uploadLauncher.launch(arrayOf("*/*")) },
-        onDownload = viewModel::download,
-        onMakeAvailableOffline = viewModel::makeAvailableOffline,
+        onDownloadForOffline = viewModel::downloadForOffline,
         onAddBackup = { draft ->
             pendingBackup = draft
             backupLauncher.launch(null)
@@ -184,8 +188,14 @@ fun FileBrowserRoute(
         onResolveConflict = viewModel::resolveConflict,
         onClearMessage = viewModel::clearMessage,
         onGlobalAction = viewModel::showGlobalActionUnavailable,
+        onSearchQueryChange = viewModel::setSearchQuery,
+        onOpenTransfers = destinations.onOpenTransfers,
     )
 }
+
+data class FileBrowserDestinations(
+    val onOpenTransfers: () -> Unit,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -200,6 +210,8 @@ fun FileBrowserScreen(
     onSetLayout: (BrowserLayout) -> Unit,
     onToggleSelection: (String) -> Unit,
     onClearSelection: () -> Unit,
+    onDownloadSelection: () -> Unit,
+    onDeleteSelection: () -> Unit,
     onShowActions: (ResourceEntity?) -> Unit,
     onDismissActions: () -> Unit,
     onCreateFolder: (String) -> Unit,
@@ -209,8 +221,7 @@ fun FileBrowserScreen(
     onCopy: (ResourceEntity) -> Unit,
     onDelete: (ResourceEntity) -> Unit,
     onUpload: () -> Unit,
-    onDownload: (ResourceEntity) -> Unit,
-    onMakeAvailableOffline: (ResourceEntity) -> Unit,
+    onDownloadForOffline: (ResourceEntity) -> Unit,
     onAddBackup: (BackupDraft) -> Unit,
     onDeleteBackup: (String) -> Unit,
     onOpenBackupPicker: () -> Unit,
@@ -220,10 +231,11 @@ fun FileBrowserScreen(
     onResolveConflict: (TransferEntity, ConflictDecision) -> Unit,
     onClearMessage: () -> Unit,
     onGlobalAction: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onOpenTransfers: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var dialog by remember { mutableStateOf<BrowserDialog?>(null) }
-    var searchQuery by remember { mutableStateOf("") }
     var sortCriterion by remember { mutableStateOf(BrowserSortCriterion.Name) }
     var sortAscending by remember { mutableStateOf(true) }
     var showSortMenu by remember { mutableStateOf(false) }
@@ -234,9 +246,9 @@ fun FileBrowserScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val visibleResources =
-        remember(state.resources, searchQuery, sortCriterion, sortAscending) {
-            state.resources
-                .filter { resource -> resource.name.contains(searchQuery, ignoreCase = true) }
+        remember(state.resources, state.searchQuery, state.searchResults, sortCriterion, sortAscending) {
+            val source = if (state.searchQuery.isBlank()) state.resources else state.searchResults
+            source
                 .sortedWith(sortCriterion.comparator(sortAscending))
         }
 
@@ -246,6 +258,10 @@ fun FileBrowserScreen(
         drawerContent = {
             BrowserNavigationDrawer(
                 releaseVersion = releaseVersion,
+                onTransfers = {
+                    scope.launch { drawerState.close() }
+                    onOpenTransfers()
+                },
                 onDeletedFiles = {
                     scope.launch { drawerState.close() }
                     onGlobalAction()
@@ -261,45 +277,98 @@ fun FileBrowserScreen(
             modifier = modifier,
             topBar = {
                 if (selectionMode) {
-                    SelectionTopAppBar(state.selectedIds.size, onClearSelection)
+                    Column {
+                        SelectionTopAppBar(
+                            selectedCount = state.selectedIds.size,
+                            onClearSelection = onClearSelection,
+                            onDownloadSelection = onDownloadSelection,
+                            onDeleteSelection = onDeleteSelection,
+                        )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surface,
+                        ) {
+                            Column {
+                                BrowserSubHeader(
+                                    canNavigateUp = state.folderTrail.isNotEmpty(),
+                                    layout = state.layout,
+                                    sortCriterion = sortCriterion,
+                                    sortAscending = sortAscending,
+                                    showSortMenu = showSortMenu,
+                                    onNavigateUp = onNavigateUp,
+                                    onShowSortMenu = { showSortMenu = true },
+                                    onDismissSortMenu = { showSortMenu = false },
+                                    onSortSelect = { criterion ->
+                                        if (sortCriterion == criterion) {
+                                            sortAscending = !sortAscending
+                                        } else {
+                                            sortCriterion = criterion
+                                            sortAscending = true
+                                        }
+                                        showSortMenu = false
+                                    },
+                                    onToggleLayout = {
+                                        onSetLayout(
+                                            if (state.layout == BrowserLayout.TILES) {
+                                                BrowserLayout.DEFAULT_TABLE
+                                            } else {
+                                                BrowserLayout.TILES
+                                            },
+                                        )
+                                    },
+                                )
+                                TransferSummary(state.transfers)
+                            }
+                        }
+                    }
                 } else {
                     Column {
                         BrowserTopAppBar(
                             accountId = accountId,
-                            searchQuery = searchQuery,
-                            onSearchQueryChange = { searchQuery = it },
+                            query = state.searchQuery,
+                            onQueryChange = onSearchQueryChange,
                             onOpenDrawer = { scope.launch { drawerState.open() } },
                             onOpenAccount = { showAccountInformation = true },
                         )
-                        BrowserSubHeader(
-                            canNavigateUp = state.folderTrail.isNotEmpty(),
-                            layout = state.layout,
-                            sortCriterion = sortCriterion,
-                            sortAscending = sortAscending,
-                            showSortMenu = showSortMenu,
-                            onNavigateUp = onNavigateUp,
-                            onShowSortMenu = { showSortMenu = true },
-                            onDismissSortMenu = { showSortMenu = false },
-                            onSortSelect = { criterion ->
-                                if (sortCriterion == criterion) {
-                                    sortAscending = !sortAscending
-                                } else {
-                                    sortCriterion = criterion
-                                    sortAscending = true
-                                }
-                                showSortMenu = false
-                            },
-                            onToggleLayout = {
-                                onSetLayout(
-                                    if (state.layout == BrowserLayout.TILES) {
-                                        BrowserLayout.DEFAULT_TABLE
-                                    } else {
-                                        BrowserLayout.TILES
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surface,
+                        ) {
+                            Column {
+                                BrowserSubHeader(
+                                    canNavigateUp = state.folderTrail.isNotEmpty(),
+                                    layout = state.layout,
+                                    sortCriterion = sortCriterion,
+                                    sortAscending = sortAscending,
+                                    showSortMenu = showSortMenu,
+                                    onNavigateUp = onNavigateUp,
+                                    onShowSortMenu = { showSortMenu = true },
+                                    onDismissSortMenu = { showSortMenu = false },
+                                    onSortSelect = { criterion ->
+                                        if (sortCriterion == criterion) {
+                                            sortAscending = !sortAscending
+                                        } else {
+                                            sortCriterion = criterion
+                                            sortAscending = true
+                                        }
+                                        showSortMenu = false
+                                    },
+                                    onToggleLayout = {
+                                        onSetLayout(
+                                            if (state.layout == BrowserLayout.TILES) {
+                                                BrowserLayout.DEFAULT_TABLE
+                                            } else {
+                                                BrowserLayout.TILES
+                                            },
+                                        )
                                     },
                                 )
-                            },
-                        )
-                        TransferSummary(state.transfers)
+                                if (state.searchQuery.isNotBlank() && state.isRemoteSearchLoading) {
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                }
+                                TransferSummary(state.transfers)
+                            }
+                        }
                     }
                 }
             },
@@ -367,29 +436,19 @@ fun FileBrowserScreen(
     state.message?.let { BrowserNotice("Notice", it, onClearMessage) }
     state.error?.let { BrowserNotice("File operation", it, onClearMessage) }
     state.actionResource?.let { resource ->
-        ModalBottomSheet(onDismissRequest = onDismissActions, sheetState = sheetState) {
-            Column(modifier = Modifier.fillMaxWidth().padding(bottom = OpenCloudDimensions.SpacingXl)) {
-                Text(
-                    resource.name,
-                    modifier = Modifier.padding(OpenCloudDimensions.SpacingMd),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                SheetAction("Rename", Icons.AutoMirrored.Filled.InsertDriveFile) {
-                    dialog = BrowserDialog.Rename(resource)
-                    onDismissActions()
-                }
-                SheetAction("Move here", Icons.Default.Folder) { onMove(resource) }
-                SheetAction("Copy here", Icons.AutoMirrored.Filled.InsertDriveFile) { onCopy(resource) }
-                SheetAction("Download", Icons.AutoMirrored.Filled.ArrowBack) {
-                    onDownload(resource)
-                }
-                SheetAction(
-                    if (resource.offlinePinned) "Available offline" else "Make available offline",
-                    Icons.Default.CloudDownload,
-                ) { onMakeAvailableOffline(resource) }
-                SheetAction("Delete", Icons.Default.Delete, MaterialTheme.colorScheme.error) { onDelete(resource) }
-            }
-        }
+        ResourceActionSheet(
+            resource = resource,
+            onDismiss = onDismissActions,
+            onRename = {
+                dialog = BrowserDialog.Rename(resource)
+                onDismissActions()
+            },
+            onMove = { onMove(resource) },
+            onCopy = { onCopy(resource) },
+            onDownloadForOffline = { onDownloadForOffline(resource) },
+            onDelete = { onDelete(resource) },
+            sheetState = sheetState,
+        )
     }
     when (val currentDialog = dialog) {
         BrowserDialog.New ->
@@ -438,33 +497,31 @@ fun FileBrowserScreen(
 @Suppress("LongParameterList")
 private fun BrowserTopAppBar(
     accountId: String,
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
+    query: String,
+    onQueryChange: (String) -> Unit,
     onOpenDrawer: () -> Unit,
     onOpenAccount: () -> Unit,
 ) = TopAppBar(
     title = {
         TextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
+            value = query,
+            onValueChange = onQueryChange,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(OpenCloudDimensions.TouchTarget)
-                    .padding(horizontal = OpenCloudDimensions.SpacingXxs),
+                    .padding(horizontal = OpenCloudDimensions.SpacingXxs)
+                    .semantics { contentDescription = "Filter files" },
             placeholder = { Text("Search in files") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                    }
+                }
+            },
             singleLine = true,
             shape = RoundedCornerShape(50),
-            colors =
-                TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedIndicatorColor = OpenCloudColor.Transparent,
-                    unfocusedIndicatorColor = OpenCloudColor.Transparent,
-                    disabledIndicatorColor = OpenCloudColor.Transparent,
-                ),
         )
     },
     navigationIcon = {
@@ -587,11 +644,21 @@ private fun BrowserSubHeader(
 private fun SelectionTopAppBar(
     selectedCount: Int,
     onClearSelection: () -> Unit,
+    onDownloadSelection: () -> Unit,
+    onDeleteSelection: () -> Unit,
 ) = TopAppBar(
     title = { Text("$selectedCount selected") },
     navigationIcon = {
         IconButton(onClick = onClearSelection) {
             Icon(Icons.Default.Close, contentDescription = "Clear selection")
+        }
+    },
+    actions = {
+        IconButton(onClick = onDownloadSelection) {
+            Icon(Icons.Default.CloudDownload, contentDescription = "Download selected for offline use")
+        }
+        IconButton(onClick = onDeleteSelection) {
+            Icon(Icons.Default.Delete, contentDescription = "Delete selected")
         }
     },
     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -631,6 +698,7 @@ private fun TransferSummary(transfers: List<TransferEntity>) {
 @Composable
 private fun BrowserNavigationDrawer(
     releaseVersion: String,
+    onTransfers: () -> Unit,
     onDeletedFiles: () -> Unit,
     onSettings: () -> Unit,
 ) = ModalDrawerSheet {
@@ -638,6 +706,16 @@ private fun BrowserNavigationDrawer(
         text = "OpenCloud",
         modifier = Modifier.padding(OpenCloudDimensions.SpacingXl),
         style = MaterialTheme.typography.headlineSmall,
+    )
+    NavigationDrawerItem(
+        label = { Text("Transfers") },
+        selected = false,
+        onClick = onTransfers,
+        icon = { Icon(Icons.Default.CloudSync, contentDescription = null) },
+        modifier =
+            Modifier
+                .padding(horizontal = OpenCloudDimensions.SpacingSm)
+                .semantics { contentDescription = "Navigate to Transfers" },
     )
     NavigationDrawerItem(
         label = { Text("Deleted files") },
@@ -740,16 +818,12 @@ private fun BrowserListItem(
     onActions: () -> Unit,
 ) = ListItem(
     headlineContent = { Text(resource.name, maxLines = 1) },
-    supportingContent = if (condensed) null else ({ Text(resourceMetadata(resource)) }),
-    leadingContent = {
-        if (selectionMode) {
-            Checkbox(checked = selected, onCheckedChange = { onSelect() })
-        } else {
-            ResourceIcon(resource.kind)
-        }
-    },
+    supportingContent = if (condensed) null else ({ ResourceMetadata(resource) }),
+    leadingContent = { ResourceIcon(resource.kind) },
     trailingContent = {
-        if (!selectionMode) {
+        if (selectionMode) {
+            SelectionCircle(selected = selected, resourceName = resource.name, onSelect = onSelect)
+        } else {
             IconButton(onClick = onActions) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Actions for ${resource.name}")
             }
@@ -837,7 +911,7 @@ private fun BrowserGridItem(
             ResourceIcon(resource.kind, Modifier.size(OpenCloudDimensions.TouchTarget))
             Spacer(Modifier.weight(1f))
             if (selectionMode) {
-                Checkbox(checked = selected, onCheckedChange = { onSelect() })
+                SelectionCircle(selected = selected, resourceName = resource.name, onSelect = onSelect)
             } else {
                 IconButton(onClick = onActions) {
                     Icon(Icons.Default.MoreVert, contentDescription = "Actions for ${resource.name}")
@@ -845,10 +919,21 @@ private fun BrowserGridItem(
             }
         }
         Text(resource.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-        Text(
-            resourceMetadata(resource),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
+        ResourceMetadata(resource)
+    }
+}
+
+@Composable
+private fun SelectionCircle(
+    selected: Boolean,
+    resourceName: String,
+    onSelect: () -> Unit,
+) {
+    IconButton(onClick = onSelect) {
+        Icon(
+            imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+            contentDescription = if (selected) "Deselect $resourceName" else "Select $resourceName",
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -880,6 +965,32 @@ private fun ResourceIcon(
     )
 }
 
+@Composable
+private fun ResourceMetadata(resource: ResourceEntity) {
+    val availableOffline = resource.hasLocalCopy || resource.offlinePinned
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            resourceMetadata(resource),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Icon(
+            imageVector = if (availableOffline) Icons.Default.Smartphone else Icons.Default.CloudDownload,
+            contentDescription = if (availableOffline) "Available offline" else "Cloud only",
+            modifier = Modifier.size(OpenCloudDimensions.SpacingMd),
+            tint =
+                if (availableOffline) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SheetAction(
@@ -893,6 +1004,39 @@ private fun SheetAction(
     colors = ListItemDefaults.colors(containerColor = OpenCloudColor.Transparent),
     modifier = Modifier.fillMaxWidth().combinedClickable(role = Role.Button, onClick = onClick),
 )
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+@Suppress("LongParameterList")
+fun ResourceActionSheet(
+    resource: ResourceEntity,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onCopy: () -> Unit,
+    onDownloadForOffline: () -> Unit,
+    onDelete: () -> Unit,
+    sheetState: androidx.compose.material3.SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = OpenCloudDimensions.SpacingXl)) {
+            Text(
+                resource.name,
+                modifier = Modifier.padding(OpenCloudDimensions.SpacingMd),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            SheetAction("Rename", Icons.AutoMirrored.Filled.InsertDriveFile, onClick = onRename)
+            SheetAction("Move here", Icons.Default.Folder, onClick = onMove)
+            SheetAction("Copy here", Icons.AutoMirrored.Filled.InsertDriveFile, onClick = onCopy)
+            SheetAction(
+                "Download for offline use",
+                Icons.Default.CloudDownload,
+                onClick = onDownloadForOffline,
+            )
+            SheetAction("Delete", Icons.Default.Delete, MaterialTheme.colorScheme.error, onDelete)
+        }
+    }
+}
 
 @Composable
 private fun BrowserNotice(

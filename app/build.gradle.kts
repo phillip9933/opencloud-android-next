@@ -93,6 +93,8 @@ dependencies {
     implementation(project(":core:documentsprovider"))
     implementation(project(":feature:auth"))
     implementation(project(":feature:files"))
+    implementation(project(":feature:search"))
+    implementation(project(":feature:transfers"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.browser)

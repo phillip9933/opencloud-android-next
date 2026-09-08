@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.Flow
         TransferEntity::class,
         FolderBackupEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(FileBrowserConverters::class)
@@ -56,7 +56,7 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                         context.applicationContext,
                         FileBrowserDatabase::class.java,
                         "opencloud-file-browser.db",
-                    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { instance = it }
             }
@@ -130,6 +130,13 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                     )
                 }
             }
+
+        private val MIGRATION_5_6 =
+            object : Migration(5, 6) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `remoteSearchUrl` TEXT")
+                }
+            }
     }
 }
 
@@ -152,6 +159,7 @@ data class AccountEntity(
     val isActive: Boolean = true,
     val oidcIssuer: String? = null,
     val oidcTokenEndpoint: String? = null,
+    val remoteSearchUrl: String? = null,
 )
 
 @Entity(
@@ -298,6 +306,16 @@ interface SpaceDao {
 @Dao
 interface ResourceDao {
     @Query(
+        "SELECT * FROM resources WHERE accountId = :accountId " +
+            "AND (name LIKE :pattern ESCAPE '\\' OR path LIKE :pattern ESCAPE '\\') " +
+            "ORDER BY CASE kind WHEN 'FOLDER' THEN 0 ELSE 1 END, name COLLATE NOCASE",
+    )
+    fun search(
+        accountId: String,
+        pattern: String,
+    ): Flow<List<ResourceEntity>>
+
+    @Query(
         "SELECT * FROM resources WHERE accountId = :accountId AND spaceId = :spaceId AND " +
             "((:parentId IS NULL AND parentId IS NULL) OR parentId = :parentId) " +
             "ORDER BY CASE kind WHEN 'FOLDER' THEN 0 ELSE 1 END, name COLLATE NOCASE",
@@ -431,8 +449,11 @@ interface TransferDao {
     @Update
     suspend fun update(transfer: TransferEntity)
 
-    @Query("DELETE FROM transfers WHERE state = 'SUCCEEDED' AND updatedAtEpochMillis < :beforeEpochMillis")
-    suspend fun deleteSuccessfulBefore(beforeEpochMillis: Long)
+    @Query("DELETE FROM transfers WHERE accountId = :accountId AND state IN ('SUCCEEDED', 'CANCELLED')")
+    suspend fun deleteHistory(accountId: String)
+
+    @Query("DELETE FROM transfers WHERE accountId = :accountId")
+    suspend fun deleteAllForAccount(accountId: String)
 
     @Query("SELECT * FROM transfers WHERE state = 'CONFLICT' ORDER BY updatedAtEpochMillis DESC")
     fun observeConflicts(): Flow<List<TransferEntity>>
@@ -478,6 +499,7 @@ class FileBrowserStore(
             tusSupported = capabilities.tusSupported,
             oidcIssuer = oidcConfiguration?.issuer,
             oidcTokenEndpoint = oidcConfiguration?.tokenEndpoint,
+            remoteSearchUrl = capabilities.remoteSearchUrl,
         ),
     )
 
@@ -488,6 +510,11 @@ class FileBrowserStore(
         spaceId: String,
         parentId: String?,
     ): Flow<List<ResourceEntity>> = resources.observeChildren(accountId, spaceId, parentId)
+
+    fun searchResources(
+        accountId: String,
+        query: String,
+    ): Flow<List<ResourceEntity>> = resources.search(accountId, query.toLikePattern())
 
     fun observeTransfers(accountId: String): Flow<List<TransferEntity>> = transfers.observeForAccount(accountId)
 
@@ -575,7 +602,9 @@ class FileBrowserStore(
         )
     }
 
-    suspend fun deleteSuccessfulTransfers(beforeEpochMillis: Long) = transfers.deleteSuccessfulBefore(beforeEpochMillis)
+    suspend fun clearTransferHistory(accountId: String) = transfers.deleteHistory(accountId)
+
+    suspend fun clearTransfers(accountId: String) = transfers.deleteAllForAccount(accountId)
 
     suspend fun enabledBackups(): List<FolderBackupEntity> = backups.findEnabled()
 
@@ -783,3 +812,5 @@ private fun String.requireValidName(): String {
 }
 
 private fun newLocalId(): String = "local-${java.util.UUID.randomUUID()}"
+
+internal fun String.toLikePattern(): String = "%${replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")}%"

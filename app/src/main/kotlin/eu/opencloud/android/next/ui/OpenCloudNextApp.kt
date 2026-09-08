@@ -7,6 +7,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -16,7 +20,9 @@ import eu.opencloud.android.next.BuildConfig
 import eu.opencloud.android.next.feature.auth.AuthScreen
 import eu.opencloud.android.next.feature.auth.AuthViewModel
 import eu.opencloud.android.next.feature.auth.DevLoginConfiguration
+import eu.opencloud.android.next.feature.files.FileBrowserDestinations
 import eu.opencloud.android.next.feature.files.FileBrowserRoute
+import eu.opencloud.android.next.feature.transfers.TransfersRoute
 
 @Composable
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
@@ -27,6 +33,7 @@ fun OpenCloudNextApp(
 ) {
     val context = LocalContext.current
     val state = viewModel.state.collectAsStateWithLifecycle()
+    var destination by remember(state.value.activeAccountId) { mutableStateOf(AppDestination.Files) }
 
     LaunchedEffect(oauthCallback) {
         oauthCallback?.let(viewModel::completeOidcCallback)
@@ -38,11 +45,22 @@ fun OpenCloudNextApp(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            state.value.activeAccountId != null ->
-                FileBrowserRoute(
-                    accountId = requireNotNull(state.value.activeAccountId),
-                    releaseVersion = BuildConfig.VERSION_NAME,
-                )
+            state.value.activeAccountId != null -> {
+                val accountId = requireNotNull(state.value.activeAccountId)
+                when (destination) {
+                    AppDestination.Files ->
+                        FileBrowserRoute(
+                            accountId = accountId,
+                            releaseVersion = BuildConfig.VERSION_NAME,
+                            destinations =
+                                FileBrowserDestinations(
+                                    onOpenTransfers = { destination = AppDestination.Transfers },
+                                ),
+                        )
+                    AppDestination.Transfers ->
+                        TransfersRoute(accountId = accountId, onNavigateBack = { destination = AppDestination.Files })
+                }
+            }
             else ->
                 AuthScreen(
                     state = state.value,
@@ -74,3 +92,5 @@ fun OpenCloudNextApp(
         }
     }
 }
+
+private enum class AppDestination { Files, Transfers }

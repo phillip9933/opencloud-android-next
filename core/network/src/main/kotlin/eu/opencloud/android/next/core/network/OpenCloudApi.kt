@@ -133,6 +133,13 @@ class OpenCloudApi(
                 ?.jsonPrimitive
                 ?.content
         val files = data["capabilities"]?.jsonObject?.get("files")?.jsonObject
+        val dav = data["capabilities"]?.jsonObject?.get("dav")?.jsonObject
+        val davReports =
+            dav
+                ?.get("reports")
+                ?.jsonArray
+                ?.map { it.jsonPrimitive.content }
+                .orEmpty()
         val sharing = data["capabilities"]?.jsonObject?.get("files_sharing")?.jsonObject
         val publicSharing = sharing?.get("public")?.jsonObject
         return ServerCapabilities(
@@ -141,6 +148,12 @@ class OpenCloudApi(
             publicSharingEnabled = publicSharing?.get("enabled")?.jsonPrimitive?.content == "true",
             spacesEnabled = data.toString().contains("spaces"),
             tusSupported = files?.toString()?.contains("tus") == true,
+            remoteSearchUrl =
+                if ("search-files" in davReports) {
+                    "${serverUrl.trimEnd('/')}/remote.php/dav/spaces/"
+                } else {
+                    null
+                },
         )
     }
 
