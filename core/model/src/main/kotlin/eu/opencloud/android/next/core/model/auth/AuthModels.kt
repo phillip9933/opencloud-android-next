@@ -28,6 +28,7 @@ data class ServerCapabilities(
     val spacesEnabled: Boolean,
     val tusSupported: Boolean,
     val remoteSearchUrl: String? = null,
+    val trashSupported: Boolean = false,
 )
 
 data class OidcConfiguration(

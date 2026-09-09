@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:network"))
     implementation(project(":core:security"))
+    implementation(project(":core:datastore"))
     implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)

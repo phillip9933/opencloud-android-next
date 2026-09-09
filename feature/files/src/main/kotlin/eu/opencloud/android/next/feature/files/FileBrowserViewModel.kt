@@ -13,6 +13,8 @@ import eu.opencloud.android.next.core.database.FolderBackupEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.database.TransferEntity
+import eu.opencloud.android.next.core.datastore.SettingsBrowserLayout
+import eu.opencloud.android.next.core.datastore.SettingsRepository
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.core.sync.DISCOVERY_ERROR
 import eu.opencloud.android.next.core.sync.SearchRepositoryResult
@@ -40,6 +42,7 @@ class FileBrowserViewModel(
     private val transfers = TransferManager(application, store)
     private val searchRepository = createSearchRepository(application, store)
     private val workManager = WorkManager.getInstance(application)
+    private val settings = SettingsRepository.create(application)
     private val mutableState = MutableStateFlow(FileBrowserUiState())
     private val activeLocation = MutableStateFlow<BrowserLocation?>(null)
     private val backupPickerLocation = MutableStateFlow<BrowserLocation?>(null)
@@ -50,6 +53,11 @@ class FileBrowserViewModel(
 
     init {
         transfers.scheduleCleanup()
+        viewModelScope.launch(Dispatchers.IO) {
+            settings.settings.collectLatest { settings ->
+                reduce { copy(layout = settings.browserLayout.toBrowserLayout()) }
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             activeLocation
                 .filterNotNull()
@@ -155,7 +163,10 @@ class FileBrowserViewModel(
         }
     }
 
-    fun setLayout(layout: BrowserLayout) = reduce { copy(layout = layout) }
+    fun setLayout(layout: BrowserLayout) {
+        reduce { copy(layout = layout) }
+        viewModelScope.launch(Dispatchers.IO) { settings.setBrowserLayout(layout.toSettingsLayout()) }
+    }
 
     fun toggleSelection(resourceId: String) {
         val next = state.value.selectedIds.toMutableSet()
@@ -172,7 +183,7 @@ class FileBrowserViewModel(
 
     fun deleteSelected() =
         batchAction("Selected resources deleted.") { resource ->
-            store.delete(resource.accountId, resource.spaceId, resource.remoteId)
+            transfers.delete(resource)
         }
 
     fun showActions(resource: ResourceEntity?) = reduce { copy(actionResource = resource) }
@@ -201,8 +212,7 @@ class FileBrowserViewModel(
     fun copy(resource: ResourceEntity) =
         mutate { account, space, parent -> store.copy(account, space, resource.remoteId, parent) }
 
-    fun delete(resource: ResourceEntity) =
-        mutate { account, space, _ -> store.delete(account, space, resource.remoteId) }
+    fun delete(resource: ResourceEntity) = mutate { _, _, _ -> transfers.delete(resource) }
 
     fun upload(uri: Uri) {
         val account = accountId ?: return
@@ -223,6 +233,20 @@ class FileBrowserViewModel(
             runCatching { withContext(Dispatchers.IO) { transfers.makeAvailableOffline(resource) } }
                 .onSuccess { reduce { copy(actionResource = null, message = "Offline synchronization queued.") } }
                 .onFailure { reduce { copy(error = it.message ?: "Offline synchronization could not be queued.") } }
+        }
+    }
+
+    fun toggleFavorite(resource: ResourceEntity) {
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { transfers.setFavorite(resource, !resource.isFavorite) } }
+                .onSuccess {
+                    reduce {
+                        copy(
+                            actionResource = null,
+                            message = if (resource.isFavorite) "Removed from favorites." else "Added to favorites.",
+                        )
+                    }
+                }.onFailure { reduce { copy(error = it.message ?: "Favorite could not be updated.") } }
         }
     }
 
@@ -469,3 +493,17 @@ enum class BrowserLayout {
 }
 
 enum class ConflictDecision { REPLACE, KEEP_BOTH, CANCEL }
+
+private fun SettingsBrowserLayout.toBrowserLayout() =
+    when (this) {
+        SettingsBrowserLayout.DEFAULT_TABLE -> BrowserLayout.DEFAULT_TABLE
+        SettingsBrowserLayout.CONDENSED_TABLE -> BrowserLayout.CONDENSED_TABLE
+        SettingsBrowserLayout.TILES -> BrowserLayout.TILES
+    }
+
+private fun BrowserLayout.toSettingsLayout() =
+    when (this) {
+        BrowserLayout.DEFAULT_TABLE -> SettingsBrowserLayout.DEFAULT_TABLE
+        BrowserLayout.CONDENSED_TABLE -> SettingsBrowserLayout.CONDENSED_TABLE
+        BrowserLayout.TILES -> SettingsBrowserLayout.TILES
+    }

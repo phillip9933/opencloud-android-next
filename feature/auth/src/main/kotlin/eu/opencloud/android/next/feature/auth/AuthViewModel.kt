@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
+import eu.opencloud.android.next.core.datastore.SettingsRepository
 import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.AuthenticationType
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.security.cert.CertificateException
@@ -28,6 +30,7 @@ class AuthViewModel(
     private val tlsPolicy = TlsPolicy(application)
     private val fileStore = FileBrowserStore(FileBrowserDatabase.create(application))
     private val credentialStore = KeystoreCredentialStore(application)
+    private val settings = SettingsRepository.create(application)
     private var repository = repositoryFor("")
     private var discovery: DiscoveryResult? = null
     private var pkce: eu.opencloud.android.next.core.model.auth.PkceRequest? = null
@@ -37,10 +40,13 @@ class AuthViewModel(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            val account =
-                fileStore.activeAccounts().firstOrNull { saved ->
+            val accounts =
+                fileStore.activeAccounts().filter { saved ->
                     hasUsablePersistedCredential(saved, credentialStore, System.currentTimeMillis() / 1000)
                 }
+            val preferred = settings.settings.first().activeAccountId
+            val account = accounts.firstOrNull { it.id == preferred } ?: accounts.firstOrNull()
+            settings.setActiveAccountId(account?.id)
             mutableState.value =
                 mutableState.value.copy(
                     activeAccountId = account?.id,
@@ -158,6 +164,17 @@ class AuthViewModel(
         mutableState.value = mutableState.value.copy(error = null)
     }
 
+    fun switchAccount(accountId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            settings.setActiveAccountId(accountId)
+            mutableState.value = mutableState.value.copy(activeAccountId = accountId, session = null)
+        }
+    }
+
+    fun accountRemoved(nextAccountId: String?) {
+        mutableState.value = mutableState.value.copy(activeAccountId = nextAccountId, session = null)
+    }
+
     private fun repositoryFor(serverUrl: String): AuthRepository {
         val baseClient = OkHttpClient.Builder().followRedirects(false).build()
         return AuthRepository(
@@ -168,6 +185,7 @@ class AuthViewModel(
 
     private suspend fun setSession(session: AuthenticatedSession) {
         fileStore.saveAccount(session.account, session.capabilities, session.oidcConfiguration)
+        settings.setActiveAccountId(session.account.id)
         mutableState.value =
             mutableState.value.copy(
                 session = session,

@@ -62,10 +62,28 @@ class OpenCloudApiTest {
         assertEquals("alice", profile.id)
         assertTrue(capabilities.sharingEnabled)
         assertEquals("$baseUrl/remote.php/dav/spaces/", capabilities.remoteSearchUrl)
+        assertTrue(capabilities.trashSupported)
         assertEquals("Basic YWxpY2U6c2VjcmV0", server.takeRequest().getHeader("Authorization"))
         val capabilitiesRequest = server.takeRequest()
         assertEquals("true", capabilitiesRequest.getHeader("OCS-APIREQUEST"))
         assertEquals("/ocs/v2.php/cloud/capabilities?format=json", capabilitiesRequest.path)
+    }
+
+    @Test
+    fun `trash capability accepts boolean and newer version values`() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        server.enqueue(MockResponse().setResponseCode(200).setBody(capabilitiesResponse("true")))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(capabilitiesResponse("\"2.0\"")))
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(
+                    200,
+                ).setBody(capabilitiesResponse("{\"enabled\":false,\"version\":\"1.0\"}")),
+        )
+
+        assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
+        assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
+        assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
     }
 
     @Test
@@ -98,8 +116,8 @@ class OpenCloudApiTest {
     private fun userResponse() =
         """{"ocs":{"data":{"id":"alice","display-name":"Alice","email":"alice@example.test"}}}"""
 
-    private fun capabilitiesResponse() =
-        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"dav":{"reports":["search-files"]},"files":{"tus":{"enabled":true}},"files_sharing":{"api_enabled":true,"public":{"enabled":true}},"spaces":{"enabled":true}}}}}"""
+    private fun capabilitiesResponse(trashbin: String = "\"1.0\"") =
+        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"dav":{"reports":["search-files"],"trashbin":$trashbin},"files":{"tus":{"enabled":true}},"files_sharing":{"api_enabled":true,"public":{"enabled":true}},"spaces":{"enabled":true}}}}}"""
 
     private fun tokenResponse(
         accessToken: String,

@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.Flow
         TransferEntity::class,
         FolderBackupEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(FileBrowserConverters::class)
@@ -56,8 +56,14 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                         context.applicationContext,
                         FileBrowserDatabase::class.java,
                         "opencloud-file-browser.db",
-                    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
-                    .build()
+                    ).addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                        MIGRATION_6_7,
+                    ).build()
                     .also { instance = it }
             }
 
@@ -137,6 +143,13 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `accounts` ADD COLUMN `remoteSearchUrl` TEXT")
                 }
             }
+
+        private val MIGRATION_6_7 =
+            object : Migration(6, 7) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `trashSupported` INTEGER NOT NULL DEFAULT 0")
+                }
+            }
     }
 }
 
@@ -160,6 +173,7 @@ data class AccountEntity(
     val oidcIssuer: String? = null,
     val oidcTokenEndpoint: String? = null,
     val remoteSearchUrl: String? = null,
+    val trashSupported: Boolean = false,
 )
 
 @Entity(
@@ -274,6 +288,12 @@ interface AccountDao {
 
     @Query("SELECT * FROM accounts WHERE isActive = 1 ORDER BY displayName COLLATE NOCASE")
     suspend fun findActive(): List<AccountEntity>
+
+    @Query("SELECT * FROM accounts WHERE isActive = 1 ORDER BY displayName COLLATE NOCASE")
+    fun observeActive(): Flow<List<AccountEntity>>
+
+    @Query("DELETE FROM accounts WHERE id = :accountId")
+    suspend fun delete(accountId: String)
 }
 
 @Dao
@@ -301,10 +321,19 @@ interface SpaceDao {
 
     @Delete
     suspend fun delete(space: SpaceEntity)
+
+    @Query("DELETE FROM spaces WHERE accountId = :accountId")
+    suspend fun deleteForAccount(accountId: String)
 }
 
 @Dao
 interface ResourceDao {
+    @Query(
+        "SELECT * FROM resources WHERE accountId = :accountId AND isFavorite = 1 " +
+            "ORDER BY CASE kind WHEN 'FOLDER' THEN 0 ELSE 1 END, name COLLATE NOCASE",
+    )
+    fun observeFavorites(accountId: String): Flow<List<ResourceEntity>>
+
     @Query(
         "SELECT * FROM resources WHERE accountId = :accountId " +
             "AND (name LIKE :pattern ESCAPE '\\' OR path LIKE :pattern ESCAPE '\\') " +
@@ -389,6 +418,17 @@ interface ResourceDao {
         pinned: Boolean,
     )
 
+    @Query(
+        "UPDATE resources SET isFavorite = :favorite " +
+            "WHERE accountId = :accountId AND spaceId = :spaceId AND remoteId = :resourceId",
+    )
+    suspend fun setFavorite(
+        accountId: String,
+        spaceId: String,
+        resourceId: String,
+        favorite: Boolean,
+    )
+
     @Query("SELECT * FROM resources WHERE offlinePinned = 1")
     suspend fun findOfflinePinned(): List<ResourceEntity>
 
@@ -407,6 +447,9 @@ interface ResourceDao {
         accountId: String,
         spaceId: String,
     )
+
+    @Query("DELETE FROM resources WHERE accountId = :accountId")
+    suspend fun deleteForAccount(accountId: String)
 }
 
 @Dao
@@ -419,6 +462,9 @@ interface TransferDao {
 
     @Query("SELECT * FROM transfers WHERE state IN ('QUEUED', 'RUNNING', 'RETRY')")
     suspend fun findPending(): List<TransferEntity>
+
+    @Query("SELECT * FROM transfers WHERE accountId = :accountId")
+    suspend fun findForAccount(accountId: String): List<TransferEntity>
 
     @Query(
         "SELECT * FROM transfers WHERE accountId = :accountId AND spaceId = :spaceId " +
@@ -475,6 +521,9 @@ interface FolderBackupDao {
 
     @Query("DELETE FROM folder_backups WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("DELETE FROM folder_backups WHERE accountId = :accountId")
+    suspend fun deleteForAccount(accountId: String)
 }
 
 class FileBrowserStore(
@@ -500,8 +549,13 @@ class FileBrowserStore(
             oidcIssuer = oidcConfiguration?.issuer,
             oidcTokenEndpoint = oidcConfiguration?.tokenEndpoint,
             remoteSearchUrl = capabilities.remoteSearchUrl,
+            trashSupported = capabilities.trashSupported,
         ),
     )
+
+    fun observeAccounts(): Flow<List<AccountEntity>> = database.accountDao().observeActive()
+
+    fun observeFavorites(accountId: String): Flow<List<ResourceEntity>> = resources.observeFavorites(accountId)
 
     fun observeSpaces(accountId: String): Flow<List<SpaceEntity>> = spaces.observeSpaces(accountId)
 
@@ -539,6 +593,21 @@ class FileBrowserStore(
 
     suspend fun activeAccounts(): List<AccountEntity> = database.accountDao().findActive()
 
+    suspend fun setFavorite(
+        resource: ResourceEntity,
+        favorite: Boolean,
+    ) = resources.setFavorite(resource.accountId, resource.spaceId, resource.remoteId, favorite)
+
+    suspend fun removeAccount(accountId: String) {
+        database.withTransaction {
+            backups.deleteForAccount(accountId)
+            transfers.deleteAllForAccount(accountId)
+            resources.deleteForAccount(accountId)
+            spaces.deleteForAccount(accountId)
+            database.accountDao().delete(accountId)
+        }
+    }
+
     suspend fun spaces(accountId: String): List<SpaceEntity> = spaces.findSpaces(accountId)
 
     suspend fun children(
@@ -555,6 +624,8 @@ class FileBrowserStore(
     suspend fun transfer(id: String): TransferEntity? = transfers.findById(id)
 
     suspend fun pendingTransfers(): List<TransferEntity> = transfers.findPending()
+
+    suspend fun activeTransfers(accountId: String): List<TransferEntity> = transfers.findForAccount(accountId)
 
     suspend fun activeDownload(
         accountId: String,
@@ -659,6 +730,7 @@ class FileBrowserStore(
                         hasLocalCopy = local?.hasLocalCopy ?: false,
                         localPath = local?.localPath,
                         offlinePinned = local?.offlinePinned ?: false,
+                        isFavorite = remote.isFavorite,
                     ),
                 )
             }

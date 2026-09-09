@@ -115,6 +115,8 @@ class RemoteDiscoveryClient(
                 eTag = response.text(DAV_NAMESPACE, "getetag"),
                 modifiedAtEpochMillis = response.text(DAV_NAMESPACE, "getlastmodified").toEpochMillis(),
                 createdAtEpochMillis = response.text(DAV_NAMESPACE, "creationdate").toEpochMillis(),
+                favorite =
+                    response.text(OC_NAMESPACE, "favorite") == "1" || response.text(OC_NAMESPACE, "favorite") == "true",
             )
         }
     }
@@ -139,7 +141,7 @@ class RemoteDiscoveryClient(
         const val OC_NAMESPACE = "http://owncloud.org/ns"
         const val LOG_TAG = "OpenCloudSync"
         val PROPFIND_BODY =
-            """<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/><oc:id/><oc:name/><oc:size/><d:getetag/><d:getcontentlength/><d:getcontenttype/><d:getlastmodified/><d:creationdate/><d:resourcetype/></d:prop></d:propfind>"""
+            """<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/><oc:id/><oc:name/><oc:size/><oc:favorite/><d:getetag/><d:getcontentlength/><d:getcontenttype/><d:getlastmodified/><d:creationdate/><d:resourcetype/></d:prop></d:propfind>"""
                 .toRequestBody(
                     "application/xml".toMediaType(),
                 )
@@ -172,6 +174,7 @@ data class RemoteResource(
     val eTag: String?,
     val modifiedAtEpochMillis: Long,
     val createdAtEpochMillis: Long,
+    val favorite: Boolean = false,
 )
 
 private fun JsonObject.requiredString(name: String): String = string(name) ?: error("Missing required field: $name")

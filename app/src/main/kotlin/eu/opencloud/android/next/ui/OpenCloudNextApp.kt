@@ -17,11 +17,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opencloud.android.next.BuildConfig
+import eu.opencloud.android.next.feature.account.AccountRoute
 import eu.opencloud.android.next.feature.auth.AuthScreen
 import eu.opencloud.android.next.feature.auth.AuthViewModel
 import eu.opencloud.android.next.feature.auth.DevLoginConfiguration
+import eu.opencloud.android.next.feature.files.BackupSettingsRoute
+import eu.opencloud.android.next.feature.files.DeletedFilesRoute
 import eu.opencloud.android.next.feature.files.FileBrowserDestinations
 import eu.opencloud.android.next.feature.files.FileBrowserRoute
+import eu.opencloud.android.next.feature.settings.SettingsRoute
 import eu.opencloud.android.next.feature.transfers.TransfersRoute
 
 @Composable
@@ -55,10 +59,45 @@ fun OpenCloudNextApp(
                             destinations =
                                 FileBrowserDestinations(
                                     onOpenTransfers = { destination = AppDestination.Transfers },
+                                    onOpenDeletedFiles = { destination = AppDestination.DeletedFiles },
+                                    onOpenSettings = { destination = AppDestination.Settings },
+                                    onOpenAccount = { destination = AppDestination.Account },
                                 ),
                         )
                     AppDestination.Transfers ->
                         TransfersRoute(accountId = accountId, onNavigateBack = { destination = AppDestination.Files })
+                    AppDestination.DeletedFiles ->
+                        DeletedFilesRoute(
+                            accountId = accountId,
+                            onNavigateBack = { destination = AppDestination.Files },
+                        )
+                    AppDestination.Settings ->
+                        SettingsRoute(
+                            onNavigateBack = { destination = AppDestination.Files },
+                            onOpenBackupSettings = { destination = AppDestination.BackupSettings },
+                        )
+                    AppDestination.BackupSettings ->
+                        BackupSettingsRoute(
+                            accountId = accountId,
+                            onNavigateBack = { destination = AppDestination.Settings },
+                        )
+                    AppDestination.Account ->
+                        AccountRoute(
+                            activeAccountId = accountId,
+                            onNavigateBack = { destination = AppDestination.Files },
+                            onAccountSelect = {
+                                viewModel.switchAccount(it)
+                                destination = AppDestination.Files
+                            },
+                            onAccountRemove = {
+                                viewModel.accountRemoved(it)
+                                destination = AppDestination.Files
+                            },
+                            onAddAccount = {
+                                viewModel.accountRemoved(null)
+                                destination = AppDestination.Files
+                            },
+                        )
                 }
             }
             else ->
@@ -93,4 +132,4 @@ fun OpenCloudNextApp(
     }
 }
 
-private enum class AppDestination { Files, Transfers }
+private enum class AppDestination { Files, DeletedFiles, Transfers, Settings, BackupSettings, Account }

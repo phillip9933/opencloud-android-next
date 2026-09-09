@@ -314,6 +314,7 @@ private suspend fun refreshFolder(request: FolderRefresh) {
                 it.eTag,
                 it.modifiedAtEpochMillis,
                 it.createdAtEpochMillis.takeIf { value -> value > 0 } ?: now,
+                isFavorite = it.favorite,
             )
         }
     request.store.replaceFolderSnapshot(request.accountId, request.space.driveId, request.parentId, resources)

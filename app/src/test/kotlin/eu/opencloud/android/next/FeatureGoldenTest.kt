@@ -9,14 +9,23 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
+import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.TransferDirection
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
+import eu.opencloud.android.next.core.datastore.SettingsBrowserLayout
+import eu.opencloud.android.next.core.datastore.UserSettings
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudTheme
 import eu.opencloud.android.next.core.model.ResourceKind
+import eu.opencloud.android.next.core.network.RemoteTrashResource
+import eu.opencloud.android.next.feature.account.AccountScreen
+import eu.opencloud.android.next.feature.account.AccountUiState
+import eu.opencloud.android.next.feature.files.DeletedFilesScreen
+import eu.opencloud.android.next.feature.files.DeletedFilesUiState
 import eu.opencloud.android.next.feature.search.SearchScreen
 import eu.opencloud.android.next.feature.search.SearchUiState
+import eu.opencloud.android.next.feature.settings.SettingsScreen
 import eu.opencloud.android.next.feature.transfers.TransfersScreen
 import eu.opencloud.android.next.feature.transfers.TransfersUiState
 import org.junit.Rule
@@ -54,6 +63,73 @@ class FeatureGoldenTest {
         )
 
     @Test fun transfersEmpty_matchesGolden() = captureTransfers(TransfersUiState(), "transfers_empty")
+
+    @Test fun deletedFiles_matchesGolden() =
+        capture("deleted_files") {
+            DeletedFilesScreen(
+                DeletedFilesUiState(
+                    resources =
+                        listOf(
+                            RemoteTrashResource(
+                                "trash",
+                                "space",
+                                "Old report.pdf",
+                                "/Documents/Old report.pdf",
+                                false,
+                                0,
+                            ),
+                        ),
+                ),
+                onNavigateBack = {},
+                onRefresh = {},
+                onRestore = {},
+                onDelete = {},
+                onDismissError = {},
+            )
+        }
+
+    @Test fun deletedFilesUnsupported_matchesGolden() =
+        capture("deleted_files_unsupported") {
+            DeletedFilesScreen(DeletedFilesUiState(supported = false), {}, {}, {}, {}, {})
+        }
+
+    @Test fun settings_matchesGolden() =
+        capture("settings") {
+            SettingsScreen(UserSettings(SettingsBrowserLayout.TILES, "account", 30), {}, {}, {})
+        }
+
+    @Test fun accounts_matchesGolden() =
+        capture("accounts") {
+            AccountScreen(
+                AccountUiState(
+                    accounts =
+                        listOf(
+                            AccountEntity(
+                                "account",
+                                "https://cloud.example",
+                                "alice",
+                                "Alice",
+                                "OIDC",
+                                true,
+                            ),
+                            AccountEntity(
+                                "account-2",
+                                "https://team.example",
+                                "bob",
+                                "Bob",
+                                "BASIC",
+                                false,
+                            ),
+                        ),
+                    activeAccountId = "account",
+                ),
+                onNavigateBack = {},
+                onSelect = {},
+                onRemove = {},
+                onAddAccount = {},
+                onDismissError = {},
+            )
+        }
 
     @Test fun transfersActive_matchesGolden() =
         captureTransfers(
@@ -148,6 +224,15 @@ class FeatureGoldenTest {
             filePath = snapshotPath(fileName),
             roborazziOptions = featureRoborazziOptions(),
         )
+    }
+
+    private fun capture(
+        fileName: String,
+        content: @androidx.compose.runtime.Composable () -> Unit,
+    ) {
+        composeRule.activity.setContent { OpenCloudTheme { content() } }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(snapshotPath(fileName), featureRoborazziOptions())
     }
 
     private fun renderTransfers(state: TransfersUiState) {

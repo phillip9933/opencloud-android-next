@@ -11,12 +11,14 @@ import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
+import eu.opencloud.android.next.core.datastore.SettingsRepository
 import eu.opencloud.android.next.core.network.TransferClient
 import eu.opencloud.android.next.core.network.TransferConflictException
 import eu.opencloud.android.next.core.network.TransferHttpException
 import eu.opencloud.android.next.core.network.TusOffsetException
 import eu.opencloud.android.next.core.security.TlsPolicy
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -363,10 +365,27 @@ class CacheCleanupWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        File(applicationContext.cacheDir, "transfers").deleteRecursively()
+        val retentionDays =
+            SettingsRepository
+                .create(applicationContext)
+                .settings
+                .first()
+                .cacheRetentionDays
+        val cutoff = System.currentTimeMillis() - retentionDays * MILLIS_PER_DAY
+        File(applicationContext.cacheDir, "transfers").deleteOlderThan(cutoff)
         return Result.success()
     }
 }
+
+private fun File.deleteOlderThan(cutoffEpochMillis: Long) {
+    if (!exists()) return
+    walkBottomUp().forEach { file ->
+        if (file.isFile && file.lastModified() < cutoffEpochMillis) file.delete()
+        if (file.isDirectory && file.list().isNullOrEmpty()) file.delete()
+    }
+}
+
+private const val MILLIS_PER_DAY = 24L * 60 * 60 * 1000
 
 private fun webDavRoot(
     account: AccountEntity,

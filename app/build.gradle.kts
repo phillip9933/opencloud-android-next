@@ -91,10 +91,13 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:sync"))
     implementation(project(":core:documentsprovider"))
+    implementation(project(":core:datastore"))
     implementation(project(":feature:auth"))
     implementation(project(":feature:files"))
     implementation(project(":feature:search"))
     implementation(project(":feature:transfers"))
+    implementation(project(":feature:settings"))
+    implementation(project(":feature:account"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.browser)

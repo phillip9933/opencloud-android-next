@@ -19,7 +19,9 @@ import eu.opencloud.android.next.core.database.TransferDirection
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
 import eu.opencloud.android.next.core.model.ResourceKind
+import eu.opencloud.android.next.core.network.GraphFavoriteClient
 import eu.opencloud.android.next.core.network.TransferClient
+import eu.opencloud.android.next.core.network.WebDavFeatureClient
 import eu.opencloud.android.next.core.security.TlsPolicy
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -105,6 +107,7 @@ class TransferManager(
                             OfflineSyncWorker.RESOURCE_ID to resource.remoteId,
                         ),
                     ).setConstraints(networkConstraints())
+                    .addTag(accountWorkTag(resource.accountId))
                     .build()
             workManager.enqueueUniqueWork(
                 "offline-${resource.accountId}-${resource.spaceId}-${resource.remoteId}",
@@ -145,6 +148,7 @@ class TransferManager(
                         AccountDiscoveryWorker.ACCOUNT_ID to accountId,
                     ),
                 ).setConstraints(networkConstraints())
+                .addTag(accountWorkTag(accountId))
                 .build()
         workManager.enqueueUniqueWork("discover-$accountId", ExistingWorkPolicy.REPLACE, request)
         return request.id
@@ -164,6 +168,7 @@ class TransferManager(
                         FolderDiscoveryWorker.FOLDER_ID to folderId,
                     ),
                 ).setConstraints(networkConstraints())
+                .addTag(accountWorkTag(accountId))
                 .build()
         workManager.enqueueUniqueWork(
             "folder-$accountId-$spaceId-${folderId ?: "root"}",
@@ -277,6 +282,37 @@ class TransferManager(
         }
     }
 
+    suspend fun setFavorite(
+        resource: ResourceEntity,
+        favorite: Boolean,
+    ) {
+        val account = requireNotNull(store.account(resource.accountId))
+        val authorization = WorkerAuthorizationProvider(context).authorization(account)
+        GraphFavoriteClient(TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl))
+            .setFavorite(account.serverUrl, resource.remoteId, authorization, favorite)
+        store.setFavorite(resource, favorite)
+    }
+
+    suspend fun delete(resource: ResourceEntity) {
+        val account = requireNotNull(store.account(resource.accountId))
+        val space = requireNotNull(store.space(resource.accountId, resource.spaceId))
+        val root = requireNotNull(space.rootWebDavUrl) { "The space WebDAV URL is unavailable." }
+        val authorization = WorkerAuthorizationProvider(context).authorization(account)
+        WebDavFeatureClient(TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl))
+            .delete(root.childUrl(resource.path), authorization)
+        store.delete(resource.accountId, resource.spaceId, resource.remoteId)
+    }
+
+    suspend fun cancelAccountWork(accountId: String) {
+        store
+            .activeTransfers(accountId)
+            .mapNotNull { it.workId }
+            .mapNotNull { workId ->
+                runCatching { UUID.fromString(workId) }.getOrNull()
+            }.forEach(workManager::cancelWorkById)
+        workManager.cancelAllWorkByTag(accountWorkTag(accountId))
+    }
+
     fun scheduleCleanup() {
         val request = PeriodicWorkRequestBuilder<CacheCleanupWorker>(1, TimeUnit.DAYS).build()
         workManager.enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
@@ -298,6 +334,7 @@ class TransferManager(
                 .setInputData(workDataOf(TransferWorker.TRANSFER_ID to transfer.id))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .addTag(accountWorkTag(transfer.accountId))
                 .build()
         store.updateTransfer(
             transfer.copy(workId = request.id.toString(), updatedAtEpochMillis = System.currentTimeMillis()),
@@ -314,6 +351,7 @@ class TransferManager(
                 .setInputData(workDataOf(TransferWorker.TRANSFER_ID to transfer.id))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .addTag(accountWorkTag(transfer.accountId))
                 .build()
         store.updateTransfer(
             transfer.copy(workId = request.id.toString(), updatedAtEpochMillis = System.currentTimeMillis()),
@@ -371,6 +409,8 @@ class TransferManager(
         const val BACKUP_SCAN_WORK = "opencloud-folder-backup-scan"
     }
 }
+
+fun accountWorkTag(accountId: String) = "opencloud-account-$accountId"
 
 private fun networkConstraints() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 

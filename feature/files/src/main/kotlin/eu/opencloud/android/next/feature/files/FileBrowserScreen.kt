@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -86,6 +85,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -114,10 +114,12 @@ fun FileBrowserRoute(
     releaseVersion: String,
     destinations: FileBrowserDestinations,
     modifier: Modifier = Modifier,
-    viewModel: FileBrowserViewModel = viewModel(),
+    viewModel: FileBrowserViewModel = viewModel(key = "files-$accountId"),
+    favoritesViewModel: FavoritesViewModel = viewModel(key = "favorites-$accountId"),
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val favoritesState by favoritesViewModel.state.collectAsStateWithLifecycle()
     val uploadLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let { selected ->
@@ -130,33 +132,13 @@ fun FileBrowserRoute(
                 viewModel.upload(selected)
             }
         }
-    var pendingBackup by remember { mutableStateOf<BackupDraft?>(null) }
-    val backupLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-            val draft = pendingBackup
-            if (uri != null && draft != null) {
-                runCatching {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                    )
-                }
-                viewModel.saveBackup(
-                    uri,
-                    draft.destinationPath,
-                    draft.mediaType,
-                    draft.wifiOnly,
-                    draft.chargingOnly,
-                    draft.deleteAfterUpload,
-                )
-            }
-            pendingBackup = null
-        }
     viewModel.load(accountId)
+    favoritesViewModel.load(accountId)
     FileBrowserScreen(
         accountId = accountId,
         releaseVersion = releaseVersion,
         state = state,
+        favoritesState = favoritesState,
         modifier = modifier,
         onSelectSpace = viewModel::selectSpace,
         onOpen = viewModel::open,
@@ -176,25 +158,25 @@ fun FileBrowserRoute(
         onDelete = viewModel::delete,
         onUpload = { uploadLauncher.launch(arrayOf("*/*")) },
         onDownloadForOffline = viewModel::downloadForOffline,
-        onAddBackup = { draft ->
-            pendingBackup = draft
-            backupLauncher.launch(null)
-        },
-        onDeleteBackup = viewModel::deleteBackup,
-        onOpenBackupPicker = viewModel::openBackupPicker,
-        onOpenBackupPickerFolder = viewModel::openBackupPickerFolder,
-        onNavigateBackupPickerUp = viewModel::navigateBackupPickerUp,
-        onCreateBackupPickerFolder = viewModel::createBackupPickerFolder,
+        onToggleFavorite = viewModel::toggleFavorite,
         onResolveConflict = viewModel::resolveConflict,
         onClearMessage = viewModel::clearMessage,
         onGlobalAction = viewModel::showGlobalActionUnavailable,
         onSearchQueryChange = viewModel::setSearchQuery,
         onOpenTransfers = destinations.onOpenTransfers,
+        onRemoveFavorite = favoritesViewModel::remove,
+        onDismissFavoriteError = favoritesViewModel::dismissError,
+        onOpenDeletedFiles = destinations.onOpenDeletedFiles,
+        onOpenSettings = destinations.onOpenSettings,
+        onOpenAccount = destinations.onOpenAccount,
     )
 }
 
 data class FileBrowserDestinations(
     val onOpenTransfers: () -> Unit,
+    val onOpenDeletedFiles: () -> Unit,
+    val onOpenSettings: () -> Unit,
+    val onOpenAccount: () -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -204,6 +186,7 @@ fun FileBrowserScreen(
     accountId: String,
     releaseVersion: String,
     state: FileBrowserUiState,
+    favoritesState: FavoritesUiState = FavoritesUiState(),
     onSelectSpace: (String) -> Unit,
     onOpen: (ResourceEntity) -> Unit,
     onNavigateUp: () -> Unit,
@@ -222,26 +205,26 @@ fun FileBrowserScreen(
     onDelete: (ResourceEntity) -> Unit,
     onUpload: () -> Unit,
     onDownloadForOffline: (ResourceEntity) -> Unit,
-    onAddBackup: (BackupDraft) -> Unit,
-    onDeleteBackup: (String) -> Unit,
-    onOpenBackupPicker: () -> Unit,
-    onOpenBackupPickerFolder: (ResourceEntity) -> Unit,
-    onNavigateBackupPickerUp: () -> Unit,
-    onCreateBackupPickerFolder: (String) -> Unit,
+    onToggleFavorite: (ResourceEntity) -> Unit,
     onResolveConflict: (TransferEntity, ConflictDecision) -> Unit,
     onClearMessage: () -> Unit,
     onGlobalAction: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onOpenTransfers: () -> Unit,
+    onRemoveFavorite: (ResourceEntity) -> Unit = {},
+    onDismissFavoriteError: () -> Unit = {},
+    onOpenDeletedFiles: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAccount: () -> Unit,
     modifier: Modifier = Modifier,
+    initialDestination: FileBrowserDestination = FileBrowserDestination.Personal,
 ) {
     var dialog by remember { mutableStateOf<BrowserDialog?>(null) }
     var sortCriterion by remember { mutableStateOf(BrowserSortCriterion.Name) }
     var sortAscending by remember { mutableStateOf(true) }
     var showSortMenu by remember { mutableStateOf(false) }
-    var showAccountInformation by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
-    val selectionMode = state.selectedIds.isNotEmpty()
+    var selectedDestination by rememberSaveable { mutableStateOf(initialDestination) }
+    val selectionMode = selectedDestination == FileBrowserDestination.Personal && state.selectedIds.isNotEmpty()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -264,11 +247,11 @@ fun FileBrowserScreen(
                 },
                 onDeletedFiles = {
                     scope.launch { drawerState.close() }
-                    onGlobalAction()
+                    onOpenDeletedFiles()
                 },
                 onSettings = {
                     scope.launch { drawerState.close() }
-                    showSettings = true
+                    onOpenSettings()
                 },
             )
         },
@@ -321,6 +304,12 @@ fun FileBrowserScreen(
                             }
                         }
                     }
+                } else if (selectedDestination == FileBrowserDestination.Favorites) {
+                    FavoritesTopAppBar(
+                        accountId = accountId,
+                        onOpenDrawer = { scope.launch { drawerState.open() } },
+                        onOpenAccount = onOpenAccount,
+                    )
                 } else {
                     Column {
                         BrowserTopAppBar(
@@ -328,7 +317,7 @@ fun FileBrowserScreen(
                             query = state.searchQuery,
                             onQueryChange = onSearchQueryChange,
                             onOpenDrawer = { scope.launch { drawerState.open() } },
-                            onOpenAccount = { showAccountInformation = true },
+                            onOpenAccount = onOpenAccount,
                         )
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -374,21 +363,31 @@ fun FileBrowserScreen(
             },
             bottomBar = {
                 BrowserBottomNavigation(
+                    selectedDestination = selectedDestination,
                     onPersonal = {
+                        selectedDestination = FileBrowserDestination.Personal
                         state.spaces.firstOrNull { it.type == "personal" }?.let { onSelectSpace(it.driveId) }
                     },
+                    onFavorites = { selectedDestination = FileBrowserDestination.Favorites },
                     onUnavailable = onGlobalAction,
                 )
             },
             floatingActionButton = {
-                if (!selectionMode) {
+                if (!selectionMode && selectedDestination == FileBrowserDestination.Personal) {
                     FloatingActionButton(onClick = { dialog = BrowserDialog.New }) {
                         Icon(Icons.Default.Add, contentDescription = "New")
                     }
                 }
             },
         ) { padding ->
-            if (state.layout == BrowserLayout.TILES) {
+            if (selectedDestination == FileBrowserDestination.Favorites) {
+                FavoritesContent(
+                    state = favoritesState,
+                    contentPadding = padding,
+                    onRemove = onRemoveFavorite,
+                    onDismissError = onDismissFavoriteError,
+                )
+            } else if (state.layout == BrowserLayout.TILES) {
                 BrowserGrid(
                     resources = visibleResources,
                     selectedIds = state.selectedIds,
@@ -413,23 +412,6 @@ fun FileBrowserScreen(
         }
     }
 
-    if (showAccountInformation) {
-        AccountInformationDialog(accountId = accountId, onDismiss = { showAccountInformation = false })
-    }
-    if (showSettings) {
-        FolderBackupSettingsDialog(
-            backups = state.backups,
-            pickerTrail = state.backupPickerTrail,
-            pickerFolders = state.backupPickerResources,
-            onDismiss = { showSettings = false },
-            onAdd = onAddBackup,
-            onDelete = onDeleteBackup,
-            onOpenPicker = onOpenBackupPicker,
-            onOpenFolder = onOpenBackupPickerFolder,
-            onNavigateUp = onNavigateBackupPickerUp,
-            onCreateFolder = onCreateBackupPickerFolder,
-        )
-    }
     state.transfers.firstOrNull { it.state == TransferState.CONFLICT.name }?.let { conflict ->
         ConflictResolutionDialog(conflict = conflict, onDecision = { onResolveConflict(conflict, it) })
     }
@@ -446,6 +428,7 @@ fun FileBrowserScreen(
             onMove = { onMove(resource) },
             onCopy = { onCopy(resource) },
             onDownloadForOffline = { onDownloadForOffline(resource) },
+            onToggleFavorite = { onToggleFavorite(resource) },
             onDelete = { onDelete(resource) },
             sheetState = sheetState,
         )
@@ -562,6 +545,56 @@ private fun BrowserTopAppBar(
     },
     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
 )
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FavoritesTopAppBar(
+    accountId: String,
+    onOpenDrawer: () -> Unit,
+    onOpenAccount: () -> Unit,
+) = TopAppBar(
+    title = { Text("Favorites") },
+    navigationIcon = {
+        IconButton(onClick = onOpenDrawer, modifier = Modifier.size(OpenCloudDimensions.TouchTarget)) {
+            Icon(Icons.Default.Menu, contentDescription = "Open navigation drawer")
+        }
+    },
+    actions = { AccountAvatar(accountId, onOpenAccount) },
+    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+)
+
+@Composable
+private fun AccountAvatar(
+    accountId: String,
+    onOpenAccount: () -> Unit,
+) {
+    Box(
+        modifier = Modifier.padding(end = OpenCloudDimensions.SpacingMd),
+        contentAlignment = Alignment.Center,
+    ) {
+        IconButton(
+            onClick = onOpenAccount,
+            modifier =
+                Modifier
+                    .size(OpenCloudDimensions.TouchTarget)
+                    .semantics { contentDescription = "Open account information" },
+        ) {
+            Surface(
+                modifier = Modifier.size(OpenCloudDimensions.AvatarSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = accountId.firstOrNull()?.uppercase() ?: "A",
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 @Suppress("LongParameterList")
@@ -762,13 +795,20 @@ private fun transferSummary(transfer: TransferEntity): String =
 
 @Composable
 private fun BrowserBottomNavigation(
+    selectedDestination: FileBrowserDestination,
     onPersonal: () -> Unit,
+    onFavorites: () -> Unit,
     onUnavailable: () -> Unit,
 ) = NavigationBar {
-    BrowserDestination.entries.forEach { destination ->
+    FileBrowserDestination.entries.forEach { destination ->
         NavigationBarItem(
-            selected = destination == BrowserDestination.Personal,
-            onClick = if (destination == BrowserDestination.Personal) onPersonal else onUnavailable,
+            selected = destination == selectedDestination,
+            onClick =
+                when (destination) {
+                    FileBrowserDestination.Personal -> onPersonal
+                    FileBrowserDestination.Favorites -> onFavorites
+                    else -> onUnavailable
+                },
             icon = { Icon(destination.icon, contentDescription = null) },
             label = { Text(destination.label, maxLines = 1) },
             modifier = Modifier.semantics { contentDescription = "Navigate to ${destination.label}" },
@@ -1016,6 +1056,7 @@ fun ResourceActionSheet(
     onCopy: () -> Unit,
     onDownloadForOffline: () -> Unit,
     onDelete: () -> Unit,
+    onToggleFavorite: () -> Unit = {},
     sheetState: androidx.compose.material3.SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -1033,6 +1074,11 @@ fun ResourceActionSheet(
                 Icons.Default.CloudDownload,
                 onClick = onDownloadForOffline,
             )
+            SheetAction(
+                if (resource.isFavorite) "Remove from favorites" else "Add to favorites",
+                Icons.Default.Star,
+                onClick = onToggleFavorite,
+            )
             SheetAction("Delete", Icons.Default.Delete, MaterialTheme.colorScheme.error, onDelete)
         }
     }
@@ -1048,23 +1094,6 @@ private fun BrowserNotice(
     title = { Text(title) },
     text = { Text(message) },
     confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
-)
-
-@Composable
-private fun AccountInformationDialog(
-    accountId: String,
-    onDismiss: () -> Unit,
-) = AlertDialog(
-    onDismissRequest = onDismiss,
-    icon = { Icon(Icons.Default.Person, contentDescription = null) },
-    title = { Text("Account") },
-    text = {
-        Column(verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs)) {
-            Text("Signed in account", style = MaterialTheme.typography.bodySmall)
-            Text(accountId, style = MaterialTheme.typography.bodyLarge)
-        }
-    },
-    confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
 )
 
 @Composable
@@ -1409,7 +1438,7 @@ private enum class BrowserSortCriterion(
     }
 }
 
-private enum class BrowserDestination(
+enum class FileBrowserDestination(
     val label: String,
     val icon: ImageVector,
 ) {

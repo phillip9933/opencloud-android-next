@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option java_package = "eu.opencloud.android.next.core.datastore.proto";
+option java_multiple_files = true;
+
+message AppSettings {
+  enum BrowserLayout {
+    BROWSER_LAYOUT_UNSPECIFIED = 0;
+    DEFAULT_TABLE = 1;
+    CONDENSED_TABLE = 2;
+    TILES = 3;
+  }
+
+  BrowserLayout browser_layout = 1;
+  string active_account_id = 2;
+  int32 cache_retention_days = 3;
+}

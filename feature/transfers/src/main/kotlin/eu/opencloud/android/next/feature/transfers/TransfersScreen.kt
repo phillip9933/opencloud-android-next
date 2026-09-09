@@ -65,7 +65,7 @@ fun TransfersRoute(
     accountId: String,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: TransfersViewModel = viewModel(),
+    viewModel: TransfersViewModel = viewModel(key = "transfers-$accountId"),
 ) {
     val state by viewModel.state.collectAsState()
     LaunchedEffect(accountId) { viewModel.load(accountId) }

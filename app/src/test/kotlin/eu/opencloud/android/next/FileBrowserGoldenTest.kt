@@ -24,6 +24,8 @@ import eu.opencloud.android.next.core.designsystem.theme.OpenCloudTheme
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.feature.files.BackupFolderCrumb
 import eu.opencloud.android.next.feature.files.BrowserLayout
+import eu.opencloud.android.next.feature.files.FavoritesUiState
+import eu.opencloud.android.next.feature.files.FileBrowserDestination
 import eu.opencloud.android.next.feature.files.FileBrowserScreen
 import eu.opencloud.android.next.feature.files.FileBrowserUiState
 import eu.opencloud.android.next.feature.files.FolderBackupSettingsContent
@@ -42,6 +44,34 @@ class FileBrowserGoldenTest {
 
     @Test
     fun fileBrowserList_matchesGolden() = capture(browserState())
+
+    @Test
+    fun favoritesTopLevel_matchesGolden() {
+        render(
+            state = browserState(),
+            favoritesState =
+                FavoritesUiState(
+                    listOf(
+                        sampleResources().first().copy(
+                            name = "Quarterly plan.pdf",
+                            path = "/Documents/Quarterly plan.pdf",
+                            kind = ResourceKind.FILE,
+                            isFavorite = true,
+                            hasLocalCopy = true,
+                        ),
+                    ),
+                ),
+        )
+        composeRule.onNodeWithContentDescription("Navigate to Favorites").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Open navigation drawer").fetchSemanticsNode()
+        composeRule.onNodeWithContentDescription("Navigate to Favorites").fetchSemanticsNode()
+        composeRule.onAllNodesWithContentDescription("Back").assertCountEquals(0)
+        composeRule.onRoot().captureRoboImage(
+            filePath = "src/test/snapshots/images/favorites.png",
+            roborazziOptions = browserRoborazziOptions(),
+        )
+    }
 
     @Test
     fun fileBrowserFixedSearch_acceptsQueryWithoutChangingLayout() {
@@ -319,6 +349,8 @@ class FileBrowserGoldenTest {
         state: FileBrowserUiState,
         onSetLayout: (BrowserLayout) -> Unit = {},
         onSearchQueryChange: (String) -> Unit = {},
+        favoritesState: FavoritesUiState = FavoritesUiState(),
+        initialDestination: FileBrowserDestination = FileBrowserDestination.Personal,
     ) {
         composeRule.activity.setContent {
             OpenCloudTheme {
@@ -326,6 +358,7 @@ class FileBrowserGoldenTest {
                     accountId = "account",
                     releaseVersion = "0.1.0",
                     state = state,
+                    favoritesState = favoritesState,
                     onSelectSpace = {},
                     onOpen = {},
                     onNavigateUp = {},
@@ -344,17 +377,16 @@ class FileBrowserGoldenTest {
                     onDelete = {},
                     onUpload = {},
                     onDownloadForOffline = {},
-                    onAddBackup = {},
-                    onDeleteBackup = {},
-                    onOpenBackupPicker = {},
-                    onOpenBackupPickerFolder = {},
-                    onNavigateBackupPickerUp = {},
-                    onCreateBackupPickerFolder = {},
+                    onToggleFavorite = {},
                     onResolveConflict = { _, _ -> },
                     onClearMessage = {},
                     onGlobalAction = {},
                     onSearchQueryChange = onSearchQueryChange,
                     onOpenTransfers = {},
+                    onOpenDeletedFiles = {},
+                    onOpenSettings = {},
+                    onOpenAccount = {},
+                    initialDestination = initialDestination,
                 )
             }
         }

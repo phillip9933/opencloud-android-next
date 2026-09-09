@@ -7,6 +7,10 @@ import eu.opencloud.android.next.core.model.auth.ServerCapabilities
 import eu.opencloud.android.next.core.model.auth.UserProfile
 import eu.opencloud.android.next.core.model.auth.WebFingerMetadata
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -154,6 +158,7 @@ class OpenCloudApi(
                 } else {
                     null
                 },
+            trashSupported = dav?.get("trashbin").isEnabledCapability(),
         )
     }
 
@@ -257,6 +262,20 @@ class OpenCloudApi(
 data class DiscoveryResult(
     val canonicalServerUrl: String,
 )
+
+private fun JsonElement?.isEnabledCapability(): Boolean =
+    when (this) {
+        null -> false
+        is JsonPrimitive -> {
+            val value = content.trim().lowercase()
+            value in setOf("true", "yes", "enabled", "on") || value.toDoubleOrNull()?.let { it > 0 } == true
+        }
+        is JsonObject ->
+            listOf("enabled", "available", "version", "value").any { key ->
+                get(key).isEnabledCapability()
+            }
+        is JsonArray -> any { it.isEnabledCapability() }
+    }
 
 private data class HttpResponse(
     val headers: okhttp3.Headers,
