@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.Flow
         FolderBackupEntity::class,
         ShareEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(FileBrowserConverters::class)
@@ -67,6 +67,7 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                         MIGRATION_5_6,
                         MIGRATION_6_7,
                         MIGRATION_7_8,
+                        MIGRATION_8_9,
                     ).build()
                     .also { instance = it }
             }
@@ -184,6 +185,19 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                     )
                 }
             }
+
+        private val MIGRATION_8_9 =
+            object : Migration(8, 9) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `spaces` ADD COLUMN `driveAlias` TEXT")
+                    db.execSQL("ALTER TABLE `spaces` ADD COLUMN `webUrl` TEXT")
+                    db.execSQL("ALTER TABLE `spaces` ADD COLUMN `ownerId` TEXT")
+                    db.execSQL("ALTER TABLE `spaces` ADD COLUMN `lastModifiedDateTime` TEXT")
+                    db.execSQL("ALTER TABLE `spaces` ADD COLUMN `quotaUsedBytes` INTEGER")
+                    db.execSQL("ALTER TABLE `spaces` ADD COLUMN `quotaRemainingBytes` INTEGER")
+                    db.execSQL("ALTER TABLE `spaces` ADD COLUMN `quotaState` TEXT")
+                }
+            }
     }
 }
 
@@ -235,6 +249,13 @@ data class SpaceEntity(
     val quotaBytes: Long?,
     val isDisabled: Boolean = false,
     val isDeleted: Boolean = false,
+    val driveAlias: String? = null,
+    val webUrl: String? = null,
+    val ownerId: String? = null,
+    val lastModifiedDateTime: String? = null,
+    val quotaUsedBytes: Long? = null,
+    val quotaRemainingBytes: Long? = null,
+    val quotaState: String? = null,
 )
 
 @Entity(

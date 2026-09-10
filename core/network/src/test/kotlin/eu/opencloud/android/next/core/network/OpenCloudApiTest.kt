@@ -5,6 +5,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -105,13 +106,13 @@ class OpenCloudApiTest {
     }
 
     @Test
-    fun `sharing remains enabled when capability is disabled or malformed`() {
+    fun `sharing is disabled when capability is disabled or malformed`() {
         val baseUrl = server.url("/").toString().trimEnd('/')
         server.enqueue(MockResponse().setResponseCode(200).setBody(disabledSharingCapabilitiesResponse()))
         server.enqueue(MockResponse().setResponseCode(200).setBody("not-json"))
 
-        assertTrue(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
-        assertTrue(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
+        assertFalse(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
+        assertFalse(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
     }
 
     @Test

@@ -1,6 +1,5 @@
 package eu.opencloud.android.next.core.network
 
-import android.util.Log
 import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
@@ -130,7 +129,6 @@ class OpenCloudApi(
                     .get()
                     .build(),
             )
-        runCatching { Log.e("OpenCloudSync", "Raw Capabilities: " + response.body) }
         return runCatching { parseCapabilities(response.body, serverUrl) }
             .getOrElse { fallbackCapabilities() }
     }
@@ -159,8 +157,9 @@ class OpenCloudApi(
         val publicSharing = sharing?.get("public")?.jsonObject
         return ServerCapabilities(
             version = version,
-            // Temporary diagnostic bypass: keep sharing available while oCIS capability variants are investigated.
-            sharingEnabled = true,
+            sharingEnabled =
+                sharing?.get("api_enabled").isEnabledCapability() ||
+                    sharing?.get("api").isEnabledCapability(),
             publicSharingEnabled = publicSharing.isEnabledCapability(),
             spacesEnabled = data.toString().contains("spaces"),
             tusSupported = files?.toString()?.contains("tus") == true,
@@ -207,7 +206,7 @@ class OpenCloudApi(
     private fun fallbackCapabilities() =
         ServerCapabilities(
             version = null,
-            sharingEnabled = true,
+            sharingEnabled = false,
             publicSharingEnabled = false,
             spacesEnabled = false,
             tusSupported = false,

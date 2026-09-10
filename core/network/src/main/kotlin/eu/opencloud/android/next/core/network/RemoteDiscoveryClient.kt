@@ -1,11 +1,6 @@
 package eu.opencloud.android.next.core.network
 
 import android.util.Log
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -20,50 +15,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 class RemoteDiscoveryClient(
     private val client: OkHttpClient,
-    private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
-    fun spaces(
-        serverUrl: String,
-        authorization: String,
-    ): List<RemoteSpace> {
-        val request =
-            Request
-                .Builder()
-                .url(
-                    "${serverUrl.trimEnd('/')}/graph/v1.0/me/drives",
-                ).header("Authorization", authorization)
-                .get()
-                .build()
-        return execute(request).let(json::parseToJsonElement).jsonObject["value"]?.jsonArray.orEmpty().map { element ->
-            val drive = element.jsonObject
-            val root = drive.requiredObject("root")
-            RemoteSpace(
-                id = drive.requiredString("id"),
-                name = drive.requiredString("name"),
-                type = drive["driveType"]?.jsonPrimitive?.content ?: "project",
-                description = drive.string("description"),
-                ownerId =
-                    drive["owner"]
-                        ?.jsonObject
-                        ?.get("user")
-                        ?.jsonObject
-                        ?.string("id"),
-                rootId = root.requiredString("id"),
-                rootWebDavUrl = root.requiredString("webDavUrl"),
-                rootETag = root.string("eTag"),
-                quotaBytes =
-                    drive["quota"]
-                        ?.jsonObject
-                        ?.get("total")
-                        ?.jsonPrimitive
-                        ?.content
-                        ?.toLongOrNull(),
-                disabled = drive.string("driveType") == "virtual",
-                deleted = root["deleted"] != null,
-            )
-        }
-    }
-
     @Suppress("TooGenericExceptionCaught")
     fun folder(
         rootWebDavUrl: String,
@@ -150,20 +102,6 @@ class RemoteDiscoveryClient(
 
 private fun String.singleLineExcerpt(): String = replace(Regex("\\s+"), " ").trim().take(512)
 
-data class RemoteSpace(
-    val id: String,
-    val name: String,
-    val type: String,
-    val description: String?,
-    val ownerId: String?,
-    val rootId: String,
-    val rootWebDavUrl: String,
-    val rootETag: String?,
-    val quotaBytes: Long?,
-    val disabled: Boolean,
-    val deleted: Boolean,
-)
-
 data class RemoteResource(
     val id: String,
     val path: String,
@@ -176,13 +114,6 @@ data class RemoteResource(
     val createdAtEpochMillis: Long,
     val favorite: Boolean = false,
 )
-
-private fun JsonObject.requiredString(name: String): String = string(name) ?: error("Missing required field: $name")
-
-private fun JsonObject.requiredObject(name: String): JsonObject =
-    get(name)?.jsonObject ?: error("Missing required object: $name")
-
-private fun JsonObject.string(name: String): String? = get(name)?.jsonPrimitive?.content
 
 private fun Element.text(
     namespace: String,

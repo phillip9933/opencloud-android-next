@@ -117,8 +117,7 @@ class SharesViewModel(
             val account = store.account(accountId)
             mutableState.value =
                 mutableState.value.copy(
-                    // Temporary diagnostic bypass for accounts persisted before capability parsing was corrected.
-                    account = account?.copy(sharingEnabled = true),
+                    account = account,
                 )
             manager.observe(accountId).collectLatest { values ->
                 mutableState.value =
@@ -440,6 +439,8 @@ fun ResourceSharesScreen(
     var showPublic by remember { mutableStateOf(false) }
     val internalShares = state.resourceShares.filter { it.shareType != OcsShareType.PUBLIC_LINK.value }
     val publicLinks = state.resourceShares.filter { it.shareType == OcsShareType.PUBLIC_LINK.value }
+    val sharingEnabled = state.account?.sharingEnabled == true
+    val publicSharingEnabled = sharingEnabled && state.account?.publicSharingEnabled == true
 
     ModalBottomSheet(
         onDismissRequest = onNavigateBack,
@@ -471,13 +472,22 @@ fun ResourceSharesScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            item {
-                Button(
-                    onClick = { showInvite = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.Person, null)
-                    Text(" Add people")
+            if (sharingEnabled) {
+                item {
+                    Button(
+                        onClick = { showInvite = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Person, null)
+                        Text(" Add people")
+                    }
+                }
+            } else {
+                item {
+                    Text(
+                        "Sharing is not supported by this server.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             if (internalShares.isEmpty()) {
@@ -506,18 +516,27 @@ fun ResourceSharesScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            item {
-                Button(
-                    onClick = {
-                        state.createdPublicLink?.let(context::copyPublicLink) ?: run { showPublic = true }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        if (state.createdPublicLink == null) Icons.Default.Link else Icons.Default.ContentCopy,
-                        null,
+            if (publicSharingEnabled) {
+                item {
+                    Button(
+                        onClick = {
+                            state.createdPublicLink?.let(context::copyPublicLink) ?: run { showPublic = true }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            if (state.createdPublicLink == null) Icons.Default.Link else Icons.Default.ContentCopy,
+                            null,
+                        )
+                        Text(if (state.createdPublicLink == null) " Create public link" else " Copy link")
+                    }
+                }
+            } else {
+                item {
+                    Text(
+                        "Public link sharing is not supported by this server.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(if (state.createdPublicLink == null) " Create public link" else " Copy link")
                 }
             }
             if (publicLinks.isEmpty()) {
@@ -544,7 +563,7 @@ fun ResourceSharesScreen(
             }
         }
     }
-    if (showInvite) {
+    if (showInvite && sharingEnabled) {
         InviteSheet(
             state = state,
             onDismiss = { showInvite = false },
@@ -552,7 +571,7 @@ fun ResourceSharesScreen(
             onCreate = onCreateRecipient,
         )
     }
-    if (showPublic) {
+    if (showPublic && publicSharingEnabled) {
         PublicLinkSheet(
             account = state.account,
             folder = state.resource?.kind?.name == "FOLDER",

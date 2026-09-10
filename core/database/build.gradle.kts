@@ -30,6 +30,10 @@ android {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 ksp {
@@ -43,4 +47,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
 }

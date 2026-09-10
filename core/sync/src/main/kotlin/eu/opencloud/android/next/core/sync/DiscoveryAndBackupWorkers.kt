@@ -17,6 +17,7 @@ import eu.opencloud.android.next.core.database.FolderBackupEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.model.ResourceKind
+import eu.opencloud.android.next.core.network.LibreGraphSpacesClient
 import eu.opencloud.android.next.core.network.RemoteDiscoveryClient
 import eu.opencloud.android.next.core.security.TlsPolicy
 import kotlinx.coroutines.Dispatchers
@@ -33,26 +34,15 @@ class AccountDiscoveryWorker(
                 val store = store()
                 val accountId = requireNotNull(inputData.getString(ACCOUNT_ID))
                 val account = requireNotNull(store.account(accountId))
-                val remote = remote(account.serverUrl)
+                val httpClient = httpClient(account.serverUrl)
+                val remote = RemoteDiscoveryClient(httpClient)
                 val authorization = WorkerAuthorizationProvider(applicationContext).authorization(account)
                 val spaces =
-                    remote.spaces(account.serverUrl, authorization).map {
-                        SpaceEntity(
-                            account.id,
-                            it.id,
-                            it.name,
-                            it.type,
-                            it.description,
-                            it.ownerId,
-                            it.rootId,
-                            it.rootWebDavUrl,
-                            it.rootETag,
-                            it.quotaBytes,
-                            it.disabled,
-                            it.deleted,
-                        )
-                    }
-                store.replaceRemoteSpaces(account.id, spaces)
+                    SpaceRepository(store, LibreGraphSpacesClient(httpClient)).synchronize(
+                        account.id,
+                        account.serverUrl,
+                        authorization,
+                    )
                 spaces.filterNot { it.isDeleted || it.isDisabled }.forEach { space ->
                     refreshFolder(FolderRefresh(store, remote, account.id, space, null, "/", authorization))
                 }
@@ -283,8 +273,10 @@ const val DISCOVERY_ERROR = "discoveryError"
 
 private fun CoroutineWorker.store() = FileBrowserStore(FileBrowserDatabase.create(applicationContext))
 
-private fun CoroutineWorker.remote(serverUrl: String) =
-    RemoteDiscoveryClient(TlsPolicy(applicationContext).applyTo(OkHttpClient.Builder().build(), serverUrl))
+private fun CoroutineWorker.remote(serverUrl: String) = RemoteDiscoveryClient(httpClient(serverUrl))
+
+private fun CoroutineWorker.httpClient(serverUrl: String) =
+    TlsPolicy(applicationContext).applyTo(OkHttpClient.Builder().build(), serverUrl)
 
 private data class FolderRefresh(
     val store: FileBrowserStore,

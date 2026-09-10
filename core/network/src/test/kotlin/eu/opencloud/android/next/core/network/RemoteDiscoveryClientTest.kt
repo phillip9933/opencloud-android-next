@@ -19,20 +19,6 @@ class RemoteDiscoveryClientTest {
 
     @After fun tearDown() = server.shutdown()
 
-    @Test fun `spaces parses graph drives`() {
-        server.enqueue(
-            MockResponse().setBody(
-                """{"value":[{"id":"drive","name":"Personal","driveType":"personal","description":"Files","owner":{"user":{"id":"alice"}},"quota":{"total":42},"root":{"id":"root","webDavUrl":"${server.url(
-                    "dav/spaces/drive",
-                )}","eTag":"tag"}}]}""",
-            ),
-        )
-        val result = client.spaces(server.url("/").toString(), "Bearer token").single()
-        assertEquals("drive", result.id)
-        assertEquals(42L, result.quotaBytes)
-        assertEquals("Bearer token", server.takeRequest().getHeader("Authorization"))
-    }
-
     @Test fun `folder parses depth one multistatus and excludes collection itself`() {
         server.enqueue(
             MockResponse()

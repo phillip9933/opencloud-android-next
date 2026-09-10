@@ -5,6 +5,7 @@ import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.ShareEntity
 import eu.opencloud.android.next.core.network.CreateShareRequest
+import eu.opencloud.android.next.core.network.OcsShareType
 import eu.opencloud.android.next.core.network.OcsSharingClient
 import eu.opencloud.android.next.core.network.RemoteShare
 import eu.opencloud.android.next.core.network.ShareRecipient
@@ -51,6 +52,9 @@ class ShareManager(
         request: CreateShareRequest,
     ): CreatedShare {
         val session = session(accountId)
+        if (request.type == OcsShareType.PUBLIC_LINK) {
+            require(session.account.publicSharingEnabled) { "Public link sharing is not supported by this server." }
+        }
         val remote =
             session.client
                 .createShare(session.account.serverUrl, session.authorization, request)
@@ -79,6 +83,7 @@ class ShareManager(
 
     private suspend fun session(accountId: String): ShareSession {
         val account = requireNotNull(store.account(accountId)) { "The account is unavailable." }
+        require(account.sharingEnabled) { "Sharing is not supported by this server." }
         val authorization = WorkerAuthorizationProvider(context).authorization(account)
         val http = TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl)
         return ShareSession(account, authorization, OcsSharingClient(http))
