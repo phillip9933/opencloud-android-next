@@ -29,6 +29,11 @@ data class ServerCapabilities(
     val tusSupported: Boolean,
     val remoteSearchUrl: String? = null,
     val trashSupported: Boolean = false,
+    val publicLinkPasswordSupported: Boolean = false,
+    val publicLinkPasswordEnforced: Boolean = false,
+    val publicLinkExpirationSupported: Boolean = false,
+    val publicLinkExpirationEnforced: Boolean = false,
+    val publicLinkExpirationDays: Int? = null,
 )
 
 data class OidcConfiguration(

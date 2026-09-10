@@ -29,8 +29,9 @@ import kotlinx.coroutines.flow.Flow
         ResourceEntity::class,
         TransferEntity::class,
         FolderBackupEntity::class,
+        ShareEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(FileBrowserConverters::class)
@@ -44,6 +45,8 @@ abstract class FileBrowserDatabase : RoomDatabase() {
     abstract fun transferDao(): TransferDao
 
     abstract fun folderBackupDao(): FolderBackupDao
+
+    abstract fun shareDao(): ShareDao
 
     companion object {
         @Volatile
@@ -63,6 +66,7 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
+                        MIGRATION_7_8,
                     ).build()
                     .also { instance = it }
             }
@@ -150,6 +154,36 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `accounts` ADD COLUMN `trashSupported` INTEGER NOT NULL DEFAULT 0")
                 }
             }
+
+        private val MIGRATION_7_8 =
+            object : Migration(7, 8) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `sharingEnabled` INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `publicSharingEnabled` INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL(
+                        "ALTER TABLE `accounts` ADD COLUMN `publicLinkPasswordSupported` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
+                        "ALTER TABLE `accounts` ADD COLUMN `publicLinkPasswordEnforced` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
+                        "ALTER TABLE `accounts` ADD COLUMN `publicLinkExpirationSupported` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL(
+                        "ALTER TABLE `accounts` ADD COLUMN `publicLinkExpirationEnforced` INTEGER NOT NULL DEFAULT 0",
+                    )
+                    db.execSQL("ALTER TABLE `accounts` ADD COLUMN `publicLinkExpirationDays` INTEGER")
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `shares` (`accountId` TEXT NOT NULL, `remoteId` TEXT NOT NULL, `resourceId` TEXT, `path` TEXT NOT NULL, `shareType` INTEGER NOT NULL, `shareWith` TEXT, `displayName` TEXT, `additionalInfo` TEXT, `permissions` INTEGER NOT NULL, `sharedAtEpochSeconds` INTEGER NOT NULL, `expiresAtEpochMillis` INTEGER, `label` TEXT, `isFolder` INTEGER NOT NULL, `sharedWithMe` INTEGER NOT NULL, PRIMARY KEY(`accountId`, `remoteId`))",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_shares_accountId_sharedWithMe` ON `shares` (`accountId`, `sharedWithMe`)",
+                    )
+                    db.execSQL(
+                        "CREATE INDEX IF NOT EXISTS `index_shares_accountId_path` ON `shares` (`accountId`, `path`)",
+                    )
+                }
+            }
     }
 }
 
@@ -174,6 +208,13 @@ data class AccountEntity(
     val oidcTokenEndpoint: String? = null,
     val remoteSearchUrl: String? = null,
     val trashSupported: Boolean = false,
+    val sharingEnabled: Boolean = false,
+    val publicSharingEnabled: Boolean = false,
+    val publicLinkPasswordSupported: Boolean = false,
+    val publicLinkPasswordEnforced: Boolean = false,
+    val publicLinkExpirationSupported: Boolean = false,
+    val publicLinkExpirationEnforced: Boolean = false,
+    val publicLinkExpirationDays: Int? = null,
 )
 
 @Entity(
@@ -276,6 +317,28 @@ data class FolderBackupEntity(
     val deleteAfterUpload: Boolean,
     val enabled: Boolean = true,
     val lastSafeScanEpochMillis: Long = 0,
+)
+
+@Entity(
+    tableName = "shares",
+    primaryKeys = ["accountId", "remoteId"],
+    indices = [Index(value = ["accountId", "sharedWithMe"]), Index(value = ["accountId", "path"])],
+)
+data class ShareEntity(
+    val accountId: String,
+    val remoteId: String,
+    val resourceId: String?,
+    val path: String,
+    val shareType: Int,
+    val shareWith: String?,
+    val displayName: String?,
+    val additionalInfo: String?,
+    val permissions: Int,
+    val sharedAtEpochSeconds: Long,
+    val expiresAtEpochMillis: Long?,
+    val label: String?,
+    val isFolder: Boolean,
+    val sharedWithMe: Boolean,
 )
 
 @Dao
@@ -526,6 +589,24 @@ interface FolderBackupDao {
     suspend fun deleteForAccount(accountId: String)
 }
 
+@Dao
+interface ShareDao {
+    @Query("SELECT * FROM shares WHERE accountId = :accountId ORDER BY sharedAtEpochSeconds DESC")
+    fun observeForAccount(accountId: String): Flow<List<ShareEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(shares: List<ShareEntity>)
+
+    @Query("DELETE FROM shares WHERE accountId = :accountId")
+    suspend fun deleteForAccount(accountId: String)
+
+    @Query("DELETE FROM shares WHERE accountId = :accountId AND remoteId = :shareId")
+    suspend fun delete(
+        accountId: String,
+        shareId: String,
+    )
+}
+
 class FileBrowserStore(
     private val database: FileBrowserDatabase,
 ) {
@@ -533,6 +614,7 @@ class FileBrowserStore(
     private val resources = database.resourceDao()
     private val transfers = database.transferDao()
     private val backups = database.folderBackupDao()
+    private val shares = database.shareDao()
 
     suspend fun saveAccount(
         account: Account,
@@ -550,6 +632,13 @@ class FileBrowserStore(
             oidcTokenEndpoint = oidcConfiguration?.tokenEndpoint,
             remoteSearchUrl = capabilities.remoteSearchUrl,
             trashSupported = capabilities.trashSupported,
+            sharingEnabled = capabilities.sharingEnabled,
+            publicSharingEnabled = capabilities.publicSharingEnabled,
+            publicLinkPasswordSupported = capabilities.publicLinkPasswordSupported,
+            publicLinkPasswordEnforced = capabilities.publicLinkPasswordEnforced,
+            publicLinkExpirationSupported = capabilities.publicLinkExpirationSupported,
+            publicLinkExpirationEnforced = capabilities.publicLinkExpirationEnforced,
+            publicLinkExpirationDays = capabilities.publicLinkExpirationDays,
         ),
     )
 
@@ -573,6 +662,8 @@ class FileBrowserStore(
     fun observeTransfers(accountId: String): Flow<List<TransferEntity>> = transfers.observeForAccount(accountId)
 
     fun observeBackups(accountId: String): Flow<List<FolderBackupEntity>> = backups.observeForAccount(accountId)
+
+    fun observeShares(accountId: String): Flow<List<ShareEntity>> = shares.observeForAccount(accountId)
 
     suspend fun account(accountId: String): AccountEntity? = database.accountDao().findById(accountId)
 
@@ -603,12 +694,28 @@ class FileBrowserStore(
             backups.deleteForAccount(accountId)
             transfers.deleteAllForAccount(accountId)
             resources.deleteForAccount(accountId)
+            shares.deleteForAccount(accountId)
             spaces.deleteForAccount(accountId)
             database.accountDao().delete(accountId)
         }
     }
 
     suspend fun spaces(accountId: String): List<SpaceEntity> = spaces.findSpaces(accountId)
+
+    suspend fun replaceShares(
+        accountId: String,
+        values: List<ShareEntity>,
+    ) {
+        database.withTransaction {
+            shares.deleteForAccount(accountId)
+            shares.upsertAll(values)
+        }
+    }
+
+    suspend fun deleteShare(
+        accountId: String,
+        shareId: String,
+    ) = shares.delete(accountId, shareId)
 
     suspend fun children(
         accountId: String,

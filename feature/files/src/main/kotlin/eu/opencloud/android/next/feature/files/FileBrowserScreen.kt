@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,8 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -48,6 +50,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ViewHeadline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -108,11 +111,12 @@ import eu.opencloud.android.next.core.model.ResourceKind
 import kotlinx.coroutines.launch
 
 @Composable
-@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Suppress("FunctionNaming", "LongParameterList", "ktlint:standard:function-naming")
 fun FileBrowserRoute(
     accountId: String,
     releaseVersion: String,
     destinations: FileBrowserDestinations,
+    sharesContent: @Composable (PaddingValues) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: FileBrowserViewModel = viewModel(key = "files-$accountId"),
     favoritesViewModel: FavoritesViewModel = viewModel(key = "favorites-$accountId"),
@@ -169,6 +173,8 @@ fun FileBrowserRoute(
         onOpenDeletedFiles = destinations.onOpenDeletedFiles,
         onOpenSettings = destinations.onOpenSettings,
         onOpenAccount = destinations.onOpenAccount,
+        onShareResource = destinations.onShareResource,
+        sharesContent = sharesContent,
     )
 }
 
@@ -177,11 +183,12 @@ data class FileBrowserDestinations(
     val onOpenDeletedFiles: () -> Unit,
     val onOpenSettings: () -> Unit,
     val onOpenAccount: () -> Unit,
+    val onShareResource: (ResourceEntity) -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Suppress("CyclomaticComplexMethod", "LongMethod", "LongParameterList")
+@Suppress("ComposableParamOrder", "CyclomaticComplexMethod", "LongMethod", "LongParameterList")
 fun FileBrowserScreen(
     accountId: String,
     releaseVersion: String,
@@ -216,6 +223,8 @@ fun FileBrowserScreen(
     onOpenDeletedFiles: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAccount: () -> Unit,
+    onShareResource: (ResourceEntity) -> Unit,
+    sharesContent: @Composable (PaddingValues) -> Unit = {},
     modifier: Modifier = Modifier,
     initialDestination: FileBrowserDestination = FileBrowserDestination.Personal,
 ) {
@@ -223,7 +232,11 @@ fun FileBrowserScreen(
     var sortCriterion by remember { mutableStateOf(BrowserSortCriterion.Name) }
     var sortAscending by remember { mutableStateOf(true) }
     var showSortMenu by remember { mutableStateOf(false) }
+    var favoritesQuery by rememberSaveable { mutableStateOf("") }
     var selectedDestination by rememberSaveable { mutableStateOf(initialDestination) }
+    val browserDestination =
+        selectedDestination == FileBrowserDestination.Personal ||
+            selectedDestination == FileBrowserDestination.Favorites
     val selectionMode = selectedDestination == FileBrowserDestination.Personal && state.selectedIds.isNotEmpty()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -233,6 +246,13 @@ fun FileBrowserScreen(
             val source = if (state.searchQuery.isBlank()) state.resources else state.searchResults
             source
                 .sortedWith(sortCriterion.comparator(sortAscending))
+        }
+    val visibleFavorites =
+        remember(favoritesState.resources, favoritesQuery, sortCriterion, sortAscending) {
+            favoritesState.resources
+                .filter { resource ->
+                    favoritesQuery.isBlank() || resource.name.contains(favoritesQuery, ignoreCase = true)
+                }.sortedWith(sortCriterion.comparator(sortAscending))
         }
 
     ModalNavigationDrawer(
@@ -291,31 +311,29 @@ fun FileBrowserScreen(
                                         showSortMenu = false
                                     },
                                     onToggleLayout = {
-                                        onSetLayout(
-                                            if (state.layout == BrowserLayout.TILES) {
-                                                BrowserLayout.DEFAULT_TABLE
-                                            } else {
-                                                BrowserLayout.TILES
-                                            },
-                                        )
+                                        onSetLayout(state.layout.next())
                                     },
                                 )
                                 TransferSummary(state.transfers)
                             }
                         }
                     }
-                } else if (selectedDestination == FileBrowserDestination.Favorites) {
-                    FavoritesTopAppBar(
-                        accountId = accountId,
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onOpenAccount = onOpenAccount,
-                    )
-                } else {
+                } else if (browserDestination) {
                     Column {
                         BrowserTopAppBar(
                             accountId = accountId,
-                            query = state.searchQuery,
-                            onQueryChange = onSearchQueryChange,
+                            query =
+                                if (selectedDestination == FileBrowserDestination.Favorites) {
+                                    favoritesQuery
+                                } else {
+                                    state.searchQuery
+                                },
+                            onQueryChange =
+                                if (selectedDestination == FileBrowserDestination.Favorites) {
+                                    { favoritesQuery = it }
+                                } else {
+                                    onSearchQueryChange
+                                },
                             onOpenDrawer = { scope.launch { drawerState.open() } },
                             onOpenAccount = onOpenAccount,
                         )
@@ -325,7 +343,9 @@ fun FileBrowserScreen(
                         ) {
                             Column {
                                 BrowserSubHeader(
-                                    canNavigateUp = state.folderTrail.isNotEmpty(),
+                                    canNavigateUp =
+                                        selectedDestination == FileBrowserDestination.Personal &&
+                                            state.folderTrail.isNotEmpty(),
                                     layout = state.layout,
                                     sortCriterion = sortCriterion,
                                     sortAscending = sortAscending,
@@ -343,22 +363,29 @@ fun FileBrowserScreen(
                                         showSortMenu = false
                                     },
                                     onToggleLayout = {
-                                        onSetLayout(
-                                            if (state.layout == BrowserLayout.TILES) {
-                                                BrowserLayout.DEFAULT_TABLE
-                                            } else {
-                                                BrowserLayout.TILES
-                                            },
-                                        )
+                                        onSetLayout(state.layout.next())
                                     },
                                 )
-                                if (state.searchQuery.isNotBlank() && state.isRemoteSearchLoading) {
+                                if (
+                                    selectedDestination == FileBrowserDestination.Personal &&
+                                    state.searchQuery.isNotBlank() &&
+                                    state.isRemoteSearchLoading
+                                ) {
                                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                 }
-                                TransferSummary(state.transfers)
+                                if (selectedDestination == FileBrowserDestination.Personal) {
+                                    TransferSummary(state.transfers)
+                                }
                             }
                         }
                     }
+                } else {
+                    DestinationTopAppBar(
+                        title = selectedDestination.label,
+                        accountId = accountId,
+                        onOpenDrawer = { scope.launch { drawerState.open() } },
+                        onOpenAccount = onOpenAccount,
+                    )
                 }
             },
             bottomBar = {
@@ -369,6 +396,7 @@ fun FileBrowserScreen(
                         state.spaces.firstOrNull { it.type == "personal" }?.let { onSelectSpace(it.driveId) }
                     },
                     onFavorites = { selectedDestination = FileBrowserDestination.Favorites },
+                    onShares = { selectedDestination = FileBrowserDestination.Shares },
                     onUnavailable = onGlobalAction,
                 )
             },
@@ -380,16 +408,19 @@ fun FileBrowserScreen(
                 }
             },
         ) { padding ->
-            if (selectedDestination == FileBrowserDestination.Favorites) {
-                FavoritesContent(
-                    state = favoritesState,
-                    contentPadding = padding,
-                    onRemove = onRemoveFavorite,
-                    onDismissError = onDismissFavoriteError,
-                )
+            val resources =
+                if (selectedDestination == FileBrowserDestination.Favorites) {
+                    visibleFavorites
+                } else {
+                    visibleResources
+                }
+            if (selectedDestination == FileBrowserDestination.Shares) {
+                sharesContent(padding)
+            } else if (selectedDestination == FileBrowserDestination.Favorites && resources.isEmpty()) {
+                FavoritesEmpty(contentPadding = padding)
             } else if (state.layout == BrowserLayout.TILES) {
                 BrowserGrid(
-                    resources = visibleResources,
+                    resources = resources,
                     selectedIds = state.selectedIds,
                     selectionMode = selectionMode,
                     contentPadding = padding,
@@ -399,10 +430,10 @@ fun FileBrowserScreen(
                 )
             } else {
                 BrowserList(
-                    resources = visibleResources,
+                    resources = resources,
                     selectedIds = state.selectedIds,
                     selectionMode = selectionMode,
-                    condensed = false,
+                    condensed = state.layout == BrowserLayout.CONDENSED_TABLE,
                     contentPadding = padding,
                     onOpen = onOpen,
                     onToggleSelection = onToggleSelection,
@@ -417,6 +448,7 @@ fun FileBrowserScreen(
     }
     state.message?.let { BrowserNotice("Notice", it, onClearMessage) }
     state.error?.let { BrowserNotice("File operation", it, onClearMessage) }
+    favoritesState.error?.let { BrowserNotice("Favorites", it, onDismissFavoriteError) }
     state.actionResource?.let { resource ->
         ResourceActionSheet(
             resource = resource,
@@ -428,7 +460,17 @@ fun FileBrowserScreen(
             onMove = { onMove(resource) },
             onCopy = { onCopy(resource) },
             onDownloadForOffline = { onDownloadForOffline(resource) },
-            onToggleFavorite = { onToggleFavorite(resource) },
+            onToggleFavorite = {
+                if (selectedDestination == FileBrowserDestination.Favorites) {
+                    onRemoveFavorite(resource)
+                } else {
+                    onToggleFavorite(resource)
+                }
+            },
+            onShare = {
+                onDismissActions()
+                onShareResource(resource)
+            },
             onDelete = { onDelete(resource) },
             sheetState = sheetState,
         )
@@ -548,12 +590,13 @@ private fun BrowserTopAppBar(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FavoritesTopAppBar(
+private fun DestinationTopAppBar(
+    title: String,
     accountId: String,
     onOpenDrawer: () -> Unit,
     onOpenAccount: () -> Unit,
 ) = TopAppBar(
-    title = { Text("Favorites") },
+    title = { Text(title) },
     navigationIcon = {
         IconButton(onClick = onOpenDrawer, modifier = Modifier.size(OpenCloudDimensions.TouchTarget)) {
             Icon(Icons.Default.Menu, contentDescription = "Open navigation drawer")
@@ -562,6 +605,23 @@ private fun FavoritesTopAppBar(
     actions = { AccountAvatar(accountId, onOpenAccount) },
     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
 )
+
+@Composable
+private fun FavoritesEmpty(contentPadding: PaddingValues) {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(contentPadding),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs),
+        ) {
+            Icon(Icons.Default.Star, contentDescription = null)
+            Text("No favorites yet", style = MaterialTheme.typography.titleMedium)
+            Text("Favorite files remain listed here while offline.")
+        }
+    }
+}
 
 @Composable
 private fun AccountAvatar(
@@ -652,20 +712,8 @@ private fun BrowserSubHeader(
         Spacer(Modifier.weight(1f))
         IconButton(onClick = onToggleLayout) {
             Icon(
-                imageVector =
-                    if (layout == BrowserLayout.TILES) {
-                        Icons.AutoMirrored.Filled.ViewList
-                    } else {
-                        Icons.Default.GridView
-                    },
-                contentDescription =
-                    if (layout ==
-                        BrowserLayout.TILES
-                    ) {
-                        "Switch to list view"
-                    } else {
-                        "Switch to grid view"
-                    },
+                imageVector = layout.nextIcon(),
+                contentDescription = layout.nextContentDescription(),
             )
         }
     }
@@ -798,6 +846,7 @@ private fun BrowserBottomNavigation(
     selectedDestination: FileBrowserDestination,
     onPersonal: () -> Unit,
     onFavorites: () -> Unit,
+    onShares: () -> Unit,
     onUnavailable: () -> Unit,
 ) = NavigationBar {
     FileBrowserDestination.entries.forEach { destination ->
@@ -807,6 +856,7 @@ private fun BrowserBottomNavigation(
                 when (destination) {
                     FileBrowserDestination.Personal -> onPersonal
                     FileBrowserDestination.Favorites -> onFavorites
+                    FileBrowserDestination.Shares -> onShares
                     else -> onUnavailable
                 },
             icon = { Icon(destination.icon, contentDescription = null) },
@@ -841,7 +891,6 @@ private fun BrowserList(
             onSelect = { onToggleSelection(resource.remoteId) },
             onActions = { onShowActions(resource) },
         )
-        HorizontalDivider()
     }
 }
 
@@ -856,31 +905,80 @@ private fun BrowserListItem(
     onOpen: () -> Unit,
     onSelect: () -> Unit,
     onActions: () -> Unit,
-) = ListItem(
-    headlineContent = { Text(resource.name, maxLines = 1) },
-    supportingContent = if (condensed) null else ({ ResourceMetadata(resource) }),
-    leadingContent = { ResourceIcon(resource.kind) },
-    trailingContent = {
+) {
+    if (condensed) {
+        CompactBrowserListItem(resource, selected, selectionMode, onOpen, onSelect, onActions)
+    } else {
+        ListItem(
+            headlineContent = { ResourceName(resource) },
+            supportingContent = { ResourceMetadata(resource) },
+            leadingContent = { ResourceIcon(resource.kind) },
+            trailingContent = {
+                if (selectionMode) {
+                    SelectionCircle(selected = selected, resourceName = resource.name, onSelect = onSelect)
+                } else {
+                    IconButton(onClick = onActions) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Actions for ${resource.name}")
+                    }
+                }
+            },
+            colors =
+                ListItemDefaults.colors(
+                    containerColor =
+                        if (selected) MaterialTheme.colorScheme.secondaryContainer else OpenCloudColor.Transparent,
+                ),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = { if (selectionMode) onSelect() else onOpen() },
+                        onLongClick = onSelect,
+                    ),
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+@Suppress("LongParameterList")
+private fun CompactBrowserListItem(
+    resource: ResourceEntity,
+    selected: Boolean,
+    selectionMode: Boolean,
+    onOpen: () -> Unit,
+    onSelect: () -> Unit,
+    onActions: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(OpenCloudDimensions.CondensedRowHeight)
+                .background(
+                    if (selected) MaterialTheme.colorScheme.secondaryContainer else OpenCloudColor.Transparent,
+                ).combinedClickable(
+                    onClick = { if (selectionMode) onSelect() else onOpen() },
+                    onLongClick = onSelect,
+                ).padding(horizontal = OpenCloudDimensions.SpacingXs),
+        horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ResourceIcon(resource.kind, Modifier.size(OpenCloudDimensions.IconMedium))
+        ResourceName(resource, Modifier.weight(1f))
         if (selectionMode) {
-            SelectionCircle(selected = selected, resourceName = resource.name, onSelect = onSelect)
+            SelectionCircle(
+                selected = selected,
+                resourceName = resource.name,
+                onSelect = onSelect,
+                modifier = Modifier.size(OpenCloudDimensions.CondensedRowHeight),
+            )
         } else {
-            IconButton(onClick = onActions) {
+            IconButton(onClick = onActions, modifier = Modifier.size(OpenCloudDimensions.CondensedRowHeight)) {
                 Icon(Icons.Default.MoreVert, contentDescription = "Actions for ${resource.name}")
             }
         }
-    },
-    colors =
-        ListItemDefaults.colors(
-            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else OpenCloudColor.Transparent,
-        ),
-    modifier =
-        Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = { if (selectionMode) onSelect() else onOpen() },
-                onLongClick = onSelect,
-            ),
-)
+    }
+}
 
 @Composable
 @Suppress("LongParameterList")
@@ -949,6 +1047,9 @@ private fun BrowserGridItem(
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             ResourceIcon(resource.kind, Modifier.size(OpenCloudDimensions.TouchTarget))
+            if (resource.isFavorite) {
+                FavoriteIndicator()
+            }
             Spacer(Modifier.weight(1f))
             if (selectionMode) {
                 SelectionCircle(selected = selected, resourceName = resource.name, onSelect = onSelect)
@@ -964,12 +1065,40 @@ private fun BrowserGridItem(
 }
 
 @Composable
+private fun ResourceName(
+    resource: ResourceEntity,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(resource.name, modifier = Modifier.weight(1f, fill = false), maxLines = 1)
+        if (resource.isFavorite) {
+            FavoriteIndicator()
+        }
+    }
+}
+
+@Composable
+private fun FavoriteIndicator() {
+    Icon(
+        imageVector = Icons.Default.Star,
+        contentDescription = "Favorite",
+        modifier = Modifier.size(OpenCloudDimensions.SpacingMd),
+        tint = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
 private fun SelectionCircle(
     selected: Boolean,
     resourceName: String,
     onSelect: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onSelect) {
+    IconButton(onClick = onSelect, modifier = modifier) {
         Icon(
             imageVector = if (selected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
             contentDescription = if (selected) "Deselect $resourceName" else "Select $resourceName",
@@ -1057,6 +1186,7 @@ fun ResourceActionSheet(
     onDownloadForOffline: () -> Unit,
     onDelete: () -> Unit,
     onToggleFavorite: () -> Unit = {},
+    onShare: (() -> Unit)? = null,
     sheetState: androidx.compose.material3.SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -1079,6 +1209,7 @@ fun ResourceActionSheet(
                 Icons.Default.Star,
                 onClick = onToggleFavorite,
             )
+            onShare?.let { SheetAction("Share", Icons.Default.Share, onClick = it) }
             SheetAction("Delete", Icons.Default.Delete, MaterialTheme.colorScheme.error, onDelete)
         }
     }
@@ -1437,6 +1568,27 @@ private enum class BrowserSortCriterion(
         return if (ascending) comparator else comparator.reversed()
     }
 }
+
+private fun BrowserLayout.next(): BrowserLayout =
+    when (this) {
+        BrowserLayout.DEFAULT_TABLE -> BrowserLayout.CONDENSED_TABLE
+        BrowserLayout.CONDENSED_TABLE -> BrowserLayout.TILES
+        BrowserLayout.TILES -> BrowserLayout.DEFAULT_TABLE
+    }
+
+private fun BrowserLayout.nextIcon(): ImageVector =
+    when (this) {
+        BrowserLayout.DEFAULT_TABLE -> Icons.Default.ViewHeadline
+        BrowserLayout.CONDENSED_TABLE -> Icons.Default.GridView
+        BrowserLayout.TILES -> Icons.AutoMirrored.Filled.FormatListBulleted
+    }
+
+private fun BrowserLayout.nextContentDescription(): String =
+    when (this) {
+        BrowserLayout.DEFAULT_TABLE -> "Switch to compact list view"
+        BrowserLayout.CONDENSED_TABLE -> "Switch to grid view"
+        BrowserLayout.TILES -> "Switch to regular list view"
+    }
 
 enum class FileBrowserDestination(
     val label: String,

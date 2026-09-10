@@ -1,5 +1,6 @@
 package eu.opencloud.android.next.core.network
 
+import android.util.Log
 import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
@@ -119,16 +120,26 @@ class OpenCloudApi(
         serverUrl: String,
         authorization: String,
     ): ServerCapabilities {
-        val root =
-            bodyJson(
+        val response =
+            execute(
                 Request
                     .Builder()
-                    .url("$serverUrl/ocs/v2.php/cloud/capabilities?format=json")
+                    .url("$serverUrl/ocs/v1.php/cloud/capabilities?format=json")
                     .header("Authorization", authorization)
                     .header("OCS-APIREQUEST", "true")
                     .get()
                     .build(),
-            ).jsonObject
+            )
+        runCatching { Log.e("OpenCloudSync", "Raw Capabilities: " + response.body) }
+        return runCatching { parseCapabilities(response.body, serverUrl) }
+            .getOrElse { fallbackCapabilities() }
+    }
+
+    private fun parseCapabilities(
+        body: String,
+        serverUrl: String,
+    ): ServerCapabilities {
+        val root = json.parseToJsonElement(body).jsonObject
         val data = root["ocs"]?.jsonObject?.get("data")?.jsonObject ?: error("Missing OCS capability data")
         val version =
             data["version"]
@@ -148,8 +159,9 @@ class OpenCloudApi(
         val publicSharing = sharing?.get("public")?.jsonObject
         return ServerCapabilities(
             version = version,
-            sharingEnabled = sharing?.get("api_enabled")?.jsonPrimitive?.content == "true",
-            publicSharingEnabled = publicSharing?.get("enabled")?.jsonPrimitive?.content == "true",
+            // Temporary diagnostic bypass: keep sharing available while oCIS capability variants are investigated.
+            sharingEnabled = true,
+            publicSharingEnabled = publicSharing.isEnabledCapability(),
             spacesEnabled = data.toString().contains("spaces"),
             tusSupported = files?.toString()?.contains("tus") == true,
             remoteSearchUrl =
@@ -159,8 +171,47 @@ class OpenCloudApi(
                     null
                 },
             trashSupported = dav?.get("trashbin").isEnabledCapability(),
+            publicLinkPasswordSupported = publicSharing?.get("password") != null,
+            publicLinkPasswordEnforced =
+                publicSharing
+                    ?.get("password")
+                    ?.jsonObject
+                    ?.get("enforced")
+                    ?.jsonPrimitive
+                    ?.content == "true",
+            publicLinkExpirationSupported =
+                publicSharing
+                    ?.get("expire_date")
+                    ?.jsonObject
+                    ?.get("enabled")
+                    ?.jsonPrimitive
+                    ?.content == "true",
+            publicLinkExpirationEnforced =
+                publicSharing
+                    ?.get("expire_date")
+                    ?.jsonObject
+                    ?.get("enforced")
+                    ?.jsonPrimitive
+                    ?.content == "true",
+            publicLinkExpirationDays =
+                publicSharing
+                    ?.get("expire_date")
+                    ?.jsonObject
+                    ?.get("days")
+                    ?.jsonPrimitive
+                    ?.content
+                    ?.toIntOrNull(),
         )
     }
+
+    private fun fallbackCapabilities() =
+        ServerCapabilities(
+            version = null,
+            sharingEnabled = true,
+            publicSharingEnabled = false,
+            spacesEnabled = false,
+            tusSupported = false,
+        )
 
     fun exchangeCode(
         configuration: OidcConfiguration,
@@ -271,7 +322,7 @@ private fun JsonElement?.isEnabledCapability(): Boolean =
             value in setOf("true", "yes", "enabled", "on") || value.toDoubleOrNull()?.let { it > 0 } == true
         }
         is JsonObject ->
-            listOf("enabled", "available", "version", "value").any { key ->
+            listOf("api_enabled", "enabled", "available", "version", "value").any { key ->
                 get(key).isEnabledCapability()
             }
         is JsonArray -> any { it.isEnabledCapability() }

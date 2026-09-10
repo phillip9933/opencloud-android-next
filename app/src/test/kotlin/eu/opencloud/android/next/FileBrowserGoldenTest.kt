@@ -315,16 +315,20 @@ class FileBrowserGoldenTest {
         }
 
     @Test
-    fun fileBrowserViewToggle_setsGridLayout() {
+    fun fileBrowserViewToggle_cyclesThroughAllLayouts() {
         var selectedLayout: BrowserLayout? = null
-        capture(
-            state = browserState(),
-            fileName = "file_browser_view_toggle",
-            onSetLayout = { selectedLayout = it },
-        ) {
-            composeRule.onNodeWithContentDescription("Switch to grid view").performClick()
-        }
+        render(browserState(), onSetLayout = { selectedLayout = it })
+
+        composeRule.onNodeWithContentDescription("Switch to compact list view").performClick()
+        check(selectedLayout == BrowserLayout.CONDENSED_TABLE)
+
+        render(browserState(layout = BrowserLayout.CONDENSED_TABLE), onSetLayout = { selectedLayout = it })
+        composeRule.onNodeWithContentDescription("Switch to grid view").performClick()
         check(selectedLayout == BrowserLayout.TILES)
+
+        render(browserState(layout = BrowserLayout.TILES), onSetLayout = { selectedLayout = it })
+        composeRule.onNodeWithContentDescription("Switch to regular list view").performClick()
+        check(selectedLayout == BrowserLayout.DEFAULT_TABLE)
     }
 
     @Suppress("LongParameterList")
@@ -386,6 +390,7 @@ class FileBrowserGoldenTest {
                     onOpenDeletedFiles = {},
                     onOpenSettings = {},
                     onOpenAccount = {},
+                    onShareResource = {},
                     initialDestination = initialDestination,
                 )
             }

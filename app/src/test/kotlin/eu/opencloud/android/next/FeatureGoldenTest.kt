@@ -11,6 +11,7 @@ import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
+import eu.opencloud.android.next.core.database.ShareEntity
 import eu.opencloud.android.next.core.database.TransferDirection
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
@@ -26,6 +27,10 @@ import eu.opencloud.android.next.feature.files.DeletedFilesUiState
 import eu.opencloud.android.next.feature.search.SearchScreen
 import eu.opencloud.android.next.feature.search.SearchUiState
 import eu.opencloud.android.next.feature.settings.SettingsScreen
+import eu.opencloud.android.next.feature.shares.ResourceSharesScreen
+import eu.opencloud.android.next.feature.shares.ShareCategory
+import eu.opencloud.android.next.feature.shares.SharesScreen
+import eu.opencloud.android.next.feature.shares.SharesUiState
 import eu.opencloud.android.next.feature.transfers.TransfersScreen
 import eu.opencloud.android.next.feature.transfers.TransfersUiState
 import org.junit.Rule
@@ -130,6 +135,85 @@ class FeatureGoldenTest {
                 onDismissError = {},
             )
         }
+
+    @Test fun sharesEmpty_matchesGolden() =
+        capture("shares_empty") {
+            SharesScreen(
+                state = SharesUiState(category = ShareCategory.WITH_ME),
+                onNavigateBack = {},
+                onCategory = {},
+                onRefresh = {},
+                onUpdatePermissions = { _, _ -> },
+                onRevoke = {},
+                onDismissNotice = {},
+            )
+        }
+
+    @Test fun sharesLists_matchesGolden() =
+        capture("shares_lists") {
+            SharesScreen(
+                state =
+                    SharesUiState(
+                        category = ShareCategory.BY_ME,
+                        shares =
+                            listOf(
+                                share("user-share", 0, "Design team", "/Projects/Roadmap.pdf", 3),
+                                share("group-share", 1, "Marketing", "/Campaign", 31, folder = true),
+                                share("link-share", 3, "Board review", "/Board notes.pdf", 1),
+                            ),
+                    ),
+                onNavigateBack = {},
+                onCategory = {},
+                onRefresh = {},
+                onUpdatePermissions = { _, _ -> },
+                onRevoke = {},
+                onDismissNotice = {},
+            )
+        }
+
+    @Test fun shareSheet_matchesGolden() {
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                ResourceSharesScreen(
+                    state =
+                        SharesUiState(
+                            account = sharingAccount(),
+                            resource = resource("roadmap", "Roadmap.pdf", ResourceKind.FILE, "/Projects/Roadmap.pdf"),
+                            recipients =
+                                listOf(
+                                    eu.opencloud.android.next.core.network.ShareRecipient(
+                                        eu.opencloud.android.next.core.network.OcsShareType.USER,
+                                        "alice",
+                                        "Alice Adams",
+                                        "alice@example.test",
+                                        true,
+                                    ),
+                                    eu.opencloud.android.next.core.network.ShareRecipient(
+                                        eu.opencloud.android.next.core.network.OcsShareType.GROUP,
+                                        "design",
+                                        "Design team",
+                                        null,
+                                        false,
+                                    ),
+                                ),
+                        ),
+                    onNavigateBack = {},
+                    onSearch = {},
+                    onCreateRecipient = { _, _ -> },
+                    onCreatePublic = { _, _, _, _ -> },
+                    onUpdatePermissions = { _, _ -> },
+                    onRevoke = {},
+                    onDismissNotice = {},
+                    initialInviteOpen = true,
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onRoot().captureRoboImage(
+            filePath = snapshotPath("share_sheet"),
+            roborazziOptions = featureRoborazziOptions(),
+        )
+    }
 
     @Test fun transfersActive_matchesGolden() =
         captureTransfers(
@@ -259,6 +343,46 @@ class FeatureGoldenTest {
         kind: ResourceKind,
         path: String,
     ) = ResourceEntity("account", "space", id, null, path, name, kind, null, 42, null, 0, 0)
+
+    @Suppress("LongParameterList")
+    private fun share(
+        id: String,
+        type: Int,
+        displayName: String,
+        path: String,
+        permissions: Int,
+        folder: Boolean = false,
+    ) = ShareEntity(
+        accountId = "account",
+        remoteId = id,
+        resourceId = "resource-$id",
+        path = path,
+        shareType = type,
+        shareWith = displayName.lowercase().replace(' ', '-'),
+        displayName = displayName,
+        additionalInfo = null,
+        permissions = permissions,
+        sharedAtEpochSeconds = 1_700_000_000,
+        expiresAtEpochMillis = null,
+        label = if (type == 3) displayName else null,
+        isFolder = folder,
+        sharedWithMe = false,
+    )
+
+    private fun sharingAccount() =
+        AccountEntity(
+            id = "account",
+            serverUrl = "https://cloud.example",
+            userId = "alice",
+            displayName = "Alice",
+            authenticationType = "OIDC",
+            tusSupported = true,
+            sharingEnabled = true,
+            publicSharingEnabled = true,
+            publicLinkPasswordSupported = true,
+            publicLinkExpirationSupported = true,
+            publicLinkExpirationDays = 30,
+        )
 
     private fun snapshotPath(fileName: String) = "src/test/snapshots/images/$fileName.png"
 

@@ -63,10 +63,14 @@ class OpenCloudApiTest {
         assertTrue(capabilities.sharingEnabled)
         assertEquals("$baseUrl/remote.php/dav/spaces/", capabilities.remoteSearchUrl)
         assertTrue(capabilities.trashSupported)
+        assertTrue(capabilities.publicLinkPasswordSupported)
+        assertTrue(capabilities.publicLinkPasswordEnforced)
+        assertTrue(capabilities.publicLinkExpirationSupported)
+        assertEquals(30, capabilities.publicLinkExpirationDays)
         assertEquals("Basic YWxpY2U6c2VjcmV0", server.takeRequest().getHeader("Authorization"))
         val capabilitiesRequest = server.takeRequest()
         assertEquals("true", capabilitiesRequest.getHeader("OCS-APIREQUEST"))
-        assertEquals("/ocs/v2.php/cloud/capabilities?format=json", capabilitiesRequest.path)
+        assertEquals("/ocs/v1.php/cloud/capabilities?format=json", capabilitiesRequest.path)
     }
 
     @Test
@@ -84,6 +88,30 @@ class OpenCloudApiTest {
         assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
         assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
         assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
+    }
+
+    @Test
+    fun `oCIS nested sharing api capability enables sharing`() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        server.enqueue(MockResponse().setResponseCode(200).setBody(ocisCapabilitiesResponse()))
+
+        val capabilities = api.capabilities(baseUrl, "Bearer token")
+
+        assertTrue(capabilities.sharingEnabled)
+        assertTrue(capabilities.publicSharingEnabled)
+        assertTrue(capabilities.publicLinkPasswordSupported)
+        assertTrue(capabilities.publicLinkExpirationSupported)
+        assertEquals(14, capabilities.publicLinkExpirationDays)
+    }
+
+    @Test
+    fun `sharing remains enabled when capability is disabled or malformed`() {
+        val baseUrl = server.url("/").toString().trimEnd('/')
+        server.enqueue(MockResponse().setResponseCode(200).setBody(disabledSharingCapabilitiesResponse()))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("not-json"))
+
+        assertTrue(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
+        assertTrue(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
     }
 
     @Test
@@ -117,7 +145,13 @@ class OpenCloudApiTest {
         """{"ocs":{"data":{"id":"alice","display-name":"Alice","email":"alice@example.test"}}}"""
 
     private fun capabilitiesResponse(trashbin: String = "\"1.0\"") =
-        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"dav":{"reports":["search-files"],"trashbin":$trashbin},"files":{"tus":{"enabled":true}},"files_sharing":{"api_enabled":true,"public":{"enabled":true}},"spaces":{"enabled":true}}}}}"""
+        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"dav":{"reports":["search-files"],"trashbin":$trashbin},"files":{"tus":{"enabled":true}},"files_sharing":{"api_enabled":true,"public":{"enabled":true,"password":{"enforced":true},"expire_date":{"enabled":true,"days":30,"enforced":false}}},"spaces":{"enabled":true}}}}}"""
+
+    private fun ocisCapabilitiesResponse() =
+        """{"ocs":{"data":{"version":{"string":"7.2.0"},"capabilities":{"files_sharing":{"api":{"api_enabled":1},"public":{"api_enabled":"true","password":{"enforced":false},"expire_date":{"enabled":true,"days":14}}}}}}}"""
+
+    private fun disabledSharingCapabilitiesResponse() =
+        """{"ocs":{"data":{"version":{"string":"7.2.0"},"capabilities":{"files_sharing":{"api_enabled":false}}}}}"""
 
     private fun tokenResponse(
         accessToken: String,

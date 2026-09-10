@@ -3,6 +3,7 @@ package eu.opencloud.android.next.ui
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -17,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opencloud.android.next.BuildConfig
+import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.feature.account.AccountRoute
 import eu.opencloud.android.next.feature.auth.AuthScreen
 import eu.opencloud.android.next.feature.auth.AuthViewModel
@@ -26,10 +28,12 @@ import eu.opencloud.android.next.feature.files.DeletedFilesRoute
 import eu.opencloud.android.next.feature.files.FileBrowserDestinations
 import eu.opencloud.android.next.feature.files.FileBrowserRoute
 import eu.opencloud.android.next.feature.settings.SettingsRoute
+import eu.opencloud.android.next.feature.shares.ResourceSharesRoute
+import eu.opencloud.android.next.feature.shares.TopLevelSharesRoute
 import eu.opencloud.android.next.feature.transfers.TransfersRoute
 
 @Composable
-@Suppress("FunctionNaming", "ktlint:standard:function-naming")
+@Suppress("CyclomaticComplexMethod", "FunctionNaming", "ktlint:standard:function-naming")
 fun OpenCloudNextApp(
     oauthCallback: String?,
     modifier: Modifier = Modifier,
@@ -38,6 +42,7 @@ fun OpenCloudNextApp(
     val context = LocalContext.current
     val state = viewModel.state.collectAsStateWithLifecycle()
     var destination by remember(state.value.activeAccountId) { mutableStateOf(AppDestination.Files) }
+    var shareResource by remember(state.value.activeAccountId) { mutableStateOf<ResourceEntity?>(null) }
 
     LaunchedEffect(oauthCallback) {
         oauthCallback?.let(viewModel::completeOidcCallback)
@@ -53,17 +58,33 @@ fun OpenCloudNextApp(
                 val accountId = requireNotNull(state.value.activeAccountId)
                 when (destination) {
                     AppDestination.Files ->
-                        FileBrowserRoute(
-                            accountId = accountId,
-                            releaseVersion = BuildConfig.VERSION_NAME,
-                            destinations =
-                                FileBrowserDestinations(
-                                    onOpenTransfers = { destination = AppDestination.Transfers },
-                                    onOpenDeletedFiles = { destination = AppDestination.DeletedFiles },
-                                    onOpenSettings = { destination = AppDestination.Settings },
-                                    onOpenAccount = { destination = AppDestination.Account },
-                                ),
-                        )
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            FileBrowserRoute(
+                                accountId = accountId,
+                                releaseVersion = BuildConfig.VERSION_NAME,
+                                destinations =
+                                    FileBrowserDestinations(
+                                        onOpenTransfers = { destination = AppDestination.Transfers },
+                                        onOpenDeletedFiles = { destination = AppDestination.DeletedFiles },
+                                        onOpenSettings = { destination = AppDestination.Settings },
+                                        onOpenAccount = { destination = AppDestination.Account },
+                                        onShareResource = { shareResource = it },
+                                    ),
+                                sharesContent = { padding ->
+                                    TopLevelSharesRoute(
+                                        accountId = accountId,
+                                        modifier = Modifier.padding(padding),
+                                    )
+                                },
+                            )
+                            shareResource?.let { resource ->
+                                ResourceSharesRoute(
+                                    accountId = accountId,
+                                    resource = resource,
+                                    onNavigateBack = { shareResource = null },
+                                )
+                            }
+                        }
                     AppDestination.Transfers ->
                         TransfersRoute(accountId = accountId, onNavigateBack = { destination = AppDestination.Files })
                     AppDestination.DeletedFiles ->
@@ -132,4 +153,11 @@ fun OpenCloudNextApp(
     }
 }
 
-private enum class AppDestination { Files, DeletedFiles, Transfers, Settings, BackupSettings, Account }
+private enum class AppDestination {
+    Files,
+    DeletedFiles,
+    Transfers,
+    Settings,
+    BackupSettings,
+    Account,
+}

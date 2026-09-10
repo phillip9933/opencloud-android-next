@@ -98,6 +98,7 @@ dependencies {
     implementation(project(":feature:transfers"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:account"))
+    implementation(project(":feature:shares"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.browser)
