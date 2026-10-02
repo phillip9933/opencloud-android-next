@@ -52,6 +52,9 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], qualifiers = "w360dp-h800dp")
 class FeatureGoldenTest {
     @get:Rule
+    val timeZoneRule = GoldenTimeZoneRule("Asia/Tokyo")
+
+    @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun searchEmpty_matchesGolden() = captureSearch(SearchUiState(), "search_empty")
