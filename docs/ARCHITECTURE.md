@@ -1,6 +1,8 @@
 # OpenCloud Android Next — Phase 0 Architecture Proposal
 
-**Status:** Proposed for review  
+**Historical proposal:** This document records Phase 0 design intent from 2026-09-06. It is not a current implementation or acceptance checklist. See the [current repository layout](README.md#repository-layout) and [testing guide](TESTING.md) before using its proposed paths or phases.
+
+**Status at time of writing:** Proposed for review
 **Date:** 2026-09-06  
 **Scope:** Phase 0 analysis and architecture only. Phase 1 project initialization is intentionally out of scope.  
 **Application ID:** `eu.opencloud.android.next`  
