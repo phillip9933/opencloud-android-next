@@ -15,8 +15,6 @@ An independent Android client for OpenCloud, rebuilt with Kotlin and Jetpack Com
 
 Use the APK attached to [GitHub Releases](https://github.com/phillip9933/opencloud-android-next/releases). Check its SHA-256 against the attached SHA256SUMS file.
 
-Pre-release testing APKs used a different, debug signing key. They cannot be updated in place by this release. Before uninstalling a test build, finish uploads and export any local-only files or drafts you need. Uninstalling removes private app data. Cloud files remain on your server. Log in and configure offline files/backups again after installing the release. Future official builds from this repository will retain the release signing identity.
-
 ## Build and test
 
 Use JDK 21, Android SDK 36 and the included Gradle wrapper. First install the checksum-pinned scanner artifacts:

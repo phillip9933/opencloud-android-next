@@ -8,11 +8,10 @@ Personal files and Spaces; favorites, search, recents and offline files; durable
 
 Hardening includes upload collision protection, transfer verification/recovery, a patched Protobuf parser, changed-source backup discovery fixes, and clearer photo metadata choices. Missing translations fall back to English.
 
-## Install and upgrade
+## Install
 
 - Android 8.0/API 26 or later; arm64-v8a or x86_64 only.
 - Download `opencloud-next-0.1.0-beta.1.apk`; verify it against `SHA256SUMS`.
-- This release uses a permanent signing key. Older private test APKs used a debug key and **cannot be updated in place**. Finish pending uploads and export needed local-only files/drafts before uninstalling the test version. Uninstalling deletes private app data. Server files are not removed by uninstalling. Reconfigure accounts/offline files/backups after installing.
 - Future releases from this repository will use the same release signing identity.
 
 ## Known limitations
