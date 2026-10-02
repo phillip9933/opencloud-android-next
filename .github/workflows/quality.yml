@@ -51,8 +51,18 @@ jobs:
       - name: Verify Compose goldens
         run: ./gradlew :app:verifyRoborazziDebug --no-daemon
 
-      - name: Build and run unit tests
-        run: ./gradlew testDebugUnitTest :app:lintRelease assembleDebug assembleRelease --no-daemon
+      - name: Run all unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Lint release
+        run: ./gradlew :app:lintRelease --no-daemon --stacktrace
+
+      - name: Build APKs
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Report runner disk capacity on failure
+        if: failure()
+        run: df -h
 
       - name: Upload reports and visual diffs
         if: always()
