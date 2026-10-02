@@ -21,25 +21,70 @@ data class RemoteTrashResource(
     val originalPath: String,
     val folder: Boolean,
     val deletedAtEpochMillis: Long,
+    val sizeBytes: Long? = null,
 )
 
 class WebDavFeatureClient(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val initiatorId: String = CLIENT_INITIATOR_ID,
 ) {
+    private val client =
+        client
+            .newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .retryOnConnectionFailure(false)
+            .build()
+
+    fun renameFile(
+        resourceUrl: String,
+        name: String,
+        eTag: String?,
+        authorization: String,
+    ) {
+        require(
+            name.isNotBlank() &&
+                name !in
+                setOf(
+                    ".",
+                    "..",
+                ) &&
+                name.none { it == '/' || it == '\\' || it.isISOControl() },
+        )
+        val source = resourceUrl.toHttpUrl()
+        val destination = source.newBuilder().setPathSegment(source.pathSegments.lastIndex, name).build()
+        execute(
+            Request
+                .Builder()
+                .url(source)
+                .openCloudDavHeaders(authorization)
+                .header("If-Match", requireVersion(eTag))
+                .header("Overwrite", "F")
+                .header("Destination", destination.toString())
+                .method("MOVE", EMPTY_BODY)
+                .build(),
+            setOf(201, 204),
+        )
+    }
+
+    private fun requireVersion(eTag: String?): String =
+        DownloadExpectation(0, eTag).strongETag
+            ?: throw OpenCloudException(OpenCloudError.PreconditionFailed)
+
     fun delete(
         resourceUrl: String,
         authorization: String,
+        eTag: String? = null,
     ) {
         execute(
             Request
                 .Builder()
                 .url(resourceUrl)
                 .openCloudDavHeaders(authorization)
+                .header("If-Match", requireVersion(eTag))
                 .delete()
                 .build(),
             setOf(200, 204),
-            logResponseBody = true,
         )
     }
 
@@ -80,7 +125,7 @@ class WebDavFeatureClient(
             val id =
                 URLDecoder
                     .decode(
-                        href.substringBefore('?'),
+                        href.substringBefore('?').replace("+", "%2B"),
                         StandardCharsets.UTF_8.name(),
                     ).trimEnd('/')
                     .substringAfterLast('/')
@@ -95,6 +140,7 @@ class WebDavFeatureClient(
                 originalPath = "/$originalLocation",
                 folder = response.getElementsByTagNameNS(DAV_NAMESPACE, "collection").length > 0,
                 deletedAtEpochMillis = response.text(TRASH_NAMESPACE, "trashbin-delete-datetime").toEpochMillis(),
+                sizeBytes = response.trashSize(),
             )
         }
     }
@@ -111,11 +157,10 @@ class WebDavFeatureClient(
                 .url(trashItemUrl(rootWebDavUrl, trashId))
                 .openCloudDavHeaders(authorization)
                 .header("Destination", destinationUrl)
-                .header("Overwrite", "T")
+                .header("Overwrite", "F")
                 .method("MOVE", EMPTY_BODY)
                 .build(),
             setOf(201, 204),
-            logResponseBody = true,
         )
     }
 
@@ -132,7 +177,6 @@ class WebDavFeatureClient(
                 .delete()
                 .build(),
             setOf(200, 204),
-            logResponseBody = true,
         )
     }
 
@@ -146,16 +190,14 @@ class WebDavFeatureClient(
     private fun execute(
         request: Request,
         expected: Set<Int>,
-        logResponseBody: Boolean = false,
     ): String =
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (response.code !in expected) {
-                val bodyLog = if (logResponseBody) "\n$body" else ""
                 runCatching {
-                    Log.e("OpenCloudSync", "${request.method} ${request.url} failed with HTTP ${response.code}$bodyLog")
+                    Log.e("OpenCloudSync", "${request.method} failed with HTTP ${response.code}")
                 }
-                throw TransferHttpException(response.code, body.replace(Regex("\\s+"), " ").take(512))
+                throw TransferHttpException(response.code)
             }
             body
         }
@@ -167,7 +209,7 @@ class WebDavFeatureClient(
         val CLIENT_INITIATOR_ID = UUID.randomUUID().toString()
         val EMPTY_BODY = ByteArray(0).toRequestBody(null)
         val TRASH_PROPFIND_BODY =
-            """<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:trashbin-original-filename/><oc:trashbin-original-location/><oc:trashbin-delete-datetime/><d:resourcetype/></d:prop></d:propfind>"""
+            """<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:trashbin-original-filename/><oc:trashbin-original-location/><oc:trashbin-delete-datetime/><d:resourcetype/><d:getcontentlength/><oc:size/></d:prop></d:propfind>"""
                 .toRequestBody("application/xml".toMediaType())
     }
 }
@@ -211,6 +253,36 @@ private fun Element.text(
     namespace: String,
     localName: String,
 ): String? = getElementsByTagNameNS(namespace, localName).item(0)?.textContent
+
+private fun Element.trashSize(): Long? {
+    val propstats = getElementsByTagNameNS("DAV:", "propstat")
+    val properties =
+        (0 until propstats.length).map { propstats.item(it) as Element }.filter {
+            it
+                .text("DAV:", "status")
+                ?.trim()
+                ?.split(Regex("\\s+"))
+                ?.getOrNull(1) == "200"
+        }
+    val folder = properties.any { it.getElementsByTagNameNS("DAV:", "collection").length > 0 }
+
+    fun size(
+        namespace: String,
+        property: String,
+    ): Long? =
+        properties.firstNotNullOfOrNull {
+            it
+                .text(namespace, property)
+                ?.trim()
+                ?.toLongOrNull()
+                ?.takeIf { bytes -> bytes >= 0 }
+        }
+    return if (folder) {
+        size("http://owncloud.org/ns", "size")
+    } else {
+        size("DAV:", "getcontentlength") ?: size("http://owncloud.org/ns", "size")
+    }
+}
 
 private fun String?.toEpochMillis(): Long =
     runCatching { this?.let(ZonedDateTime::parse)?.toInstant()?.toEpochMilli() }.getOrNull() ?: 0

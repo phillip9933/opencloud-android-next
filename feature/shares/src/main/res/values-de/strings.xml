@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_metadata_name_label">Name der Freigabe</string>
+    <string name="share_metadata_fallback_name">Freigabe</string>
+    <!-- %1$s is the formatted share creation date. -->
+    <string name="share_metadata_created">Erstellt: %1$s</string>
+    <!-- %1$s is the formatted expiration date or the no-expiration label. -->
+    <string name="share_metadata_expires">Läuft ab: %1$s</string>
+    <string name="share_metadata_no_expiration">Kein Ablaufdatum</string>
+    <string name="share_metadata_location_label">Speicherort</string>
+    <string name="share_metadata_location_unavailable">Der Server hat keinen Speicherort angegeben.</string>
+    <!-- Explain that a folder share includes descendants and can be browsed. -->
+    <string name="share_metadata_folder_scope">Diese Freigabe umfasst diesen Ordner und seinen gesamten Inhalt einschließlich der Unterordner. Öffnen Sie den Ordner, um den aktuellen Inhalt zu durchsuchen.</string>
+    <string name="share_browse_folder">Ordnerinhalt durchsuchen</string>
+    <string name="share_show_in_folder">Im Ordner anzeigen</string>
+    <string name="share_locating_item">Freigegebenes Element wird gesucht.</string>
+    <string name="share_item_unavailable">Dieses Element ist im lokalen Dateiindex nicht verfügbar. Aktualisieren Sie den Space und versuchen Sie es erneut.</string>
+    <!-- %1$s is File or Folder and %2$s is the shared path or fallback label. -->
+    <string name="share_item_summary">%1$s: %2$s</string>
+    <string name="share_item_type_folder">Ordner</string>
+    <string name="share_item_type_file">Datei</string>
+    <string name="share_item_location_unavailable">Speicherort nicht verfügbar</string>
+    <string name="share_metadata_expires_short">Läuft ab</string>
+    <string name="share_ok">OK</string>
+    <string name="share_category_with_me">Mit mir geteilt</string>
+    <string name="share_category_by_me">Von mir geteilt</string>
+    <string name="share_category_public">Öffentliche Links</string>
+    <string name="shares_title">Freigaben</string>
+    <string name="shares_back">Zurück</string>
+    <string name="shares_refresh">Freigaben aktualisieren</string>
+    <string name="shares_internal_heading">Interne Freigaben</string>
+    <string name="shares_internal_description">Teilen Sie Inhalte mit Personen und Gruppen auf diesem OpenCloud-Server.</string>
+    <string name="shares_add_people">Personen hinzufügen</string>
+    <string name="shares_not_supported">Dieser Server unterstützt keine Freigaben.</string>
+    <string name="shares_no_internal_shares">Bisher haben keine Personen oder Gruppen Zugriff.</string>
+    <string name="shares_external_heading">Externe Freigaben</string>
+    <string name="shares_external_description">Erstellen Sie einen öffentlichen Link für Personen außerhalb dieses OpenCloud-Servers.</string>
+    <string name="shares_create_public_link">Öffentlichen Link erstellen</string>
+    <string name="shares_copy_link">Link kopieren</string>
+    <string name="shares_public_not_supported">Dieser Server unterstützt keine Freigaben über öffentliche Links.</string>
+    <string name="shares_no_public_links">Es wurden noch keine öffentlichen Links erstellt.</string>
+    <string name="shares_public_link_fallback">Öffentlicher Link</string>
+    <!-- %1$s is the share type, %2$s is the permission list, and %3$s is optional expiration text. -->
+    <string name="shares_row_metadata">%1$s • %2$s%3$s</string>
+    <string name="shares_copy_link_failed">Der Link konnte nicht kopiert werden. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.</string>
+    <string name="shares_details">Details</string>
+    <string name="shares_details_title">Details zur Freigabe</string>
+    <string name="shares_permissions">Berechtigungen</string>
+    <string name="shares_revoke">Freigabe aufheben</string>
+    <string name="shares_save">Speichern</string>
+    <string name="shares_cancel">Abbrechen</string>
+    <string name="shares_invite_title">Für Personen oder Gruppen freigeben</string>
+    <string name="shares_search_recipients">Empfänger suchen</string>
+    <string name="shares_recipient_group">Gruppe</string>
+    <string name="shares_recipient_user">Benutzer</string>
+    <string name="shares_shared_with_you">Mit Ihnen geteilt</string>
+    <string name="shares_link_name_optional">Linkname (optional)</string>
+    <string name="shares_password_required">Passwort (erforderlich)</string>
+    <string name="shares_password_required_by_server">Dieser Server verlangt ein Passwort für öffentliche Links.</string>
+    <string name="shares_expiration_required">Ablaufdatum JJJJ-MM-TT (erforderlich)</string>
+    <string name="shares_expiration_optional">Ablaufdatum JJJJ-MM-TT (optional)</string>
+    <!-- %1$d is the maximum number of days before a public link expires. -->
+    <plurals name="shares_expiration_max_days">
+        <item quantity="one">Maximal %1$d Tag</item>
+        <item quantity="other">Maximal %1$d Tage</item>
+    </plurals>
+    <string name="shares_expiration_future">Wählen Sie heute oder ein zukünftiges Datum</string>
+    <string name="shares_create_link">Link erstellen</string>
+    <string name="shares_permission_view_download">Ansehen und herunterladen</string>
+    <string name="shares_permission_view_download_upload">Ansehen, herunterladen und hochladen</string>
+    <string name="shares_permission_edit_contents">Inhalt bearbeiten</string>
+    <string name="shares_permission_upload_only">Nur hochladen</string>
+    <string name="shares_permission_view_edit">Ansehen und bearbeiten</string>
+    <string name="shares_permission_read">Lesen</string>
+    <string name="shares_permission_update">Aktualisieren</string>
+    <string name="shares_permission_create">Erstellen</string>
+    <string name="shares_permission_delete">Löschen</string>
+    <string name="shares_permission_reshare">Weiterteilen</string>
+    <string name="shares_permission_share">Teilen</string>
+    <string name="shares_empty_with_me">Es wurde nichts mit Ihnen geteilt.</string>
+    <string name="shares_empty_by_me">Sie haben keine Dateien geteilt.</string>
+    <string name="shares_empty_public">Sie haben keine öffentlichen Links erstellt.</string>
+    <string name="shares_dialog_error_title">Freigabe</string>
+    <string name="shares_dialog_done_title">Fertig</string>
+    <!-- %1$s is the file name whose local-copy actions are shown. -->
+    <string name="shares_actions_for_file">Aktionen für %1$s</string>
+    <string name="shares_make_copy_temporary">Lokale Kopie temporär speichern</string>
+    <string name="shares_keep_local_copy">Lokale Kopie behalten</string>
+    <string name="shares_remove_local_copy">Lokale Kopie entfernen</string>
+    <string name="shares_clipboard_label">Öffentlicher OpenCloud-Link</string>
+    <string name="incoming_open_no_app">Keine installierte App kann diesen Dateityp öffnen.</string>
+    <string name="incoming_open_access_unavailable">Dateizugriff nicht verfügbar. Entsperren und aktualisieren Sie die App, bevor Sie es erneut versuchen.</string>
+    <string name="incoming_parent_folder">Übergeordneter Ordner</string>
+    <string name="incoming_shared_folders">Freigegebene Ordner</string>
+    <string name="incoming_refresh_folder">Freigegebenen Ordner aktualisieren</string>
+    <string name="incoming_upload">Hochladen</string>
+    <string name="incoming_upload_source_unavailable">Diese Quelle kann den Dateizugriff für einen Upload im Hintergrund nicht aufrechterhalten. Wählen Sie eine andere Quelle.</string>
+    <string name="incoming_try_again">Erneut versuchen</string>
+    <string name="incoming_no_shared_folders">Keine freigegebenen Ordner verfügbar.</string>
+    <string name="incoming_empty_folder">Dieser Ordner ist leer.</string>
+    <string name="incoming_copy_kept_online_required">Auf dem Gerät behalten – Onlinezugriff erforderlich</string>
+    <string name="incoming_copy_temporary">Temporäre lokale Kopie</string>
+    <string name="incoming_copy_cloud_only">Nur in der Cloud</string>
+    <!-- %1$d is the number of shared folders unavailable in the current view. -->
+    <plurals name="incoming_unavailable_folders">
+        <item quantity="one">%1$d freigegebener Ordner ist derzeit nicht verfügbar.</item>
+        <item quantity="other">%1$d freigegebene Ordner sind derzeit nicht verfügbar.</item>
+    </plurals>
+</resources>

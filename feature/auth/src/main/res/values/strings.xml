@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Authentication screen labels and help. -->
+    <string name="auth_connect_title">Connect to OpenCloud</string>
+    <string name="auth_server_discovery_description">Enter your OpenCloud server address to discover its sign-in method.</string>
+    <string name="auth_server_address">Server address</string>
+    <string name="auth_use_browser_sign_in">Use browser sign-in</string>
+    <string name="auth_use_app_password">Use an app password or token</string>
+    <!-- Keep the administrator configuration name and local.properties filename unchanged. -->
+    <string name="auth_client_id">Administrator-provided client ID (optional)</string>
+    <string name="auth_continue">Continue</string>
+    <string name="auth_dev_login">Dev Login</string>
+    <string name="auth_dev_login_configuration">Configure dev.server.url, dev.server.username, and dev.server.password in local.properties.</string>
+    <!-- %1$s is the entered or discovered server address. -->
+    <string name="auth_server_label">Server: %1$s</string>
+    <string name="auth_username">Username</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_sign_in">Sign in</string>
+    <string name="auth_sign_in_browser">Sign in in browser</string>
+    <string name="auth_app_token_description">Use an app password or token issued by your server. Browser sign-in is still available.</string>
+    <string name="auth_app_password_or_token">App password or token</string>
+
+    <!-- %1$s is the account display name; server identity values are supplied at runtime. -->
+    <string name="auth_signed_in_as">Signed in as %1$s</string>
+    <!-- %1$s is the server-reported version, or the localized Unknown fallback. -->
+    <string name="auth_server_version">Server version: %1$s</string>
+    <string name="auth_unknown">Unknown</string>
+    <string name="auth_sharing_available">Sharing: available</string>
+    <string name="auth_sharing_unavailable">Sharing: unavailable</string>
+
+    <!-- Fixed authentication validation and callback messages. -->
+    <string name="auth_required_fields">Enter the server address, username, and app password or token.</string>
+    <string name="auth_oidc_session_expired">The sign-in session expired or could not be verified. Please sign in again.</string>
+    <string name="auth_sign_in_cancelled">Sign-in was cancelled or rejected.</string>
+    <string name="auth_certificate_untrusted">The server certificate could not be trusted. Review the certificate fingerprint before approving an explicit pin.</string>
+</resources>

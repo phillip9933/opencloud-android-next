@@ -22,6 +22,37 @@ class WebDavFeatureClientTest {
 
     @After fun tearDown() = server.shutdown()
 
+    @Test fun `trash sizes ignore failed properties and require aggregate size for folders`() {
+        val responses =
+            listOf(
+                "<d:getcontentlength>42</d:getcontentlength><d:resourcetype/>",
+                "<d:getcontentlength>0</d:getcontentlength><d:resourcetype><d:collection/></d:resourcetype>",
+                "<oc:size>120</oc:size><d:resourcetype><d:collection/></d:resourcetype>",
+                "<d:getcontentlength>-1</d:getcontentlength><d:resourcetype/>",
+            ).mapIndexed { index, properties ->
+                """<d:response><d:href>/dav/spaces/trash-bin/storage-id/$index</d:href><d:propstat><d:prop>$properties</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat><d:propstat><d:prop><oc:size>999</oc:size></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>"""
+            }.joinToString("")
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(
+                    207,
+                ).setBody(
+                    """<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">$responses</d:multistatus>""",
+                ),
+        )
+        assertEquals(
+            listOf(
+                42L,
+                null,
+                120L,
+                null,
+            ),
+            client.trash(server.url("dav/spaces/storage-id").toString(), "s", "Bearer test").map {
+                it.sizeBytes
+            },
+        )
+    }
+
     @Test fun `trash list maps original path and deletion date`() {
         server.enqueue(MockResponse().setResponseCode(207).setBody(trashResponse()))
         val resources = client.trash(server.url("dav/spaces/storage-id").toString(), "space", "Basic auth")
@@ -56,18 +87,18 @@ class WebDavFeatureClientTest {
         assertOpenCloudWriteHeaders(delete)
     }
 
-    @Test fun `normal delete uses oCIS space URL and propagates response body`() {
+    @Test fun `normal delete uses oCIS space URL and redacts response body`() {
         val gatewayBody = """{"error":"permission denied by storage provider"}"""
         server.enqueue(MockResponse().setResponseCode(403).setBody(gatewayBody))
         val resourceUrl = server.url("dav/spaces/storage-id/Documents/report.pdf").toString()
 
         val exception =
             assertThrows(TransferHttpException::class.java) {
-                client.delete(resourceUrl, "Bearer token")
+                client.delete(resourceUrl, "Bearer token", "\"v1\"")
             }
 
         assertEquals(403, exception.statusCode)
-        assertTrue(exception.message.orEmpty().contains("permission denied by storage provider"))
+        assertEquals("Access was denied.", exception.message)
         val request = server.takeRequest()
         assertEquals("DELETE", request.method)
         assertTrue(request.path.orEmpty().endsWith("/dav/spaces/storage-id/Documents/report.pdf"))
@@ -76,8 +107,29 @@ class WebDavFeatureClientTest {
 
     @Test fun `normal delete accepts successful no-content response`() {
         server.enqueue(MockResponse().setResponseCode(204))
-        client.delete(server.url("dav/spaces/storage-id/report.pdf").toString(), "Bearer token")
+        client.delete(server.url("dav/spaces/storage-id/report.pdf").toString(), "Bearer token", "\"v1\"")
         assertEquals("DELETE", server.takeRequest().method)
+    }
+
+    @Test fun `file rename encodes name and prevents stale overwrite`() {
+        server.enqueue(MockResponse().setResponseCode(201))
+        client.renameFile(server.url("dav/spaces/s/old.txt").toString(), "new + 文.txt", "\"v1\"", "Bearer token")
+        val request = server.takeRequest()
+        assertEquals("MOVE", request.method)
+        assertEquals("F", request.getHeader("Overwrite"))
+        assertEquals("\"v1\"", request.getHeader("If-Match"))
+        assertTrue(request.getHeader("Destination").orEmpty().endsWith("new%20+%20%E6%96%87.txt"))
+        server.enqueue(MockResponse().setResponseCode(412))
+        assertThrows(TransferHttpException::class.java) {
+            client.renameFile(server.url("dav/spaces/s/old.txt").toString(), "new.txt", "\"v1\"", "Bearer token")
+        }
+    }
+
+    @Test fun `delete without a strong version is contained before network`() {
+        assertThrows(OpenCloudException::class.java) {
+            client.delete(server.url("file").toString(), "Bearer token", "W/\"weak\"")
+        }
+        assertEquals(0, server.requestCount)
     }
 
     private fun trashResponse() =

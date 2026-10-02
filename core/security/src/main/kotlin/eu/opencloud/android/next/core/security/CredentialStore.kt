@@ -5,6 +5,9 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import eu.opencloud.android.next.core.model.auth.AuthTokens
+import eu.opencloud.android.next.core.model.auth.ClientRegistrationSource
+import eu.opencloud.android.next.core.model.auth.OidcClientRegistration
+import org.json.JSONArray
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -35,12 +38,49 @@ interface CredentialStore {
     fun readTokens(accountId: String): AuthTokens?
 
     fun remove(accountId: String)
+
+    fun readClientRegistration(key: String): OidcClientRegistration? = null
+
+    fun invalidateClientRegistration(registration: OidcClientRegistration): Unit =
+        error("Client registration persistence is unavailable.")
+
+    fun saveClientRegistration(
+        key: String,
+        registration: OidcClientRegistration,
+    ): Unit = error("Client registration persistence is unavailable.")
+
+    fun saveRegisteredTokens(
+        accountId: String,
+        tokens: AuthTokens,
+        registration: OidcClientRegistration,
+    ): Unit = error("Atomic session persistence is unavailable.")
 }
 
 class KeystoreCredentialStore(
     context: Context,
 ) : CredentialStore {
     private val preferences = context.getSharedPreferences("secure_credentials", Context.MODE_PRIVATE)
+
+    fun savePendingLogin(login: PendingOidcLogin) =
+        synchronized(pendingLoginLock) {
+            check(preferences.edit().putString("pending.oidc", encrypt(login.encode())).commit())
+        }
+
+    fun consumePendingLogin(
+        state: String,
+        now: Long,
+    ): PendingOidcLogin? =
+        synchronized(pendingLoginLock) {
+            val encoded = preferences.getString("pending.oidc", null) ?: return@synchronized null
+            val pending = PendingOidcLogin.decode(requireNotNull(decrypt(encoded)))
+            if (!pending.validAt(now)) {
+                check(preferences.edit().remove("pending.oidc").commit())
+                return@synchronized null
+            }
+            if (pending.request.state != state) return@synchronized null
+            check(preferences.edit().remove("pending.oidc").commit())
+            pending
+        }
 
     override fun saveBasicUsername(
         accountId: String,
@@ -66,15 +106,10 @@ class KeystoreCredentialStore(
         accountId: String,
         tokens: AuthTokens,
     ) {
-        val serialized =
-            listOf(
-                tokens.accessToken,
-                tokens.refreshToken.orEmpty(),
-                tokens.expiresAtEpochSeconds.toString(),
-                tokens.tokenType,
-                tokens.scope.orEmpty(),
-            ).joinToString("\u0000")
-        preferences.edit().putString("tokens.$accountId", encrypt(serialized)).apply()
+        val serialized = serializeTokens(tokens)
+        check(preferences.edit().putString("tokens.$accountId", encrypt(serialized)).commit()) {
+            "Credentials could not be persisted."
+        }
     }
 
     override fun readTokens(accountId: String): AuthTokens? =
@@ -93,14 +128,96 @@ class KeystoreCredentialStore(
                 )
             }
 
-    override fun remove(accountId: String) {
-        preferences
-            .edit()
-            .remove("basic.username.$accountId")
-            .remove("basic.$accountId")
-            .remove("tokens.$accountId")
-            .apply()
+    override fun readClientRegistration(key: String): OidcClientRegistration? =
+        preferences.getString("oidc.$key", null)?.let(::decrypt)?.let { serialized ->
+            runCatching {
+                val values = JSONArray(serialized)
+                OidcClientRegistration(
+                    values.getString(0),
+                    values.getString(1),
+                    values.getString(2),
+                    values.getString(3),
+                    values.getString(4),
+                    values.getString(5),
+                    ClientRegistrationSource.valueOf(values.getString(6)),
+                    values.getString(7).ifBlank { null },
+                    values.getString(8).ifBlank { null },
+                )
+            }.getOrNull()
+        }
+
+    override fun invalidateClientRegistration(registration: OidcClientRegistration) {
+        val editor = preferences.edit()
+        preferences.all.keys.filter { it.startsWith("oidc.") }.forEach { key ->
+            val candidate = readClientRegistration(key.removePrefix("oidc."))
+            if (candidate?.serverUrl == registration.serverUrl &&
+                candidate.issuer == registration.issuer &&
+                candidate.clientId == registration.clientId
+            ) {
+                editor.remove(key)
+            }
+        }
+        check(editor.commit()) { "Client registration could not be invalidated." }
     }
+
+    override fun saveClientRegistration(
+        key: String,
+        registration: OidcClientRegistration,
+    ) {
+        check(preferences.edit().putString("oidc.$key", encrypt(serializeRegistration(registration))).commit()) {
+            "Client registration could not be persisted."
+        }
+    }
+
+    override fun saveRegisteredTokens(
+        accountId: String,
+        tokens: AuthTokens,
+        registration: OidcClientRegistration,
+    ) {
+        check(
+            preferences
+                .edit()
+                .putString("tokens.$accountId", encrypt(serializeTokens(tokens)))
+                .putString("oidc.account:$accountId", encrypt(serializeRegistration(registration)))
+                .commit(),
+        ) { "The session could not be persisted." }
+    }
+
+    override fun remove(accountId: String) {
+        check(
+            preferences
+                .edit()
+                .remove("basic.username.$accountId")
+                .remove("basic.$accountId")
+                .remove("tokens.$accountId")
+                .remove("oidc.account:$accountId")
+                .commit(),
+        ) { "Credentials could not be removed." }
+    }
+
+    private fun serializeTokens(tokens: AuthTokens): String =
+        listOf(
+            tokens.accessToken,
+            tokens.refreshToken.orEmpty(),
+            tokens.expiresAtEpochSeconds.toString(),
+            tokens.tokenType,
+            tokens.scope.orEmpty(),
+        ).joinToString("\u0000")
+
+    private fun serializeRegistration(registration: OidcClientRegistration): String =
+        JSONArray(
+            listOf(
+                registration.serverUrl,
+                registration.issuer,
+                registration.clientId,
+                registration.redirectUri,
+                registration.authorizationEndpoint,
+                registration.tokenEndpoint,
+                registration.source.name,
+                registration.registrationAccessToken.orEmpty(),
+                registration.registrationClientUri.orEmpty(),
+            ),
+        ).toString()
 
     private fun encrypt(value: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -138,6 +255,7 @@ class KeystoreCredentialStore(
     }
 
     private companion object {
+        val pendingLoginLock = Any()
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val KEY_ALIAS = "opencloud.next.credentials.v1"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

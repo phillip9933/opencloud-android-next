@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings screen and navigation labels. -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_close">Close</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_change_appearance">Change appearance</string>
+    <string name="settings_appearance_light">Light</string>
+    <string name="settings_appearance_dark">Dark</string>
+    <string name="settings_appearance_system">System</string>
+    <string name="settings_local_storage">Local storage</string>
+    <string name="settings_delete_temporary_copies">Delete temporary local copies</string>
+    <string name="settings_temporary_copy_retention_description">Remove opened files after inactivity. Files kept offline are preserved.</string>
+    <string name="settings_change_copy_retention">Change temporary copy retention</string>
+    <string name="settings_retention_never">Never</string>
+    <plurals name="settings_retention_hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+    <plurals name="settings_retention_days">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <string name="settings_backup_security">Backup &amp; security</string>
+    <string name="settings_folder_camera_backup">Folder &amp; camera backup</string>
+    <string name="settings_manage_automatic_uploads">Set up and manage automatic uploads</string>
+    <string name="settings_open_backup_configuration">Open backup configuration</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_app_lock_other_apps">App lock and access from other apps</string>
+    <string name="settings_open_security_settings">Open security settings</string>
+    <string name="settings_troubleshooting">Troubleshooting</string>
+    <string name="settings_selected">Selected</string>
+    <!-- Maximum number of fixed transfer outcomes retained locally; this is not a file count. -->
+    <string name="settings_diagnostics_description">Keep up to %1$d transfer outcomes on this device. No names or addresses. Turning off clears them.</string>
+    <string name="settings_view_local_diagnostics">View local diagnostics</string>
+    <string name="settings_local_diagnostics">Local diagnostics</string>
+
+    <!-- File display preferences. -->
+    <string name="settings_file_size">File size</string>
+    <string name="settings_date_modified">Date modified</string>
+    <string name="settings_file_extensions">File extensions</string>
+    <string name="settings_hidden_files">Hidden files</string>
+    <string name="settings_clear_temporary_copies_now">Clear temporary copies now</string>
+    <string name="settings_clear_temporary_copies_title">Clear temporary copies?</string>
+    <string name="settings_clear_temporary_copies_confirmation">Are you sure? This removes temporary copies from this phone for all accounts. Files kept offline, active downloads, and cloud originals will be kept.</string>
+    <string name="settings_clear_temporary_copies">Clear temporary copies</string>
+    <string name="settings_cancel">Cancel</string>
+
+    <!-- Security preferences. -->
+    <string name="settings_lock_opencloud">Lock OpenCloud</string>
+    <string name="settings_lock_description_secure">Use your device PIN, pattern or password. App previews and screenshots are hidden while enabled.</string>
+    <string name="settings_lock_description_insecure">Set a device screen lock in Android settings first.</string>
+    <string name="settings_biometric_unlock">Biometric unlock</string>
+    <string name="settings_biometric_description_available">Use fingerprint or supported face recognition, with device screen lock as a fallback.</string>
+    <string name="settings_biometric_description_unavailable">Enroll a supported fingerprint or face in Android settings first. Device screen lock remains available.</string>
+    <string name="settings_lock_after_leaving">Lock after leaving the app</string>
+    <string name="settings_lock_after_leaving_description">Always locks when your device screen turns off.</string>
+    <string name="settings_change_lock_delay">Change lock delay</string>
+    <string name="settings_lock_delay_immediately">Immediately</string>
+    <!-- Number of minutes before the app locks. -->
+    <plurals name="settings_lock_delay_minutes">
+        <item quantity="one">%1$d min</item>
+        <item quantity="other">%1$d min</item>
+    </plurals>
+    <string name="settings_protect_other_apps">Protect access from other apps</string>
+    <string name="settings_protect_other_apps_description">Require device credentials in Android\'s file picker. Unlock grants access for one minute. Copies already shared with another app cannot be revoked.</string>
+    <string name="settings_unlock_file_picker">Unlock file picker access</string>
+    <string name="settings_photo_video_metadata">Photo and video metadata</string>
+    <string name="settings_photo_video_metadata_not_needed">Photo location permission is not needed on this Android version.</string>
+    <string name="settings_photo_video_metadata_allowed">Photo location access is allowed.</string>
+    <string name="settings_photo_video_metadata_not_allowed">Photo location access is not allowed. Selected files can still upload without GPS location.</string>
+    <string name="settings_photo_video_metadata_description">Photo location access may allow OpenCloud to read location information from photos. Android and the file provider determine what metadata is included; this permission does not control all metadata.</string>
+    <string name="settings_request_photo_video_metadata">Allow photo location</string>
+    <string name="settings_manage_app_permissions">Manage permissions</string>
+    <string name="settings_ask_for_photo_location">Ask to preserve photo location</string>
+    <string name="settings_ask_for_photo_location_description">Controls whether OpenCloud asks for photo location access. Turning this off does not revoke permission already granted or control other metadata.</string>
+
+    <!-- Settings diagnostics results. %1$d is the number of temporary copies removed. -->
+    <string name="settings_diagnostics_update_failed">Diagnostics settings could not be updated.</string>
+    <string name="settings_no_transfer_outcomes">No transfer outcomes recorded yet.</string>
+    <string name="settings_diagnostics_read_failed">Local diagnostics could not be read.</string>
+    <plurals name="settings_temporary_copies_removed">
+        <item quantity="one">Removed %1$d temporary copy. Files kept offline are preserved.</item>
+        <item quantity="other">Removed %1$d temporary copies. Files kept offline are preserved.</item>
+    </plurals>
+    <string name="settings_temporary_copies_remove_failed">Some temporary copies could not be removed. Please try again.</string>
+</resources>

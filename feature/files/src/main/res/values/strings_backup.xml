@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Folder and camera backup configuration screen. -->
+    <string name="backup_settings_title">Folder &amp; camera backup</string>
+    <string name="backup_settings_add_accessibility">Add backup</string>
+    <string name="backup_settings_scan_accessibility">Scan backups now</string>
+    <string name="backup_settings_back">Back</string>
+    <string name="backup_settings_ok">OK</string>
+    <string name="backup_settings_active_configurations">Active backup configurations</string>
+    <string name="backup_settings_empty_description">No backup folders configured. Use + to choose a source folder and its OpenCloud destination.</string>
+    <string name="backup_settings_manage">Manage</string>
+    <string name="backup_settings_add">Add backup</string>
+    <string name="backup_settings_source">Source: %1$s</string>
+
+    <!-- Date and time text uses the value formatted for the current device locale. -->
+    <string name="backup_settings_last_checked_through">Last checked through %1$s</string>
+    <string name="backup_settings_not_scanned">Not scanned yet</string>
+    <string name="backup_settings_last_completed_upload">Last completed upload %1$s</string>
+    <!-- Number of uploads waiting to run for this backup configuration. -->
+    <plurals name="backup_settings_uploads_pending">
+        <item quantity="one">%1$d upload pending</item>
+        <item quantity="other">%1$d uploads pending</item>
+    </plurals>
+    <!-- Number of uploads that need user attention in the Uploads screen. -->
+    <plurals name="backup_settings_uploads_need_attention">
+        <item quantity="one">%1$d upload needs attention in Uploads</item>
+        <item quantity="other">%1$d uploads need attention in Uploads</item>
+    </plurals>
+    <string name="backup_settings_watching">Watching for changes</string>
+    <string name="backup_settings_paused">Backup paused</string>
+</resources>

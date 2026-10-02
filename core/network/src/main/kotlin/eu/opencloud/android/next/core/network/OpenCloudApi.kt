@@ -1,16 +1,13 @@
 package eu.opencloud.android.next.core.network
 
+import eu.opencloud.android.next.core.model.AppClock
+import eu.opencloud.android.next.core.model.SystemAppClock
 import eu.opencloud.android.next.core.model.auth.AuthTokens
-import eu.opencloud.android.next.core.model.auth.OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
 import eu.opencloud.android.next.core.model.auth.ServerCapabilities
 import eu.opencloud.android.next.core.model.auth.UserProfile
 import eu.opencloud.android.next.core.model.auth.WebFingerMetadata
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -18,31 +15,47 @@ import okhttp3.Credentials
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.net.URI
 
 class OpenCloudApi(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val json: Json = Json { ignoreUnknownKeys = true },
+    private val endpoints: EndpointPolicy = EndpointPolicy(),
+    private val clock: AppClock = SystemAppClock,
 ) {
+    private val client =
+        client
+            .newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+
+    fun registerClient(
+        serverUrl: String,
+        configuration: OidcConfiguration,
+    ) = OidcRegistrationClient(client, endpoints).register(serverUrl, configuration)
+
     fun discover(serverInput: String): DiscoveryResult {
         val normalized = normalizeServerUrl(serverInput)
-        val response =
-            execute(
-                Request
-                    .Builder()
-                    .url("$normalized/status.php")
-                    .get()
-                    .build(),
-            )
-        val canonical =
-            response.headers["Location"]?.let(::normalizeServerUrl) ?: normalized
-        return DiscoveryResult(canonical)
+        execute(
+            Request
+                .Builder()
+                .url("$normalized/status.php")
+                .get()
+                .build(),
+        )
+        return DiscoveryResult(normalized)
     }
 
     fun webFinger(serverUrl: String): WebFingerMetadata? =
         runCatching {
             val endpoint =
-                "$serverUrl/.well-known/webfinger?resource=$serverUrl&rel=http%3A%2F%2Fopencloud.eu%2Fns%2Foidc%2Fissuer"
+                endpoints
+                    .endpoint(serverUrl, allowQuery = false)
+                    .newBuilder()
+                    .addPathSegments(".well-known/webfinger")
+                    .addQueryParameter("resource", serverUrl)
+                    .addQueryParameter("rel", OIDC_ISSUER_REL)
+                    .build()
             val root =
                 bodyJson(
                     Request
@@ -52,11 +65,12 @@ class OpenCloudApi(
                         .build(),
                 ).jsonObject
             val properties = root["properties"]?.jsonObject
+            val links = root["links"]?.jsonArray.orEmpty()
             val issuer =
-                root["links"]
-                    ?.jsonArray
-                    ?.firstOrNull { it.jsonObject["rel"]?.jsonPrimitive?.content == OIDC_ISSUER_REL }
-                    ?.jsonObject
+                (
+                    links.firstOrNull { it.jsonObject["rel"]?.jsonPrimitive?.content == OIDC_ISSUER_REL }
+                        ?: links.firstOrNull { it.jsonObject["rel"]?.jsonPrimitive?.content == LEGACY_ISSUER_REL }
+                )?.jsonObject
                     ?.get("href")
                     ?.jsonPrimitive
                     ?.content
@@ -72,12 +86,15 @@ class OpenCloudApi(
                         ?.map { it.trim().trim('"') }
                         ?.filter(String::isNotBlank),
             )
-        }.getOrNull()
+        }.getOrElse { failure ->
+            if (failure is TransferHttpException && failure.statusCode == 404) null else throw failure
+        }
 
     fun oidcDiscovery(
         issuer: String,
         webFinger: WebFingerMetadata?,
     ): OidcConfiguration {
+        val expectedIssuer = endpoints.issuer(issuer)
         val root =
             bodyJson(
                 Request
@@ -94,11 +111,18 @@ class OpenCloudApi(
                 ?.map { it.trim().trim('"') }
                 ?.filter(String::isNotBlank)
                 .orEmpty()
+        if (endpoints.issuer(root.requiredString("issuer")) != expectedIssuer) {
+            throw OpenCloudException(OpenCloudError.Trust)
+        }
         return OidcConfiguration(
-            issuer = root.requiredString("issuer"),
-            authorizationEndpoint = root.requiredString("authorization_endpoint"),
-            tokenEndpoint = root.requiredString("token_endpoint"),
-            registrationEndpoint = root["registration_endpoint"]?.jsonPrimitive?.content,
+            issuer = expectedIssuer,
+            authorizationEndpoint = endpoints.endpoint(root.requiredString("authorization_endpoint")).toString(),
+            tokenEndpoint = endpoints.endpoint(root.requiredString("token_endpoint")).toString(),
+            registrationEndpoint =
+                root["registration_endpoint"]
+                    ?.jsonPrimitive
+                    ?.content
+                    ?.let { endpoints.endpoint(it).toString() },
             clientId = webFinger?.clientId,
             scopes = scopes.ifEmpty { listOf("openid", "profile") },
         )
@@ -129,88 +153,8 @@ class OpenCloudApi(
                     .get()
                     .build(),
             )
-        return runCatching { parseCapabilities(response.body, serverUrl) }
-            .getOrElse { fallbackCapabilities() }
+        return CapabilitiesParser().parse(response.body, serverUrl)
     }
-
-    private fun parseCapabilities(
-        body: String,
-        serverUrl: String,
-    ): ServerCapabilities {
-        val root = json.parseToJsonElement(body).jsonObject
-        val data = root["ocs"]?.jsonObject?.get("data")?.jsonObject ?: error("Missing OCS capability data")
-        val version =
-            data["version"]
-                ?.jsonObject
-                ?.get("string")
-                ?.jsonPrimitive
-                ?.content
-        val files = data["capabilities"]?.jsonObject?.get("files")?.jsonObject
-        val dav = data["capabilities"]?.jsonObject?.get("dav")?.jsonObject
-        val davReports =
-            dav
-                ?.get("reports")
-                ?.jsonArray
-                ?.map { it.jsonPrimitive.content }
-                .orEmpty()
-        val sharing = data["capabilities"]?.jsonObject?.get("files_sharing")?.jsonObject
-        val publicSharing = sharing?.get("public")?.jsonObject
-        return ServerCapabilities(
-            version = version,
-            sharingEnabled =
-                sharing?.get("api_enabled").isEnabledCapability() ||
-                    sharing?.get("api").isEnabledCapability(),
-            publicSharingEnabled = publicSharing.isEnabledCapability(),
-            spacesEnabled = data.toString().contains("spaces"),
-            tusSupported = files?.toString()?.contains("tus") == true,
-            remoteSearchUrl =
-                if ("search-files" in davReports) {
-                    "${serverUrl.trimEnd('/')}/remote.php/dav/spaces/"
-                } else {
-                    null
-                },
-            trashSupported = dav?.get("trashbin").isEnabledCapability(),
-            publicLinkPasswordSupported = publicSharing?.get("password") != null,
-            publicLinkPasswordEnforced =
-                publicSharing
-                    ?.get("password")
-                    ?.jsonObject
-                    ?.get("enforced")
-                    ?.jsonPrimitive
-                    ?.content == "true",
-            publicLinkExpirationSupported =
-                publicSharing
-                    ?.get("expire_date")
-                    ?.jsonObject
-                    ?.get("enabled")
-                    ?.jsonPrimitive
-                    ?.content == "true",
-            publicLinkExpirationEnforced =
-                publicSharing
-                    ?.get("expire_date")
-                    ?.jsonObject
-                    ?.get("enforced")
-                    ?.jsonPrimitive
-                    ?.content == "true",
-            publicLinkExpirationDays =
-                publicSharing
-                    ?.get("expire_date")
-                    ?.jsonObject
-                    ?.get("days")
-                    ?.jsonPrimitive
-                    ?.content
-                    ?.toIntOrNull(),
-        )
-    }
-
-    private fun fallbackCapabilities() =
-        ServerCapabilities(
-            version = null,
-            sharingEnabled = false,
-            publicSharingEnabled = false,
-            spacesEnabled = false,
-            tusSupported = false,
-        )
 
     fun exchangeCode(
         configuration: OidcConfiguration,
@@ -225,7 +169,7 @@ class OpenCloudApi(
                 .add("grant_type", "authorization_code")
                 .add("code", code)
                 .add("redirect_uri", redirectUri)
-                .add("client_id", OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID)
+                .add("client_id", requireNotNull(configuration.clientId) { "A registered client is required." })
                 .add("code_verifier", codeVerifier)
                 .build(),
         )
@@ -240,11 +184,11 @@ class OpenCloudApi(
                 .Builder()
                 .add("grant_type", "refresh_token")
                 .add("refresh_token", refreshToken)
-                .add("client_id", OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID)
+                .add("client_id", requireNotNull(configuration.clientId) { "A registered client is required." })
                 .build(),
         )
 
-    private fun profile(
+    fun profile(
         serverUrl: String,
         authorization: String,
     ): UserProfile {
@@ -282,7 +226,7 @@ class OpenCloudApi(
         return AuthTokens(
             accessToken = data.requiredString("access_token"),
             refreshToken = data["refresh_token"]?.jsonPrimitive?.content,
-            expiresAtEpochSeconds = (System.currentTimeMillis() / 1000) + expiresIn,
+            expiresAtEpochSeconds = (clock.epochMillis() / 1000) + expiresIn.coerceIn(0, 31536000),
             tokenType = data["token_type"]?.jsonPrimitive?.content ?: "Bearer",
             scope = data["scope"]?.jsonPrimitive?.content,
         )
@@ -290,42 +234,57 @@ class OpenCloudApi(
 
     private fun bodyJson(request: Request) = json.parseToJsonElement(execute(request).body)
 
-    private fun execute(request: Request): HttpResponse =
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("HTTP ${response.code}")
-            HttpResponse(response.headers, response.body?.string().orEmpty())
+    private fun execute(request: Request): HttpResponse {
+        endpoints.endpoint(request.url.toString())
+        return client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val tokenRequest =
+                    (request.body as? FormBody)?.let { form ->
+                        (0 until form.size).any { form.name(it) == "grant_type" }
+                    } == true
+                val oauthError =
+                    if (tokenRequest && response.code in setOf(400, 401)) {
+                        runCatching {
+                            json
+                                .parseToJsonElement(
+                                    body,
+                                ).jsonObject["error"]
+                                ?.jsonPrimitive
+                                ?.content
+                        }.getOrNull()
+                    } else {
+                        null
+                    }
+                val failure =
+                    when (oauthError) {
+                        "invalid_grant" -> OpenCloudError.AuthenticationRequired
+                        "invalid_client" -> OpenCloudError.ClientRegistrationRequired
+                        else -> httpError(response.code)
+                    }
+                throw TransferHttpException(response.code, error = failure)
+            }
+            HttpResponse(response.headers, body)
         }
+    }
 
     private fun normalizeServerUrl(value: String): String {
         val withScheme = if ("://" in value) value else "https://$value"
-        return URI(withScheme).let { "${it.scheme}://${it.authority}${it.path.orEmpty().trimEnd('/')}" }
+        return endpoints.endpoint(withScheme, allowQuery = false).toString().trimEnd('/')
     }
 
     private fun kotlinx.serialization.json.JsonObject.requiredString(name: String): String =
         get(name)?.jsonPrimitive?.content ?: error("Missing required field: $name")
 
     private companion object {
-        const val OIDC_ISSUER_REL = "http://opencloud.eu/ns/oidc/issuer"
+        const val OIDC_ISSUER_REL = "http://openid.net/specs/connect/1.0/issuer"
+        const val LEGACY_ISSUER_REL = "http://opencloud.eu/ns/oidc/issuer"
     }
 }
 
 data class DiscoveryResult(
     val canonicalServerUrl: String,
 )
-
-private fun JsonElement?.isEnabledCapability(): Boolean =
-    when (this) {
-        null -> false
-        is JsonPrimitive -> {
-            val value = content.trim().lowercase()
-            value in setOf("true", "yes", "enabled", "on") || value.toDoubleOrNull()?.let { it > 0 } == true
-        }
-        is JsonObject ->
-            listOf("api_enabled", "enabled", "available", "version", "value").any { key ->
-                get(key).isEnabledCapability()
-            }
-        is JsonArray -> any { it.isEnabledCapability() }
-    }
 
 private data class HttpResponse(
     val headers: okhttp3.Headers,

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_offline_queued">Offline-Synchronisierung vorgemerkt.</string>
+    <string name="search_open_in_files">Öffne dieses Element in Dateien, um seinen Speicherort oder Namen zu ändern.</string>
+    <string name="search_action_failed">Die Aktion ist fehlgeschlagen.</string>
+    <string name="search_placeholder">Dateien und Ordner durchsuchen</string>
+    <string name="search_clear">Suche leeren</string>
+    <string name="search_back">Zurück</string>
+    <string name="search_action_title">Suchaktion</string>
+    <string name="search_ok">OK</string>
+    <string name="search_empty_title">OpenCloud durchsuchen</string>
+    <string name="search_empty_message">Während der Eingabe werden Ergebnisse von diesem Gerät angezeigt.</string>
+    <string name="search_unavailable_title">Serversuche nicht verfügbar</string>
+    <string name="search_unavailable_message">Auf diesem Gerät wurden keine Ergebnisse gefunden.</string>
+    <string name="search_no_results_title">Keine Ergebnisse</string>
+    <string name="search_no_results_message">Versuche es mit einem anderen Datei- oder Ordnernamen.</string>
+    <string name="search_status_loading">Server wird durchsucht.</string>
+    <string name="search_status_server_error">Ergebnisse auf diesem Gerät • Server nicht verfügbar</string>
+    <string name="search_status_capped">Ergebnisse auf diesem Gerät und Server • Suche eingrenzen, um weitere zu finden</string>
+    <string name="search_status_combined">Ergebnisse auf diesem Gerät und Server</string>
+    <string name="search_status_device">Ergebnisse auf diesem Gerät</string>
+</resources>

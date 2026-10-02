@@ -1,0 +1,9 @@
+<resources>
+    <string name="media_metadata_title">Keep photo location metadata?</string>
+    <string name="media_metadata_explanation">Photo location access is off. Android may remove GPS location from uploaded photos. Grant permission to help preserve it. Uploading anyway uses the file Android provides; location and other metadata may be included or omitted. OpenCloud does not strip metadata.</string>
+    <string name="media_metadata_allow">Grant permission</string>
+    <string name="media_metadata_continue">Upload anyway (ask every time)</string>
+    <string name="media_metadata_settings">Open app permissions</string>
+    <string name="media_metadata_never_ask">Upload anyway (never ask again)</string>
+    <string name="media_metadata_settings_note">You can change this later in Settings, under Security.</string>
+</resources>

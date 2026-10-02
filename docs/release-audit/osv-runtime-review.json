@@ -1,0 +1,7 @@
+{
+  "reviewDate": "2026-10-02",
+  "source": "https://api.osv.dev/v1/querybatch",
+  "queried": 160,
+  "excluded": "dev.offlinescan prerelease modules; native/model assets require separate review",
+  "findings": []
+}

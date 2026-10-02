@@ -33,6 +33,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:sync"))
+    implementation(libs.kotlinx.coroutines.android)
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(platform(libs.androidx.compose.bom))

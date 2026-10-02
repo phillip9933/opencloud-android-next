@@ -19,14 +19,21 @@ import kotlin.coroutines.cancellation.CancellationException
 
 enum class SettingsBrowserLayout { DEFAULT_TABLE, CONDENSED_TABLE, TILES }
 
+enum class Appearance { SYSTEM, LIGHT, DARK }
+
 data class UserSettings(
     val browserLayout: SettingsBrowserLayout = SettingsBrowserLayout.DEFAULT_TABLE,
     val activeAccountId: String? = null,
     val cacheRetentionDays: Int = DEFAULT_CACHE_RETENTION_DAYS,
+    val localDiagnosticsEnabled: Boolean = false,
+    val appearance: Appearance = Appearance.SYSTEM,
+    val temporaryCopyRetentionHours: Int = 0,
+    val fileDisplay: FileDisplayOptions = FileDisplayOptions(),
 )
 
 class SettingsRepository private constructor(
     private val dataStore: DataStore<AppSettings>,
+    private val context: Context? = null,
 ) {
     val settings: Flow<UserSettings> =
         dataStore.data
@@ -53,6 +60,35 @@ class SettingsRepository private constructor(
             it.toBuilder().setCacheRetentionDays(days.coerceIn(MIN_CACHE_DAYS, MAX_CACHE_DAYS)).build()
         }
 
+    suspend fun setTemporaryCopyRetentionHours(hours: Int) =
+        update {
+            require(hours in listOf(0, 1, 12, 24, 720))
+            it.toBuilder().setTemporaryCopyRetentionHours(hours).build()
+        }
+
+    suspend fun setFileDisplay(options: FileDisplayOptions) =
+        update {
+            it
+                .toBuilder()
+                .setHideFileSize(!options.showSize)
+                .setHideModifiedDate(!options.showModified)
+                .setHideFileExtensions(!options.showExtensions)
+                .setShowHiddenFiles(options.showHidden)
+                .build()
+        }
+
+    suspend fun setLocalDiagnosticsEnabled(enabled: Boolean) =
+        update { it.toBuilder().setLocalDiagnosticsEnabled(enabled).build() }
+
+    suspend fun setAppearance(appearance: Appearance) {
+        update { it.toBuilder().setAppearance(AppSettings.Appearance.valueOf(appearance.name)).build() }
+        context
+            ?.getSharedPreferences("window-appearance", Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString("appearance", appearance.name)
+            ?.apply()
+    }
+
     private suspend fun update(transform: (AppSettings) -> AppSettings) {
         dataStore.updateData { transform(it.repaired()) }
     }
@@ -63,11 +99,13 @@ class SettingsRepository private constructor(
         fun create(context: Context): SettingsRepository =
             instance ?: synchronized(this) {
                 instance ?: SettingsRepository(
-                    DataStoreFactory.create(
-                        serializer = AppSettingsSerializer,
-                        corruptionHandler = ReplaceFileCorruptionHandler { AppSettings.getDefaultInstance() },
-                        produceFile = { context.applicationContext.dataStoreFile("opencloud-settings.pb") },
-                    ),
+                    context = context.applicationContext,
+                    dataStore =
+                        DataStoreFactory.create(
+                            serializer = AppSettingsSerializer,
+                            corruptionHandler = ReplaceFileCorruptionHandler { AppSettings.getDefaultInstance() },
+                            produceFile = { context.applicationContext.dataStoreFile("opencloud-settings.pb") },
+                        ),
                 ).also { instance = it }
             }
 
@@ -95,6 +133,10 @@ private fun AppSettings.validated() =
     UserSettings(
         browserLayout = browserLayout.toDomain(),
         activeAccountId = activeAccountId.trim().takeIf(String::isNotBlank),
+        localDiagnosticsEnabled = localDiagnosticsEnabled,
+        fileDisplay = FileDisplayOptions(!hideFileSize, !hideModifiedDate, !hideFileExtensions, showHiddenFiles),
+        temporaryCopyRetentionHours = temporaryCopyRetentionHours.takeIf { it in listOf(0, 1, 12, 24, 720) } ?: 0,
+        appearance = Appearance.entries.firstOrNull { it.name == appearance.name } ?: Appearance.SYSTEM,
         cacheRetentionDays =
             cacheRetentionDays.takeIf { it in MIN_CACHE_DAYS..MAX_CACHE_DAYS } ?: DEFAULT_CACHE_RETENTION_DAYS,
     )

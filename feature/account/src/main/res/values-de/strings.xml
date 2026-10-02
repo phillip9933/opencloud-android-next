@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="account_title_accounts">Konten</string>
+    <string name="account_back">Zurück</string>
+    <string name="account_empty">Keine Konten</string>
+    <string name="account_add">Konto hinzufügen</string>
+    <string name="account_sign_in_another_server">Bei einem anderen OpenCloud-Server anmelden</string>
+    <string name="account_remove_accessibility">%1$s entfernen</string>
+    <string name="account_remove_title">Abmelden und Konto entfernen?</string>
+    <string name="account_remove_confirmation">Lokale Dateien, Anmeldedaten, Übertragungen, Sicherungen und der Zugriff über die System-Dateiauswahl für %1$s werden entfernt.</string>
+    <string name="account_remove">Entfernen</string>
+    <string name="account_cancel">Abbrechen</string>
+    <string name="account_ok">OK</string>
+    <string name="account_information">Kontoinformationen</string>
+    <string name="account_refresh_accessibility">Konto aktualisieren</string>
+    <string name="account_profile_picture">Profilbild</string>
+    <string name="account_profile_picture_formats">JPG oder PNG, bis zu 10 MB</string>
+    <string name="account_invalid_picture">Bitte wählen Sie ein gültiges JPG- oder PNG-Bild mit höchstens 10 MB aus.</string>
+    <string name="account_upload_picture">Bild hochladen</string>
+    <string name="account_remove_picture_title">Profilbild entfernen?</string>
+    <string name="account_remove_picture_confirmation">Dadurch wird Ihr Profilbild vom Server und aus allen OpenCloud-Apps entfernt.</string>
+    <string name="account_username">Benutzername</string>
+    <string name="account_first_last_name">Vor- und Nachname</string>
+    <string name="account_email">E-Mail</string>
+    <string name="account_not_loaded">Nicht geladen</string>
+    <string name="account_no_email">Keine E-Mail-Adresse angegeben</string>
+    <string name="account_storage_not_available">Nicht verfügbar</string>
+    <string name="account_storage_used">%1$s verwendet</string>
+    <string name="account_storage_used_of_total">%1$s von %2$s verwendet</string>
+    <string name="account_personal_storage">Persönlicher Speicher</string>
+    <string name="account_group_memberships">Gruppenmitgliedschaften</string>
+    <string name="account_no_group_memberships">Keine Gruppenmitgliedschaften</string>
+    <string name="account_server">Server</string>
+</resources>

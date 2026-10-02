@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_metadata_title">Standortmetadaten von Fotos behalten?</string>
+    <string name="media_metadata_explanation">Android kann Standortmetadaten aus Fotos entfernen. Erlauben Sie den Zugriff, damit sie in Uploads und Sicherungen erhalten bleiben. Ohne Berechtigung entfernt Android sie möglicherweise.</string>
+    <string name="media_metadata_allow">Zugriff auf Metadaten erlauben</string>
+    <string name="media_metadata_continue">Ohne fortfahren</string>
+</resources>

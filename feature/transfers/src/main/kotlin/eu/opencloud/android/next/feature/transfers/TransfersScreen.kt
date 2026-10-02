@@ -4,8 +4,9 @@ import android.app.Application
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,16 +14,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -41,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -65,9 +70,11 @@ fun TransfersRoute(
     accountId: String,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenFileActions: (() -> Unit)? = null,
     viewModel: TransfersViewModel = viewModel(key = "transfers-$accountId"),
 ) {
     val state by viewModel.state.collectAsState()
+    var showEdits by remember { mutableStateOf(false) }
     LaunchedEffect(accountId) { viewModel.load(accountId) }
     TransfersScreen(
         state = state,
@@ -79,7 +86,10 @@ fun TransfersRoute(
         onClearAll = viewModel::clearAll,
         onDismissError = viewModel::dismissError,
         modifier = modifier,
+        onOpenFileActions = onOpenFileActions,
+        onReviewEdits = { showEdits = true },
     )
+    if (showEdits) DocumentEditsDialog(accountId, onDismiss = { showEdits = false })
 }
 
 class TransfersViewModel(
@@ -95,9 +105,13 @@ class TransfersViewModel(
         if (loadedAccountId == accountId) return
         loadedAccountId = accountId
         viewModelScope.launch(Dispatchers.IO) {
-            store.observeTransfers(accountId).collectLatest { transfers ->
-                mutableState.value = categorizeTransfers(transfers)
-            }
+            kotlinx.coroutines.flow
+                .combine(
+                    store.observeTransfers(accountId),
+                    store.observeSpaces(accountId),
+                ) { transfers, spaces ->
+                    categorizeTransfers(transfers).copy(spaceNames = spaces.associate { it.driveId to it.name })
+                }.collectLatest { mutableState.value = it }
         }
     }
 
@@ -127,7 +141,12 @@ class TransfersViewModel(
         runAction {
             val failures = failed.mapNotNull { transfer -> runCatching { manager.retry(transfer) }.exceptionOrNull() }
             check(failures.isEmpty()) {
-                "${failures.size} of ${failed.size} failed transfers could not be retried."
+                getApplication<Application>().resources.getQuantityString(
+                    R.plurals.transfers_retry_failures,
+                    failed.size,
+                    failures.size,
+                    failed.size,
+                )
             }
         }
     }
@@ -147,13 +166,18 @@ class TransfersViewModel(
             runCatching { withContext(Dispatchers.IO) { action() } }
                 .onFailure {
                     mutableState.value =
-                        mutableState.value.copy(error = it.message ?: "Transfer action failed.")
+                        mutableState.value.copy(
+                            error =
+                                it.message
+                                    ?: getApplication<Application>().getString(R.string.transfers_action_failed),
+                        )
                 }
         }
     }
 }
 
 data class TransfersUiState(
+    val spaceNames: Map<String, String> = emptyMap(),
     val active: List<TransferEntity> = emptyList(),
     val failed: List<TransferEntity> = emptyList(),
     val history: List<TransferEntity> = emptyList(),
@@ -189,30 +213,56 @@ fun TransfersScreen(
     onClearAll: () -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenFileActions: (() -> Unit)? = null,
+    onReviewEdits: (() -> Unit)? = null,
 ) {
     var showActions by remember { mutableStateOf(false) }
     var confirmClearAll by remember { mutableStateOf(false) }
     val hasFailedTransfers = state.failed.any { it.state == TransferState.FAILED.name }
     val hasTransfers = state.active.isNotEmpty() || state.failed.isNotEmpty() || state.history.isNotEmpty()
+    val activeQueuedTitle = stringResource(R.string.transfers_active_queued)
+    val needsAttentionTitle = stringResource(R.string.transfers_needs_attention)
+    val historyTitle = stringResource(R.string.transfers_history)
     Scaffold(
         modifier = modifier,
+        floatingActionButton = {
+            onOpenFileActions?.let { openActions ->
+                FloatingActionButton(onClick = openActions) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.transfers_upload_files))
+                }
+            }
+        },
         topBar = {
             TopAppBar(
-                title = { Text("Transfers") },
+                title = { Text(stringResource(R.string.transfers_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.transfers_back),
+                        )
                     }
                 },
                 actions = {
+                    onReviewEdits?.let { review ->
+                        IconButton(onClick = review) {
+                            Icon(
+                                Icons.Default.Restore,
+                                contentDescription = stringResource(R.string.transfers_recover_edits),
+                            )
+                        }
+                    }
                     if (hasTransfers) {
                         Box {
                             IconButton(onClick = { showActions = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Transfer actions")
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = stringResource(R.string.transfers_actions_description),
+                                )
                             }
                             DropdownMenu(expanded = showActions, onDismissRequest = { showActions = false }) {
                                 DropdownMenuItem(
-                                    text = { Text("Retry all failed") },
+                                    text = { Text(stringResource(R.string.transfers_retry_all_failed)) },
                                     leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
                                     enabled = hasFailedTransfers,
                                     onClick = {
@@ -221,7 +271,7 @@ fun TransfersScreen(
                                     },
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Clear all") },
+                                    text = { Text(stringResource(R.string.transfers_clear_all)) },
                                     leadingIcon = { Icon(Icons.Default.Cancel, contentDescription = null) },
                                     onClick = {
                                         showActions = false
@@ -242,47 +292,58 @@ fun TransfersScreen(
                 contentPadding = padding,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                transferSection("Active & queued", state.active) { TransferRow(it, onCancel = { onCancel(it) }) }
-                transferSection("Needs attention", state.failed) { transfer ->
+                transferSection(activeQueuedTitle, state.active) { transfer ->
                     TransferRow(
-                        transfer = transfer,
-                        onRetry = if (transfer.state == TransferState.FAILED.name) ({ onRetry(transfer) }) else null,
-                        onConflict =
-                            if (transfer.state == TransferState.CONFLICT.name) {
-                                { decision -> onResolveConflict(transfer, decision) }
-                            } else {
-                                null
-                            },
+                        transfer,
+                        onRetry = if (transfer.state == TransferState.RETRY.name) ({ onRetry(transfer) }) else null,
+                        onCancel = { onCancel(transfer) },
+                        spaceName = state.spaceNames[transfer.spaceId],
                     )
                 }
-                transferSection("History", state.history) { TransferRow(it) }
+                transferSection(needsAttentionTitle, state.failed) { transfer ->
+                    FailedTransferRow(transfer, onRetry, onResolveConflict)
+                }
+                transferSection(historyTitle, state.history) {
+                    TransferRow(it, spaceName = state.spaceNames[it.spaceId])
+                }
             }
         }
     }
     state.error?.let { error ->
         AlertDialog(
             onDismissRequest = onDismissError,
-            title = { Text("Transfer action") },
+            title = { Text(stringResource(R.string.transfers_action_title)) },
             text = { Text(error) },
-            confirmButton = { TextButton(onClick = onDismissError) { Text("OK") } },
+            confirmButton = { TextButton(onClick = onDismissError) { Text(stringResource(R.string.transfers_ok)) } },
         )
     }
     if (confirmClearAll) {
-        AlertDialog(
-            onDismissRequest = { confirmClearAll = false },
-            title = { Text("Clear all transfers?") },
-            text = { Text("Active work will be cancelled and the complete transfer list will be removed.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmClearAll = false
-                        onClearAll()
-                    },
-                ) { Text("Clear all") }
+        TransfersClearAllDialog(
+            onDismiss = { confirmClearAll = false },
+            onConfirm = {
+                confirmClearAll = false
+                onClearAll()
             },
-            dismissButton = { TextButton(onClick = { confirmClearAll = false }) { Text("Cancel") } },
         )
     }
+}
+
+@Composable
+private fun TransfersClearAllDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.transfers_clear_all_title)) },
+        text = { Text(stringResource(R.string.transfers_clear_all_confirmation)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.transfers_clear_all)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.transfers_cancel)) }
+        },
+    )
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.transferSection(
@@ -302,22 +363,42 @@ private fun androidx.compose.foundation.lazy.LazyListScope.transferSection(
 }
 
 @Composable
+private fun FailedTransferRow(
+    transfer: TransferEntity,
+    onRetry: (TransferEntity) -> Unit,
+    onResolveConflict: (TransferEntity, TransferConflictDecision) -> Unit,
+) {
+    TransferRow(
+        transfer = transfer,
+        onRetry = if (transfer.state == TransferState.FAILED.name) ({ onRetry(transfer) }) else null,
+        onConflict =
+            if (transfer.state == TransferState.CONFLICT.name) {
+                { decision -> onResolveConflict(transfer, decision) }
+            } else {
+                null
+            },
+    )
+}
+
+@Composable
 private fun TransferEmptyState(padding: PaddingValues) {
     Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.CloudUpload, contentDescription = null)
-            Text("No transfers", style = MaterialTheme.typography.titleLarge)
-            Text("Uploads and downloads will appear here.")
+            Text(stringResource(R.string.transfers_empty_title), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.transfers_empty_description))
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TransferRow(
     transfer: TransferEntity,
     onRetry: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     onConflict: ((TransferConflictDecision) -> Unit)? = null,
+    spaceName: String? = null,
 ) {
     val progress =
         if (transfer.bytesTotal > 0) {
@@ -330,13 +411,49 @@ private fun TransferRow(
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXxs)) {
                 Text(transferStatus(transfer))
+                val location = listOfNotNull(spaceName, transfer.destinationPath).joinToString(" ")
+                Text(
+                    stringResource(
+                        if (transfer.direction == TransferDirection.UPLOAD.name) {
+                            R.string.transfers_destination_upload
+                        } else {
+                            R.string.transfers_destination_download
+                        },
+                        location,
+                    ),
+                )
+                Text(
+                    stringResource(R.string.transfers_started, transferDate(transfer.createdAtEpochMillis)),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (transfer.updatedAtEpochMillis != transfer.createdAtEpochMillis) {
+                    Text(
+                        stringResource(
+                            if (transfer.state == TransferState.SUCCEEDED.name) {
+                                R.string.transfers_completed
+                            } else {
+                                R.string.transfers_updated
+                            },
+                            transferDate(transfer.updatedAtEpochMillis),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (transfer.state in ACTIVE_STATES) LinearProgressIndicator({ progress }, Modifier.fillMaxWidth())
                 transfer.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (onConflict != null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs)) {
-                        TextButton(onClick = { onConflict(TransferConflictDecision.REPLACE) }) { Text("Replace") }
-                        TextButton(onClick = { onConflict(TransferConflictDecision.KEEP_BOTH) }) { Text("Keep both") }
-                        TextButton(onClick = { onConflict(TransferConflictDecision.CANCEL) }) { Text("Cancel") }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs)) {
+                        if (transfer.locationKind != "SHARED_FOLDER") {
+                            TextButton(onClick = { onConflict(TransferConflictDecision.REPLACE) }) {
+                                Text(stringResource(R.string.transfers_replace))
+                            }
+                        }
+                        TextButton(onClick = { onConflict(TransferConflictDecision.KEEP_BOTH) }) {
+                            Text(stringResource(R.string.transfers_keep_both))
+                        }
+                        TextButton(onClick = { onConflict(TransferConflictDecision.CANCEL) }) {
+                            Text(stringResource(R.string.transfers_cancel))
+                        }
                     }
                 }
             }
@@ -355,14 +472,65 @@ private fun TransferRow(
         },
         trailingContent = {
             when {
-                onRetry != null -> IconButton(onClick = onRetry) { Icon(Icons.Default.Refresh, "Retry") }
-                onCancel != null -> IconButton(onClick = onCancel) { Icon(Icons.Default.Cancel, "Cancel transfer") }
+                onRetry != null ->
+                    IconButton(onClick = onRetry) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.transfers_retry))
+                    }
+                onCancel != null ->
+                    IconButton(onClick = onCancel) {
+                        Icon(
+                            Icons.Default.Cancel,
+                            contentDescription = stringResource(R.string.transfers_cancel_transfer),
+                        )
+                    }
                 transfer.state == TransferState.FAILED.name -> Icon(Icons.Default.Error, contentDescription = null)
             }
         },
     )
 }
 
-private fun transferStatus(transfer: TransferEntity): String =
-    transfer.state.lowercase().replaceFirstChar(Char::uppercase) +
-        if (transfer.bytesTotal > 0) " • ${transfer.bytesTransferred} / ${transfer.bytesTotal} bytes" else ""
+@Composable
+private fun transferStatus(transfer: TransferEntity): String {
+    val status =
+        if (transfer.state == TransferState.RUNNING.name) {
+            when {
+                transfer.bytesTransferred == 0L -> stringResource(R.string.transfers_preparing)
+                transfer.bytesTotal > 0 && transfer.bytesTransferred >= transfer.bytesTotal -> {
+                    stringResource(R.string.transfers_verifying)
+                }
+                else -> stringResource(R.string.transfers_transferring)
+            }
+        } else {
+            when (TransferState.entries.firstOrNull { it.name == transfer.state }) {
+                TransferState.QUEUED -> stringResource(R.string.transfers_status_queued)
+                TransferState.RETRY -> stringResource(R.string.transfers_status_retry)
+                TransferState.CONFLICT -> stringResource(R.string.transfers_status_conflict)
+                TransferState.SUCCEEDED -> stringResource(R.string.transfers_status_succeeded)
+                TransferState.FAILED -> stringResource(R.string.transfers_status_failed)
+                TransferState.CANCELLED -> stringResource(R.string.transfers_status_cancelled)
+                TransferState.RUNNING, null -> transfer.state.lowercase().replaceFirstChar(Char::uppercase)
+            }
+        }
+    return if (transfer.bytesTotal > 0) {
+        stringResource(
+            R.string.transfers_status_progress,
+            status,
+            transferSize(transfer.bytesTransferred),
+            transferSize(transfer.bytesTotal),
+        )
+    } else {
+        status
+    }
+}
+
+@Composable
+private fun transferSize(bytes: Long) =
+    android.text.format.Formatter
+        .formatShortFileSize(androidx.compose.ui.platform.LocalContext.current, bytes)
+
+private fun transferDate(timestamp: Long) =
+    java.text.DateFormat
+        .getDateTimeInstance(
+            java.text.DateFormat.MEDIUM,
+            java.text.DateFormat.SHORT,
+        ).format(java.util.Date(timestamp))

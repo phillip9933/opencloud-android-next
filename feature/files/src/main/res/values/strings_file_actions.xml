@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="deleted_files_title">Deleted files</string>
+    <string name="deleted_back">Back</string>
+    <string name="deleted_recycle_bin_title">Recycle bin</string>
+    <string name="deleted_recycle_bin_explanation">Permanently deletes items from the server.</string>
+    <string name="deleted_empty_recycle_bin">Empty recycle bin</string>
+    <string name="deleted_delete_permanently">Delete permanently</string>
+    <string name="deleted_cancel">Cancel</string>
+    <string name="deleted_ok">OK</string>
+    <string name="deleted_loading">Loading deleted files…</string>
+    <string name="deleted_empty">The recycle bin is empty.</string>
+    <string name="deleted_unsupported">Deleted files are not supported by this server.</string>
+    <string name="deleted_clear_selection">Clear selection</string>
+    <string name="deleted_select_all">Select all</string>
+    <string name="deleted_restore_selected">Restore selected</string>
+    <string name="deleted_permanently_delete_selected">Permanently delete selected</string>
+    <!-- %1$s is the original name of the deleted item. -->
+    <string name="deleted_restore_item">Restore %1$s</string>
+    <!-- %1$s is the original name of the deleted item. -->
+    <string name="deleted_permanently_delete_item">Permanently delete %1$s</string>
+    <!-- %1$d is the number of selected deleted items. -->
+    <plurals name="deleted_selection_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <!-- %1$d is the number of items being permanently deleted. -->
+    <plurals name="deleted_confirm_title">
+        <item quantity="one">Permanently delete %1$d item?</item>
+        <item quantity="other">Permanently delete %1$d items?</item>
+    </plurals>
+    <!-- Quantity selects singular or plural; no formatting arguments. -->
+    <plurals name="deleted_confirm_message">
+        <item quantity="one">This item will be removed from the server recycle bin and cannot be restored.</item>
+        <item quantity="other">These items will be removed from the server recycle bin and cannot be restored.</item>
+    </plurals>
+    <!-- %1$d is the failed item count; %2$s is the existing server or operation error detail. -->
+    <plurals name="deleted_batch_failure">
+        <item quantity="one">%1$d item could not be processed. %2$s</item>
+        <item quantity="other">%1$d items could not be processed. %2$s</item>
+    </plurals>
+    <!-- %1$s is the name of the single copied or moved item. -->
+    <string name="file_operation_choose_destination_one">Choose a destination for %1$s</string>
+    <!-- %1$d is the number of items being copied or moved. -->
+    <plurals name="file_operation_choose_destination_many">
+        <item quantity="one">Choose a destination for %1$d item</item>
+        <item quantity="other">Choose a destination for %1$d items</item>
+    </plurals>
+    <string name="file_operation_move_here">Move here</string>
+    <string name="file_operation_copy_here">Copy here</string>
+    <string name="file_operation_cancel">Cancel</string>
+    <!-- %1$s is the source item's displayed file name. -->
+    <string name="file_operation_verifying">Verifying %1$s…</string>
+    <string name="file_operation_check_again">Check again</string>
+    <string name="file_operation_dismiss">Dismiss</string>
+</resources>

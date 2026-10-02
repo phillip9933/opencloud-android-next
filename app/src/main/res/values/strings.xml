@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_lock_title">OpenCloud is locked</string>
+    <string name="app_lock_setup_required">Set a device screen lock in Android settings to unlock OpenCloud.</string>
+    <string name="app_lock_unlock_biometric">Unlock OpenCloud</string>
+    <string name="app_lock_unlock_credentials">Unlock with device credentials</string>
+    <string name="app_lock_biometric_subtitle">Use biometrics or your device screen lock</string>
+    <string name="app_lock_use_device_credentials">Use device PIN or password</string>
+    <string name="app_lock_confirm_credentials">Confirm your device PIN, pattern or password.</string>
+</resources>

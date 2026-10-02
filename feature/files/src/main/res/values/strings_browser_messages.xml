@@ -1,0 +1,7 @@
+<resources>
+    <string name="browser_storage_used">%1$s used</string>
+    <string name="browser_storage_used_total">%1$s used of %2$s</string>
+    <string name="browser_direction_upload">Upload</string>
+    <string name="browser_direction_download">Download</string>
+    <string name="browser_direction_transfer">Transfer</string>
+</resources>

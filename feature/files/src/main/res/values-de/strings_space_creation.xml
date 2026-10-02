@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="space_created_refresh_pending">Der Space wurde auf dem Server erstellt, seine Details sind jedoch noch nicht verfügbar. Aktualisieren Sie „Spaces“, um es erneut zu versuchen. Wenn Sie denselben Namen erneut eingeben, wird dieser Space geprüft, statt ein weiterer erstellt.</string>
+    <string name="browser_backup_configured">Ordnersicherung eingerichtet.</string>
+    <string name="browser_preview_navigation_unavailable">Diese globale Navigationsaktion ist in der Dateibrowser-Vorschau noch nicht verfügbar.</string>
+    <string name="space_created_recovery_not_saved">Der Space wurde auf dem Server erstellt, die Wiederherstellung konnte jedoch nicht auf diesem Gerät gespeichert werden. Aktualisieren Sie „Spaces“, bevor Sie einen weiteren Space erstellen.</string>
+</resources>

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_close">Schließen</string>
+    <string name="settings_back">Zurück</string>
+    <string name="settings_appearance">Darstellung</string>
+    <string name="settings_theme">Design</string>
+    <string name="settings_change_appearance">Darstellung ändern</string>
+    <string name="settings_appearance_light">Hell</string>
+    <string name="settings_appearance_dark">Dunkel</string>
+    <string name="settings_appearance_system">Systemstandard</string>
+    <string name="settings_local_storage">Lokaler Speicher</string>
+    <string name="settings_delete_temporary_copies">Temporäre lokale Kopien löschen</string>
+    <string name="settings_temporary_copy_retention_description">Geöffnete Dateien nach einer Zeit ohne Aktivität entfernen. Offline gespeicherte Dateien bleiben erhalten.</string>
+    <string name="settings_change_copy_retention">Aufbewahrungsdauer temporärer Kopien ändern</string>
+    <string name="settings_retention_never">Nie</string>
+    <plurals name="settings_retention_hours">
+        <item quantity="one">%1$d Stunde</item>
+        <item quantity="other">%1$d Stunden</item>
+    </plurals>
+    <plurals name="settings_retention_days">
+        <item quantity="one">%1$d Tag</item>
+        <item quantity="other">%1$d Tage</item>
+    </plurals>
+    <string name="settings_backup_security">Sicherung &amp; Sicherheit</string>
+    <string name="settings_folder_camera_backup">Ordner- &amp; Kamerasicherung</string>
+    <string name="settings_manage_automatic_uploads">Automatische Uploads einrichten und verwalten</string>
+    <string name="settings_open_backup_configuration">Sicherungskonfiguration öffnen</string>
+    <string name="settings_security">Sicherheit</string>
+    <string name="settings_app_lock_other_apps">App-Sperre und Zugriff durch andere Apps</string>
+    <string name="settings_open_security_settings">Sicherheitseinstellungen öffnen</string>
+    <string name="settings_troubleshooting">Fehlerbehebung</string>
+    <string name="settings_selected">Ausgewählt</string>
+    <string name="settings_diagnostics_description">Bis zu %1$d Übertragungsergebnisse auf diesem Gerät speichern. Keine Namen oder Adressen. Beim Deaktivieren werden sie gelöscht.</string>
+    <string name="settings_view_local_diagnostics">Lokale Diagnose anzeigen</string>
+    <string name="settings_local_diagnostics">Lokale Diagnose</string>
+    <string name="settings_file_size">Dateigröße</string>
+    <string name="settings_date_modified">Änderungsdatum</string>
+    <string name="settings_file_extensions">Dateiendungen</string>
+    <string name="settings_hidden_files">Versteckte Dateien</string>
+    <string name="settings_clear_temporary_copies_now">Temporäre Kopien jetzt löschen</string>
+    <string name="settings_clear_temporary_copies_title">Temporäre Kopien löschen?</string>
+    <string name="settings_clear_temporary_copies_confirmation">Möchten Sie fortfahren? Dadurch werden temporäre Kopien aller Konten von diesem Smartphone entfernt. Offline gespeicherte Dateien, laufende Downloads und Originale in der Cloud bleiben erhalten.</string>
+    <string name="settings_clear_temporary_copies">Temporäre Kopien löschen</string>
+    <string name="settings_cancel">Abbrechen</string>
+    <string name="settings_lock_opencloud">OpenCloud sperren</string>
+    <string name="settings_lock_description_secure">Verwenden Sie die PIN, das Muster oder das Passwort Ihres Geräts. Vorschauen und Screenshots der App werden währenddessen ausgeblendet.</string>
+    <string name="settings_lock_description_insecure">Richten Sie zuerst in den Android-Einstellungen eine Bildschirmsperre für Ihr Gerät ein.</string>
+    <string name="settings_biometric_unlock">Biometrisch entsperren</string>
+    <string name="settings_biometric_description_available">Verwenden Sie den Fingerabdruck oder die unterstützte Gesichtserkennung. Als Ersatz dient die Bildschirmsperre des Geräts.</string>
+    <string name="settings_biometric_description_unavailable">Richte zuerst in den Android-Einstellungen einen unterstützten Fingerabdruck oder die Gesichtserkennung ein. Die Bildschirmsperre des Geräts bleibt verfügbar.</string>
+    <string name="settings_lock_after_leaving">App beim Verlassen sperren</string>
+    <string name="settings_lock_after_leaving_description">Die App wird immer gesperrt, wenn sich der Bildschirm deines Geräts ausschaltet.</string>
+    <string name="settings_change_lock_delay">Sperrverzögerung ändern</string>
+    <string name="settings_lock_delay_immediately">Sofort</string>
+    <plurals name="settings_lock_delay_minutes">
+        <item quantity="one">%1$d Min.</item>
+        <item quantity="other">%1$d Min.</item>
+    </plurals>
+    <string name="settings_protect_other_apps">Zugriff durch andere Apps schützen</string>
+    <string name="settings_protect_other_apps_description">Fordere Anmeldedaten des Geräts in der Android-Dateiauswahl an. Nach dem Entsperren ist der Zugriff eine Minute lang möglich. Bereits für andere Apps freigegebene Kopien können nicht zurückgerufen werden.</string>
+    <string name="settings_unlock_file_picker">Zugriff über die Dateiauswahl entsperren</string>
+    <string name="settings_diagnostics_update_failed">Die Diagnoseeinstellungen konnten nicht aktualisiert werden.</string>
+    <string name="settings_no_transfer_outcomes">Noch keine Übertragungsergebnisse gespeichert.</string>
+    <string name="settings_diagnostics_read_failed">Die lokale Diagnose konnte nicht gelesen werden.</string>
+    <plurals name="settings_temporary_copies_removed">
+        <item quantity="one">%1$d temporäre Kopie entfernt. Offline gespeicherte Dateien bleiben erhalten.</item>
+        <item quantity="other">%1$d temporäre Kopien entfernt. Offline gespeicherte Dateien bleiben erhalten.</item>
+    </plurals>
+    <string name="settings_temporary_copies_remove_failed">Einige temporäre Kopien konnten nicht entfernt werden. Bitte versuche es erneut.</string>
+</resources>

@@ -58,6 +58,7 @@ data class CreateShareRequest(
     val label: String? = null,
     val password: String? = null,
     val expirationDate: LocalDate? = null,
+    val resourceId: String? = null,
 )
 
 data class UpdateShareRequest(
@@ -69,14 +70,23 @@ data class UpdateShareRequest(
 )
 
 class OcsSharingClient(
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val json: Json = Json { ignoreUnknownKeys = true },
+    private val onPolicyUncertain: () -> Unit = {},
 ) {
+    private val client =
+        client
+            .newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+
     fun listShares(
         serverUrl: String,
         authorization: String,
         sharedWithMe: Boolean = false,
         path: String? = null,
+        resourceId: String? = null,
     ): List<RemoteShare> {
         val url =
             sharesUrl(serverUrl)
@@ -84,7 +94,8 @@ class OcsSharingClient(
                 .apply {
                     addQueryParameter("format", "json")
                     if (sharedWithMe) addQueryParameter("shared_with_me", "true")
-                    path?.let {
+                    resourceId?.let { addQueryParameter("space", it) }
+                    path?.takeIf { resourceId == null }?.let {
                         addQueryParameter("path", it)
                         addQueryParameter("reshares", "true")
                         addQueryParameter("subfiles", "false")
@@ -143,9 +154,9 @@ class OcsSharingClient(
         val body =
             FormBody
                 .Builder()
-                .add("path", value.path)
+                .apply { if (value.resourceId != null) add("space", value.resourceId) else add("path", value.path) }
                 .add("shareType", value.type.value.toString())
-                .add("shareWith", value.shareWith.orEmpty())
+                .apply { value.shareWith?.let { add("shareWith", it) } }
                 .add("permissions", value.permissions.toString())
                 .apply {
                     value.label?.takeIf(String::isNotBlank)?.let { add("name", it) }
@@ -241,16 +252,16 @@ class OcsSharingClient(
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
+                if (response.code in setOf(403, 404, 405)) onPolicyUncertain()
                 runCatching {
                     Log.e(
                         LOG_TAG,
-                        "${request.method} ${request.url.redacted()} failed with HTTP ${response.code}",
+                        "${request.method} failed with HTTP ${response.code}",
                     )
                 }
-                val safeMessage = safeOcsMessage(body)
                 throw TransferHttpException(
                     response.code,
-                    publicLinkPasswordMessage(response.code, safeMessage, body),
+                    error = publicLinkPasswordError(response.code, body),
                 )
             }
             val root = json.parseToJsonElement(body)
@@ -260,13 +271,13 @@ class OcsSharingClient(
                 runCatching {
                     Log.e(
                         LOG_TAG,
-                        "${request.method} ${request.url.redacted()} failed with OCS status $ocsStatus",
+                        "${request.method} failed with OCS status $ocsStatus",
                     )
                 }
                 val message = meta["message"]?.jsonPrimitive?.content?.take(512)
                 throw TransferHttpException(
                     ocsStatus,
-                    publicLinkPasswordMessage(ocsStatus, message, message.orEmpty()),
+                    error = publicLinkPasswordError(ocsStatus, message.orEmpty()),
                 )
             }
             root
@@ -348,27 +359,55 @@ private fun String.toExpirationMillis(): Long? =
         }.getOrNull()
     }
 
-private fun okhttp3.HttpUrl.redacted() = newBuilder().query(null).build()
-
-private fun safeOcsMessage(body: String): String? =
-    runCatching {
-        val root = Json.parseToJsonElement(body).jsonObject
-        root["ocs"]
-            ?.jsonObject
-            ?.get("meta")
-            ?.jsonObject
-            ?.get("message")
-            ?.jsonPrimitive
-            ?.content
-    }.getOrNull()?.take(512)
-
-private fun publicLinkPasswordMessage(
+private fun publicLinkPasswordError(
     statusCode: Int,
-    safeMessage: String?,
     responseText: String,
-): String? =
-    if (statusCode == 400 && responseText.contains("password", ignoreCase = true)) {
-        "This server requires a password for public links."
+): OpenCloudError =
+    if (statusCode == 400 && missingSharePassword(responseText)) {
+        OpenCloudError.PublicLinkPasswordRequired
+    } else if (statusCode == 400) {
+        val minimums = passwordMinimums(responseText)
+        val reason = if (minimums.isEmpty()) shareRejection(responseText) else ShareRejection.PASSWORD_POLICY
+        OpenCloudError.ShareRejected(reason, minimums)
     } else {
-        safeMessage
+        httpError(statusCode)
+    }
+
+private fun missingSharePassword(text: String): Boolean =
+    listOf("missing required password", "password is required", "password required").any { text.contains(it, true) }
+
+/** Keep only known character classes and bounded numeric requirements, never the response text. */
+private fun passwordMinimums(text: String): Map<PasswordCharacterClass, Int> =
+    PasswordCharacterClass.entries
+        .mapNotNull { kind ->
+            val pattern = Regex("at least ([0-9]{1,5}) ${kind.label} are required", RegexOption.IGNORE_CASE)
+            val count =
+                pattern
+                    .find(text)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toIntOrNull()
+                    ?.takeIf { it in 1..10000 }
+            count?.let { kind to it }
+        }.toMap()
+
+private fun shareRejection(responseText: String): ShareRejection =
+    when {
+        responseText.contains("password", true) -> ShareRejection.PASSWORD_POLICY
+        responseText.contains("permission", true) ||
+            responseText.contains("role", true) ||
+            responseText.contains("resharing", true) -> ShareRejection.PERMISSIONS
+        responseText.contains("space reference", true) -> ShareRejection.RESOURCE_REFERENCE
+        responseText.contains("share space root", true) -> ShareRejection.SPACE_ROOT
+        responseText.contains(
+            "datetime",
+            true,
+        ) ||
+            responseText.contains("expiration", true) -> ShareRejection.EXPIRATION
+        responseText.contains(
+            "parse form",
+            true,
+        ) ||
+            responseText.contains("shareType must", true) -> ShareRejection.REQUEST_FORMAT
+        else -> ShareRejection.UNKNOWN
     }

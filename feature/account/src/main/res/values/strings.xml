@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Account list and account removal. %1$s is the account's display name. -->
+    <string name="account_title_accounts">Accounts</string>
+    <string name="account_back">Back</string>
+    <string name="account_empty">No accounts</string>
+    <string name="account_add">Add account</string>
+    <string name="account_sign_in_another_server">Sign in to another OpenCloud server</string>
+    <string name="account_remove_accessibility">Remove %1$s</string>
+    <string name="account_remove_title">Sign out and remove account?</string>
+    <string name="account_remove_confirmation">Local files, credentials, transfers, backups, and system file-picker access for %1$s will be removed.</string>
+    <string name="account_remove">Remove</string>
+    <string name="account_cancel">Cancel</string>
+    <string name="account_ok">OK</string>
+
+    <!-- Account details. The size arguments are formatted by Android for the current locale. -->
+    <string name="account_information">Account information</string>
+    <string name="account_refresh_accessibility">Refresh account</string>
+    <string name="account_profile_picture">Profile picture</string>
+    <string name="account_profile_picture_formats">JPG or PNG, up to 10 MB</string>
+    <string name="account_invalid_picture">Choose a valid JPG or PNG picture up to 10 MB.</string>
+    <string name="account_upload_picture">Upload picture</string>
+    <string name="account_remove_picture_title">Remove profile picture?</string>
+    <string name="account_remove_picture_confirmation">This removes your profile picture from the server and all OpenCloud apps.</string>
+    <string name="account_username">Username</string>
+    <string name="account_first_last_name">First and last name</string>
+    <string name="account_email">Email</string>
+    <string name="account_not_loaded">Not loaded</string>
+    <string name="account_no_email">No email set</string>
+    <string name="account_storage_not_available">Not available</string>
+    <string name="account_storage_used">%1$s used</string>
+    <string name="account_storage_used_of_total">%1$s used of %2$s</string>
+    <string name="account_personal_storage">Personal storage</string>
+    <string name="account_group_memberships">Group memberships</string>
+    <string name="account_no_group_memberships">No group memberships</string>
+    <string name="account_server">Server</string>
+</resources>

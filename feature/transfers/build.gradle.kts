@@ -29,6 +29,8 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:sync"))
+    implementation(project(":core:security"))
+    implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.material3)

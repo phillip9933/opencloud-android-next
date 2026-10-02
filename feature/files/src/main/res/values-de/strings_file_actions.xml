@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="deleted_files_title">Gelöschte Dateien</string>
+    <string name="deleted_back">Zurück</string>
+    <string name="deleted_recycle_bin_title">Papierkorb</string>
+    <string name="deleted_recycle_bin_explanation">Löscht Elemente dauerhaft vom Server.</string>
+    <string name="deleted_empty_recycle_bin">Papierkorb leeren</string>
+    <string name="deleted_delete_permanently">Dauerhaft löschen</string>
+    <string name="deleted_cancel">Abbrechen</string>
+    <string name="deleted_ok">OK</string>
+    <string name="deleted_loading">Gelöschte Dateien werden geladen.</string>
+    <string name="deleted_empty">Der Papierkorb ist leer.</string>
+    <string name="deleted_unsupported">Gelöschte Dateien werden von diesem Server nicht unterstützt.</string>
+    <string name="deleted_clear_selection">Auswahl aufheben</string>
+    <string name="deleted_select_all">Alle auswählen</string>
+    <string name="deleted_restore_selected">Ausgewählte wiederherstellen</string>
+    <string name="deleted_permanently_delete_selected">Ausgewählte dauerhaft löschen</string>
+    <string name="deleted_restore_item">%1$s wiederherstellen</string>
+    <string name="deleted_permanently_delete_item">%1$s dauerhaft löschen</string>
+    <plurals name="deleted_selection_count">
+        <item quantity="one">%1$d ausgewählt</item>
+        <item quantity="other">%1$d ausgewählt</item>
+    </plurals>
+    <plurals name="deleted_confirm_title">
+        <item quantity="one">%1$d Element dauerhaft löschen?</item>
+        <item quantity="other">%1$d Elemente dauerhaft löschen?</item>
+    </plurals>
+    <plurals name="deleted_confirm_message">
+        <item quantity="one">Dieses Element wird aus dem Server-Papierkorb entfernt und kann nicht wiederhergestellt werden.</item>
+        <item quantity="other">Diese Elemente werden aus dem Server-Papierkorb entfernt und können nicht wiederhergestellt werden.</item>
+    </plurals>
+    <plurals name="deleted_batch_failure">
+        <item quantity="one">%1$d Element konnte nicht verarbeitet werden. %2$s</item>
+        <item quantity="other">%1$d Elemente konnten nicht verarbeitet werden. %2$s</item>
+    </plurals>
+    <string name="file_operation_choose_destination_one">Ziel für %1$s auswählen</string>
+    <plurals name="file_operation_choose_destination_many">
+        <item quantity="one">Ziel für %1$d Element auswählen</item>
+        <item quantity="other">Ziel für %1$d Elemente auswählen</item>
+    </plurals>
+    <string name="file_operation_move_here">Hierher verschieben</string>
+    <string name="file_operation_copy_here">Hierher kopieren</string>
+    <string name="file_operation_cancel">Abbrechen</string>
+    <string name="file_operation_verifying">%1$s wird überprüft.</string>
+    <string name="file_operation_check_again">Erneut prüfen</string>
+    <string name="file_operation_dismiss">Schließen</string>
+</resources>

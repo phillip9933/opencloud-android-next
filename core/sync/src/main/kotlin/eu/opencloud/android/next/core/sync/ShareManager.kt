@@ -32,11 +32,32 @@ class ShareManager(
     suspend fun sharesForResource(
         accountId: String,
         path: String,
+        resourceId: String? = null,
     ): List<ShareEntity> {
         val session = session(accountId)
-        return session.client.listShares(session.account.serverUrl, session.authorization, path = path).map {
-            it.toEntity(accountId, false)
-        }
+        return session.client
+            .listShares(
+                session.account.serverUrl,
+                session.authorization,
+                path = path,
+                resourceId = resourceId,
+            ).map {
+                it.toEntity(accountId, false)
+            }
+    }
+
+    suspend fun publicLink(
+        accountId: String,
+        shareId: String,
+    ): TransientPublicLink {
+        val session = session(accountId)
+        val link =
+            session.client
+                .listShares(session.account.serverUrl, session.authorization)
+                .firstOrNull { it.id == shareId && it.type == OcsShareType.PUBLIC_LINK }
+                ?.publicUrl
+        require(!link.isNullOrBlank()) { "The public link is unavailable." }
+        return TransientPublicLink(link)
     }
 
     suspend fun searchRecipients(
@@ -54,12 +75,14 @@ class ShareManager(
         val session = session(accountId)
         if (request.type == OcsShareType.PUBLIC_LINK) {
             require(session.account.publicSharingEnabled) { "Public link sharing is not supported by this server." }
+            validatePublicLinkPolicy(session.account, request.password, request.expirationDate)
         }
         val remote =
             session.client
                 .createShare(session.account.serverUrl, session.authorization, request)
-        refresh(accountId)
-        return CreatedShare(remote.toEntity(accountId, false), remote.publicUrl?.let(::TransientPublicLink))
+        val confirmed = remote.toEntity(accountId, false)
+        store.saveConfirmedShare(confirmed)
+        return CreatedShare(confirmed, remote.publicUrl?.let(::TransientPublicLink))
     }
 
     suspend fun update(
@@ -68,8 +91,29 @@ class ShareManager(
         request: UpdateShareRequest,
     ) {
         val session = session(accountId)
-        session.client.updateShare(session.account.serverUrl, session.authorization, shareId, request)
-        refresh(accountId)
+        val share =
+            session.client
+                .listShares(session.account.serverUrl, session.authorization)
+                .firstOrNull { it.id == shareId }
+        requireNotNull(share) { "The share is unavailable." }
+        if (share.type == OcsShareType.PUBLIC_LINK) {
+            require(session.account.publicSharingEnabled) { "Public link sharing is not supported by this server." }
+            val expiration =
+                if (request.clearExpiration) {
+                    null
+                } else {
+                    request.expirationDate
+                        ?: share.expiresAtEpochMillis?.let {
+                            java.time.Instant
+                                .ofEpochMilli(it)
+                                .atZone(java.time.ZoneOffset.UTC)
+                                .toLocalDate()
+                        }
+                }
+            validatePublicLinkPolicy(session.account, request.password, expiration, updating = true)
+        }
+        val updated = session.client.updateShare(session.account.serverUrl, session.authorization, shareId, request)
+        store.saveConfirmedShare(updated.toEntity(accountId, false))
     }
 
     suspend fun revoke(
@@ -83,10 +127,18 @@ class ShareManager(
 
     private suspend fun session(accountId: String): ShareSession {
         val account = requireNotNull(store.account(accountId)) { "The account is unavailable." }
-        require(account.sharingEnabled) { "Sharing is not supported by this server." }
         val authorization = WorkerAuthorizationProvider(context).authorization(account)
+        val capabilities = CapabilityRepository.get(context).refresh(account, authorization, store)
+        require(capabilities.sharingEnabled) { "Sharing is not supported by this server." }
+        val updatedAccount = requireNotNull(store.account(accountId)) { "The account is unavailable." }
         val http = TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl)
-        return ShareSession(account, authorization, OcsSharingClient(http))
+        return ShareSession(
+            updatedAccount,
+            authorization,
+            OcsSharingClient(http) {
+                CapabilityRepository.get(context).invalidate(accountId)
+            },
+        )
     }
 }
 

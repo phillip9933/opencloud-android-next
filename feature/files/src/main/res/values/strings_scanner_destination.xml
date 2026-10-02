@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scanner_destination_title">Choose scan destination</string>
+    <string name="scanner_destination_cancel">Cancel</string>
+    <string name="scanner_destination_spaces">Spaces</string>
+    <string name="scanner_destination_select_space">Choose a personal or project space</string>
+    <string name="scanner_destination_choose">Save in this folder</string>
+    <string name="scanner_destination_retry">Retry</string>
+    <string name="scanner_destination_all_spaces">All spaces</string>
+    <string name="scanner_destination_up">Up one folder</string>
+    <string name="scanner_destination_root">Root</string>
+    <string name="scanner_destination_locations">Personal &amp; Spaces</string>
+    <string name="scanner_destination_change">Change</string>
+    <string name="scanner_destination_root_folder">Top-level folder</string>
+    <string name="scanner_destination_personal">Your personal files</string>
+    <string name="scanner_destination_project">Project space</string>
+    <string name="scanner_destination_empty">No subfolders. You can save your scan here.</string>
+</resources>

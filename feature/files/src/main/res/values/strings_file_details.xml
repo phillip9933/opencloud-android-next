@@ -1,0 +1,41 @@
+<resources>
+    <string name="file_details_kept_offline">Kept offline</string>
+    <string name="file_details_selected_offline">Selected for offline use</string>
+    <string name="file_details_temporary_copy">Temporary local copy</string>
+    <string name="file_details_temporary_copy_short">Temporary copy</string>
+    <string name="file_details_cloud_only">Cloud only</string>
+    <string name="file_details_folder">Folder</string>
+    <string name="file_details_checking_copy">Checking local copy...</string>
+    <string name="file_details_kept_pending">Kept offline: download pending</string>
+    <string name="file_details_kept_retained">Kept offline: retained until you remove it</string>
+    <string name="file_details_temporary_never">Temporary local copy: automatic cleanup is set to Never</string>
+    <string name="file_details_now">now</string>
+    <!-- %1$s is a date/time formatted using the device locale. -->
+    <string name="file_details_after_date">after %1$s</string>
+    <!-- %1$s is localized timing: now, or after a date/time. -->
+    <string name="file_details_temporary_cleanup">Temporary local copy: eligible for cleanup %1$s. Opening it resets this timer. Android may run cleanup later.</string>
+    <string name="file_details_photo_metadata">Photo metadata (EXIF)</string>
+    <string name="file_details_no_photo_metadata">No readable EXIF metadata in this image.</string>
+    <string name="file_details_download_error">Could not download photo metadata. Check the transfer and try again.</string>
+    <string name="file_details_downloading_photo">Downloading photo...</string>
+    <string name="file_details_download_photo">Download photo to view metadata</string>
+    <string name="file_details_close">Close</string>
+    <string name="file_details_location">Location: %1$s</string>
+    <string name="file_details_type">Type: %1$s</string>
+    <string name="file_details_size">Size: %1$s</string>
+    <string name="file_details_unknown">Unknown</string>
+    <string name="file_details_modified">Modified: %1$s</string>
+    <string name="file_details_exif_taken">Taken</string>
+    <string name="file_details_exif_make">Camera make</string>
+    <string name="file_details_exif_model">Camera model</string>
+    <string name="file_details_exif_width">Width</string>
+    <string name="file_details_exif_height">Height</string>
+    <string name="file_details_exif_exposure">Exposure (seconds)</string>
+    <string name="file_details_exif_aperture">Aperture</string>
+    <string name="file_details_exif_iso">ISO</string>
+    <string name="file_details_exif_focal_length">Focal length</string>
+    <!-- %1$s is the localized field label; %2$s is unmodified EXIF metadata. -->
+    <string name="file_details_exif_value">%1$s: %2$s</string>
+    <!-- %1$s and %2$s are latitude/longitude strings, preserving their existing precision. -->
+    <string name="file_details_exif_gps">GPS: %1$s, %2$s</string>
+</resources>

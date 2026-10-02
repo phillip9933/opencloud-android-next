@@ -77,6 +77,28 @@ class OcsSharingClientTest {
         assertEquals("DELETE", revoke.method)
     }
 
+    @Test fun `sharing a discovered resource uses its space reference without a legacy home path`() {
+        server.enqueue(ok(singleShare(shareType = 3)))
+        client.createShare(
+            baseUrl(),
+            "Bearer token",
+            CreateShareRequest(
+                path = "/nested/Plan.pdf",
+                type = OcsShareType.PUBLIC_LINK,
+                resourceId = "storage\$space!file",
+            ),
+        )
+        val body = server.takeRequest().body.readUtf8()
+        assertTrue(body.contains("space=storage%24space%21file"))
+        assertFalse(body.contains("path="))
+        assertFalse(body.contains("shareWith="))
+        server.enqueue(ok(shareList()))
+        client.listShares(baseUrl(), "Bearer token", path = "/Plan.pdf", resourceId = "storage\$space!file")
+        val url = server.takeRequest().requestUrl!!
+        assertEquals("storage\$space!file", url.queryParameter("space"))
+        assertEquals(null, url.queryParameter("path"))
+    }
+
     @Test fun `searches users and groups and keeps exact matches first`() {
         server.enqueue(
             ok(
@@ -103,7 +125,7 @@ class OcsSharingClientTest {
             }
 
         assertEquals(403, error.statusCode)
-        assertTrue(error.message.orEmpty().contains("Permission denied"))
+        assertEquals("Access was denied.", error.message)
         assertFalse(error.message.orEmpty().contains("secret-token"))
         assertFalse(error.message.orEmpty().contains("private.example"))
     }
@@ -121,7 +143,7 @@ class OcsSharingClientTest {
             }
 
         assertEquals(400, error.statusCode)
-        assertEquals("HTTP 400: This server requires a password for public links.", error.message)
+        assertEquals("This server requires a password for public links.", error.message)
     }
 
     @Test fun `OCS 400 password rejection returns public link guidance`() {
@@ -141,7 +163,7 @@ class OcsSharingClientTest {
             }
 
         assertEquals(400, error.statusCode)
-        assertEquals("HTTP 400: This server requires a password for public links.", error.message)
+        assertEquals("This server requires a password for public links.", error.message)
     }
 
     private fun assertOcsHeaders(request: okhttp3.mockwebserver.RecordedRequest) {
@@ -149,6 +171,71 @@ class OcsSharingClientTest {
         assertEquals("true", request.getHeader("OCS-APIREQUEST"))
         assertEquals("application/json", request.getHeader("Accept"))
         assertTrue(request.getHeader("X-Request-ID").orEmpty().isNotBlank())
+    }
+
+    @Test fun `sharing rejections expose safe categories rather than raw server details`() {
+        val cases =
+            mapOf(
+                "could not parse space reference" to ShareRejection.RESOURCE_REFERENCE,
+                "Can not share space root" to ShareRejection.SPACE_ROOT,
+                "Could not create permission from permission key" to ShareRejection.PERMISSIONS,
+                "Password too short" to ShareRejection.PASSWORD_POLICY,
+                "invalid datetime format" to ShareRejection.EXPIRATION,
+                "unrecognized response https://secret.invalid/token" to ShareRejection.UNKNOWN,
+            )
+        cases.forEach { (message, reason) ->
+            server.enqueue(MockResponse().setResponseCode(400).setBody(message))
+            val error =
+                assertThrows(TransferHttpException::class.java) {
+                    client.createShare(baseUrl(), "Bearer token", CreateShareRequest("/file", OcsShareType.PUBLIC_LINK))
+                }
+            assertEquals(OpenCloudError.ShareRejected(reason), error.error)
+            assertFalse(error.message.orEmpty().contains("secret.invalid"))
+        }
+    }
+
+    @Test fun `server password minimum errors without password keyword become safe actionable guidance`() {
+        val message =
+            "At least 12 characters are required\\n" +
+                "at least 1 uppercase letters are required\\n" +
+                "at least 2 numbers are required\\n" +
+                "at least 1 special characters are required !secret-value"
+        listOf(400, 200).forEach { httpStatus ->
+            server.enqueue(
+                MockResponse().setResponseCode(httpStatus).setBody(
+                    """{"ocs":{"meta":{"statuscode":400,"message":"$message"},"data":[]}}""",
+                ),
+            )
+            val error =
+                assertThrows(TransferHttpException::class.java) {
+                    client.createShare(baseUrl(), "Bearer token", CreateShareRequest("/file", OcsShareType.PUBLIC_LINK))
+                }
+            val rejection = error.error as OpenCloudError.ShareRejected
+            assertEquals(ShareRejection.PASSWORD_POLICY, rejection.reason)
+            assertEquals(12, rejection.passwordMinimums[PasswordCharacterClass.LENGTH])
+            assertEquals(1, rejection.passwordMinimums[PasswordCharacterClass.UPPERCASE])
+            assertEquals(2, rejection.passwordMinimums[PasswordCharacterClass.DIGITS])
+            assertEquals(1, rejection.passwordMinimums[PasswordCharacterClass.SPECIAL])
+            assertTrue(error.message.orEmpty().contains("at least 1 uppercase letters"))
+            assertFalse(error.message.orEmpty().contains("secret-value"))
+        }
+    }
+
+    @Test fun `password strength rules must not be mistaken for missing password`() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(
+                    400,
+                ).setBody("Password validation: at least 1 lowercase letters are required"),
+        )
+        val error =
+            assertThrows(TransferHttpException::class.java) {
+                client.createShare(baseUrl(), "Bearer token", CreateShareRequest("/file", OcsShareType.PUBLIC_LINK))
+            }
+        assertEquals(
+            OpenCloudError.ShareRejected(ShareRejection.PASSWORD_POLICY, mapOf(PasswordCharacterClass.LOWERCASE to 1)),
+            error.error,
+        )
     }
 
     private fun baseUrl() = server.url("/").toString()

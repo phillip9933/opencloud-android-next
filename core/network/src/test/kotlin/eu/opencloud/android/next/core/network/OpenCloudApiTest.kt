@@ -18,12 +18,49 @@ class OpenCloudApiTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        api = OpenCloudApi(OkHttpClient())
+        api = OpenCloudApi(OkHttpClient(), endpoints = EndpointPolicy(allowLoopbackHttp = true))
     }
 
     @After
     fun tearDown() {
         server.shutdown()
+    }
+
+    @Test
+    fun `issuer mismatch is rejected before credentials can be sent`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"issuer":"https://unexpected.example","authorization_endpoint":"https://unexpected.example/auth","token_endpoint":"https://unexpected.example/token"}""",
+            ),
+        )
+        org.junit.Assert.assertThrows(OpenCloudException::class.java) {
+            api.oidcDiscovery(server.url("/").toString(), null)
+        }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `invalid grant produces controlled reauthentication without response text`() {
+        server.enqueue(
+            MockResponse().setResponseCode(400).setBody(
+                """{"error":"invalid_grant","error_description":"private refresh token"}""",
+            ),
+        )
+        val configuration =
+            eu.opencloud.android.next.core.model.auth.OidcConfiguration(
+                server.url("/").toString(),
+                server.url("authorize").toString(),
+                server.url("token").toString(),
+                null,
+                "registered",
+                emptyList(),
+            )
+        val failure =
+            org.junit.Assert.assertThrows(
+                OpenCloudException::class.java,
+            ) { api.refresh(configuration, "secret") }
+        assertEquals(OpenCloudError.AuthenticationRequired, failure.error)
+        assertFalse(failure.toString().contains("private"))
     }
 
     @Test
@@ -49,6 +86,34 @@ class OpenCloudApiTest {
         assertEquals("https://issuer.example", metadata?.issuer)
         assertEquals("mobile-client", metadata?.clientId)
         assertEquals(listOf("openid", "profile"), metadata?.scopes)
+    }
+
+    @Test fun `standard webfinger issuer on a separate origin is used for discovery`() {
+        MockWebServer().use { identity ->
+            val issuer = identity.url("/").toString()
+            server.enqueue(MockResponse().setBody("{}"))
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"links":[{"rel":"http://openid.net/specs/connect/1.0/issuer","href":"$issuer"}]}""",
+                ),
+            )
+            identity.enqueue(
+                MockResponse().setBody(
+                    """{"issuer":"$issuer","authorization_endpoint":"${issuer}authorize","token_endpoint":"${issuer}token"}""",
+                ),
+            )
+            val discovered = api.discover(server.url("/").toString())
+            val metadata = requireNotNull(api.webFinger(discovered.canonicalServerUrl))
+            val configuration = api.oidcDiscovery(requireNotNull(metadata.issuer), metadata)
+            assertEquals(issuer, configuration.issuer)
+            assertEquals("${issuer}authorize", configuration.authorizationEndpoint)
+            server.takeRequest()
+            assertEquals(
+                "http://openid.net/specs/connect/1.0/issuer",
+                server.takeRequest().requestUrl?.queryParameter("rel"),
+            )
+            assertEquals("/.well-known/openid-configuration", identity.takeRequest().path)
+        }
     }
 
     @Test
@@ -88,7 +153,7 @@ class OpenCloudApiTest {
 
         assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
         assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
-        assertTrue(api.capabilities(baseUrl, "Bearer token").trashSupported)
+        assertFalse(api.capabilities(baseUrl, "Bearer token").trashSupported)
     }
 
     @Test
@@ -112,7 +177,9 @@ class OpenCloudApiTest {
         server.enqueue(MockResponse().setResponseCode(200).setBody("not-json"))
 
         assertFalse(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
-        assertFalse(api.capabilities(baseUrl, "Bearer token").sharingEnabled)
+        org.junit.Assert.assertThrows(OpenCloudException::class.java) {
+            api.capabilities(baseUrl, "Bearer token")
+        }
     }
 
     @Test
@@ -137,16 +204,16 @@ class OpenCloudApiTest {
         val authorizationCodeRequest = server.takeRequest().body.readUtf8()
         val refreshRequest = server.takeRequest().body.readUtf8()
         assertTrue(authorizationCodeRequest.contains("grant_type=authorization_code"))
-        assertTrue(authorizationCodeRequest.contains("client_id=OpenCloudAndroid"))
+        assertTrue(authorizationCodeRequest.contains("client_id=server-advertised-client"))
         assertTrue(refreshRequest.contains("grant_type=refresh_token"))
-        assertTrue(refreshRequest.contains("client_id=OpenCloudAndroid"))
+        assertTrue(refreshRequest.contains("client_id=server-advertised-client"))
     }
 
     private fun userResponse() =
         """{"ocs":{"data":{"id":"alice","display-name":"Alice","email":"alice@example.test"}}}"""
 
     private fun capabilitiesResponse(trashbin: String = "\"1.0\"") =
-        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"dav":{"reports":["search-files"],"trashbin":$trashbin},"files":{"tus":{"enabled":true}},"files_sharing":{"api_enabled":true,"public":{"enabled":true,"password":{"enforced":true},"expire_date":{"enabled":true,"days":30,"enforced":false}}},"spaces":{"enabled":true}}}}}"""
+        """{"ocs":{"data":{"version":{"string":"7.4.0"},"capabilities":{"dav":{"reports":["search-files"],"trashbin":$trashbin},"files":{"tus_support":{"version":"1.0.0","resumable":"1.0.0"}},"files_sharing":{"api_enabled":true,"public":{"enabled":true,"password":{"enforced":true},"expire_date":{"enabled":true,"days":30,"enforced":false}}},"spaces":{"enabled":true}}}}}"""
 
     private fun ocisCapabilitiesResponse() =
         """{"ocs":{"data":{"version":{"string":"7.2.0"},"capabilities":{"files_sharing":{"api":{"api_enabled":1},"public":{"api_enabled":"true","password":{"enforced":false},"expire_date":{"enabled":true,"days":14}}}}}}}"""

@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
-import android.provider.DocumentsContract
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.ListenableWorker
@@ -18,9 +17,13 @@ import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.core.network.LibreGraphSpacesClient
+import eu.opencloud.android.next.core.network.OpenCloudError
 import eu.opencloud.android.next.core.network.RemoteDiscoveryClient
+import eu.opencloud.android.next.core.network.safeMessage
+import eu.opencloud.android.next.core.network.toOpenCloudError
 import eu.opencloud.android.next.core.security.TlsPolicy
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 
@@ -30,6 +33,7 @@ class AccountDiscoveryWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
+            var favoriteRemaining = -1
             runCatching {
                 val store = store()
                 val accountId = requireNotNull(inputData.getString(ACCOUNT_ID))
@@ -37,6 +41,7 @@ class AccountDiscoveryWorker(
                 val httpClient = httpClient(account.serverUrl)
                 val remote = RemoteDiscoveryClient(httpClient)
                 val authorization = WorkerAuthorizationProvider(applicationContext).authorization(account)
+                CapabilityRepository.get(applicationContext).refresh(account, authorization, store)
                 val spaces =
                     SpaceRepository(store, LibreGraphSpacesClient(httpClient)).synchronize(
                         account.id,
@@ -46,11 +51,49 @@ class AccountDiscoveryWorker(
                 spaces.filterNot { it.isDeleted || it.isDisabled }.forEach { space ->
                     refreshFolder(FolderRefresh(store, remote, account.id, space, null, "/", authorization))
                 }
-            }.fold(onSuccess = { Result.success() }, onFailure = { discoveryFailure("Account discovery", it) })
+                store.account(account.id)?.remoteSearchUrl?.let { endpoint ->
+                    val token = store.beginSnapshot(account.id)
+                    val roots =
+                        spaces.filterNot { it.isDeleted || it.isDisabled }.associate {
+                            it.driveId to
+                                webDavRoot(it)
+                        }
+                    val rawFavorites =
+                        eu.opencloud.android.next.core.network
+                            .FavoriteSnapshotClient(httpClient)
+                            .locations(endpoint, authorization, roots)
+                    val exclusionDao = FileBrowserDatabase.create(applicationContext).vaultExclusionDao()
+                    val exclusionSnapshot = exclusionDao.allForAccount(account.id)
+                    val favorites = filterFavoriteLocations(account.id, rawFavorites, exclusionSnapshot)
+                    favoriteRemaining =
+                        FavoriteHydrator(
+                            store,
+                            isVaultExcluded = { owner, spaceId, path ->
+                                exclusionDao.denies(owner, spaceId, path)
+                            },
+                            currentExclusions = exclusionDao::allForAccount,
+                        ) { spaceId, parentId, path ->
+                            val space = requireNotNull(spaces.find { it.driveId == spaceId })
+                            refreshFolder(
+                                FolderRefresh(store, remote, account.id, space, parentId, path, authorization),
+                            )
+                        }.hydrate(account.id, favorites)
+                    if (!store.replaceFavoriteSnapshot(account.id, favorites.mapValues { it.value.keys }, token)) {
+                        throw SupersededDiscovery()
+                    }
+                }
+            }.fold(
+                onSuccess = { Result.success(workDataOf(FAVORITE_REMAINING to favoriteRemaining)) },
+                onFailure = { discoveryFailure("Account discovery", it) },
+            ).also {
+                schedulePendingExcludedCache(applicationContext)
+                scheduleSharedDownloadCleanup(applicationContext)
+            }
         }
 
     companion object {
         const val ACCOUNT_ID = "accountId"
+        const val FAVORITE_REMAINING = "favoriteRemainingUpperBound"
     }
 }
 
@@ -60,6 +103,8 @@ class FolderDiscoveryWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
+            val revision = inputData.getString(REVISION)
+            if (revision != null && store().pendingDiscovery(revision) == null) return@withContext Result.success()
             runCatching {
                 val store = store()
                 val accountId = requireNotNull(inputData.getString(ACCOUNT_ID))
@@ -79,13 +124,16 @@ class FolderDiscoveryWorker(
                         WorkerAuthorizationProvider(applicationContext).authorization(account),
                     ),
                 )
+                if (revision != null) store.acknowledgeDiscovery(revision)
             }.fold(onSuccess = { Result.success() }, onFailure = { discoveryFailure("Folder discovery", it) })
+                .also { schedulePendingExcludedCache(applicationContext) }
         }
 
     companion object {
         const val ACCOUNT_ID = "accountId"
         const val SPACE_ID = "spaceId"
         const val FOLDER_ID = "folderId"
+        const val REVISION = "confirmedDiscoveryRevision"
     }
 }
 
@@ -97,51 +145,23 @@ class OfflineSyncWorker(
         withContext(Dispatchers.IO) {
             runCatching {
                 val store = store()
-                val manager = TransferManager(applicationContext, store)
-                val roots =
-                    inputData.getString(RESOURCE_ID)?.let { id ->
-                        val accountId = requireNotNull(inputData.getString(ACCOUNT_ID))
-                        val spaceId = requireNotNull(inputData.getString(SPACE_ID))
-                        listOf(requireNotNull(store.resource(accountId, spaceId, id)))
-                    } ?: store.offlinePinnedResources()
-                roots.forEach { root -> syncOffline(root, store, manager) }
-            }.fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+                val queue =
+                    eu.opencloud.android.next.core.database.OfflineTraversalStore(
+                        FileBrowserDatabase.create(applicationContext),
+                    )
+                val resourceId = inputData.getString(RESOURCE_ID)
+                if (resourceId != null) {
+                    val accountId = requireNotNull(inputData.getString(ACCOUNT_ID))
+                    val spaceId = requireNotNull(inputData.getString(SPACE_ID))
+                    store.resource(accountId, spaceId, resourceId)?.let { root ->
+                        queue.startIfSelected(root)?.let { scheduleOfflineTraversal(applicationContext, it.id) }
+                    }
+                } else {
+                    scheduleOfflineMaintenance(applicationContext)
+                }
+                reconcileOfflineTraversals(applicationContext)
+            }.fold(onSuccess = { Result.success() }, onFailure = { discoveryFailure("Background synchronization", it) })
         }
-
-    private suspend fun syncOffline(
-        root: ResourceEntity,
-        store: FileBrowserStore,
-        manager: TransferManager,
-    ) {
-        store.setOfflinePinned(root, true)
-        if (root.kind == ResourceKind.FILE) {
-            manager.enqueueDownload(root, true)
-            return
-        }
-        val account = requireNotNull(store.account(root.accountId))
-        val space = requireNotNull(store.space(root.accountId, root.spaceId))
-        val client = remote(account.serverUrl)
-        val authorization = WorkerAuthorizationProvider(applicationContext).authorization(account)
-
-        suspend fun recurse(folder: ResourceEntity) {
-            refreshFolder(
-                FolderRefresh(
-                    store,
-                    client,
-                    folder.accountId,
-                    space,
-                    folder.remoteId,
-                    folder.path,
-                    authorization,
-                ),
-            )
-            store.children(folder.accountId, folder.spaceId, folder.remoteId).forEach { child ->
-                store.setOfflinePinned(child, true)
-                if (child.kind == ResourceKind.FOLDER) recurse(child) else manager.enqueueDownload(child, true)
-            }
-        }
-        recurse(root)
-    }
 
     companion object {
         const val ACCOUNT_ID = "accountId"
@@ -160,8 +180,15 @@ class FolderBackupScanWorker(
                 val store = store()
                 val manager = TransferManager(applicationContext, store)
                 val now = System.currentTimeMillis()
-                store.enabledBackups().forEach { backup -> scan(backup, now, manager, store) }
-            }.fold(onSuccess = { Result.success() }, onFailure = { Result.retry() })
+                var firstFailure: Throwable? = null
+                store.enabledBackups().forEach { backup ->
+                    runCatching { scan(backup, now, manager, store) }.onFailure {
+                        it.toOpenCloudError() // Preserve cancellation before continuing another pair.
+                        if (firstFailure == null) firstFailure = it
+                    }
+                }
+                firstFailure?.let { throw it }
+            }.fold(onSuccess = { Result.success() }, onFailure = { discoveryFailure("Background synchronization", it) })
         }
 
     private suspend fun scan(
@@ -180,55 +207,43 @@ class FolderBackupScanWorker(
         ) {
             return
         }
-        val safeTime = now - WRITE_SAFETY_BUFFER_MS
-        queryTree(Uri.parse(backup.sourceTreeUri))
-            .filter { document ->
-                document.modified in backup.lastSafeScanEpochMillis until safeTime &&
-                    (backup.mediaType == "ALL" || document.mimeType.startsWith(backup.mediaType.lowercase() + "/"))
-            }.forEach { document ->
+        val inventory = BackupInventory(applicationContext, backup.id)
+        val active = store.activeTransfers(backup.accountId)
+        manager.ensureBackupDestination(backup.accountId, backup.spaceId, backup.destinationPath)
+        val coroutine = kotlinx.coroutines.currentCoroutineContext()
+        val documents =
+            queryBackupTree(applicationContext, Uri.parse(backup.sourceTreeUri)) { coroutine.ensureActive() }
+        documents.forEach { document ->
+            coroutine.ensureActive()
+            val selected = backup.mediaType == "ALL" || document.mimeType.startsWith(backup.mediaType.lowercase() + "/")
+            if (!selected) return@forEach
+            val signature =
+                backupSignature(document.size, document.modified, { coroutine.ensureActive() }) {
+                    openUploadSource(applicationContext, document.uri)
+                }
+            val parent = backupDestination(backup, document)
+            val receipt = backupReceiptKey(backup, document)
+            val destination = "${parent.trimEnd('/')}/${document.name}"
+            val busy =
+                active.any { it.blocksBackupScan(backup.spaceId, document.uri.toString(), destination) }
+            if (!busy &&
+                inventory.needsUpload(receipt, signature) &&
+                inventory.stable(receipt, signature, document.modified, now)
+            ) {
                 manager.enqueueUpload(
                     backup.accountId,
                     backup.spaceId,
-                    backup.destinationPath,
+                    parent,
                     document.uri,
-                    backup.deleteAfterUpload,
+                    backup,
                 )
-            }
-        store.saveBackup(backup.copy(lastSafeScanEpochMillis = safeTime))
-    }
-
-    private fun queryTree(treeUri: Uri): List<LocalDocument> {
-        val resolver = applicationContext.contentResolver
-        val rootId = DocumentsContract.getTreeDocumentId(treeUri)
-        val result = mutableListOf<LocalDocument>()
-
-        fun visit(documentId: String) {
-            val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
-            resolver.query(children, PROJECTION, null, null, null)?.use { cursor ->
-                val rows = mutableListOf<Triple<String, String, Long>>()
-                while (cursor.moveToNext()) {
-                    rows +=
-                        Triple(cursor.getString(0), cursor.getString(2).orEmpty(), cursor.getLong(3))
-                }
-                rows.forEach { (id, mime, modified) ->
-                    if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                        visit(id)
-                    } else {
-                        result +=
-                            LocalDocument(DocumentsContract.buildDocumentUriUsingTree(treeUri, id), mime, modified)
-                    }
-                }
+                inventory.queued(receipt, signature)
             }
         }
-        visit(rootId)
-        return result
+        eu.opencloud.android.next.core.database
+            .BackupScanStore(FileBrowserDatabase.create(applicationContext))
+            .complete(backup, now)
     }
-
-    private data class LocalDocument(
-        val uri: Uri,
-        val mimeType: String,
-        val modified: Long,
-    )
 
     private fun isUnmetered(): Boolean {
         val manager = applicationContext.getSystemService(ConnectivityManager::class.java)
@@ -237,36 +252,41 @@ class FolderBackupScanWorker(
     }
 
     private fun isCharging(): Boolean = applicationContext.getSystemService(BatteryManager::class.java).isCharging
-
-    companion object {
-        private const val WRITE_SAFETY_BUFFER_MS = 10_000L
-        private val PROJECTION =
-            arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
-            )
-    }
 }
 
 internal object BackupExecutionPolicy {
     fun canRun(
-        debug: Boolean,
+        @Suppress("UNUSED_PARAMETER") debug: Boolean,
         wifiOnly: Boolean,
         chargingOnly: Boolean,
         unmetered: Boolean,
         charging: Boolean,
-    ): Boolean = debug || ((!wifiOnly || unmetered) && (!chargingOnly || charging))
+    ): Boolean = (!wifiOnly || unmetered) && (!chargingOnly || charging)
 }
 
 private fun CoroutineWorker.discoveryFailure(
     operation: String,
     throwable: Throwable,
 ): ListenableWorker.Result {
-    val message = throwable.message ?: throwable::class.java.simpleName
-    Log.e("OpenCloudSync", "$operation failed: $message", throwable)
-    return ListenableWorker.Result.failure(workDataOf(DISCOVERY_ERROR to message))
+    if (throwable is Error) throw throwable
+    if (throwable is SupersededDiscovery) {
+        return if (runAttemptCount < 5) {
+            ListenableWorker.Result.retry()
+        } else {
+            ListenableWorker.Result.failure(
+                workDataOf(
+                    DISCOVERY_ERROR to "Another update interrupted this refresh. Pull down to refresh again.",
+                ),
+            )
+        }
+    }
+    val failure = throwable.toOpenCloudError()
+    Log.e("OpenCloudSync", "$operation failed: ${failure.diagnosticCode()}")
+    return if (failure == OpenCloudError.Connectivity && runAttemptCount < 5) {
+        ListenableWorker.Result.retry()
+    } else {
+        ListenableWorker.Result.failure(workDataOf(DISCOVERY_ERROR to failure.safeMessage()))
+    }
 }
 
 const val DISCOVERY_ERROR = "discoveryError"
@@ -278,7 +298,7 @@ private fun CoroutineWorker.remote(serverUrl: String) = RemoteDiscoveryClient(ht
 private fun CoroutineWorker.httpClient(serverUrl: String) =
     TlsPolicy(applicationContext).applyTo(OkHttpClient.Builder().build(), serverUrl)
 
-private data class FolderRefresh(
+internal data class FolderRefresh(
     val store: FileBrowserStore,
     val client: RemoteDiscoveryClient,
     val accountId: String,
@@ -288,11 +308,13 @@ private data class FolderRefresh(
     val authorization: String,
 )
 
-private suspend fun refreshFolder(request: FolderRefresh) {
-    val root = requireNotNull(request.space.rootWebDavUrl) { "The space WebDAV URL is unavailable." }
+internal suspend fun refreshFolder(request: FolderRefresh) {
+    val root = webDavRoot(request.space)
+    val token = request.store.beginFolderSnapshot(request.accountId, request.space.driveId, request.parentId)
     val now = System.currentTimeMillis()
+    val snapshot = request.client.folderSnapshot(root, request.path, request.authorization)
     val resources =
-        request.client.folder(root, request.path, request.authorization).map {
+        snapshot.resources.map {
             ResourceEntity(
                 request.accountId,
                 request.space.driveId,
@@ -309,5 +331,17 @@ private suspend fun refreshFolder(request: FolderRefresh) {
                 isFavorite = it.favorite,
             )
         }
-    request.store.replaceFolderSnapshot(request.accountId, request.space.driveId, request.parentId, resources)
+    if (!request.store.replaceDiscoveredFolderSnapshot(
+            request.accountId,
+            request.space.driveId,
+            request.parentId,
+            eu.opencloud.android.next.core.database
+                .FolderSnapshot(resources, snapshot.excludedVaultPaths),
+            token,
+        )
+    ) {
+        throw SupersededDiscovery()
+    }
 }
+
+private class SupersededDiscovery : Exception()

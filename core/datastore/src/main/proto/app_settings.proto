@@ -14,4 +14,16 @@ message AppSettings {
   BrowserLayout browser_layout = 1;
   string active_account_id = 2;
   int32 cache_retention_days = 3;
+  bool local_diagnostics_enabled = 4;
+  enum Appearance {
+    SYSTEM = 0;
+    LIGHT = 1;
+    DARK = 2;
+  }
+  Appearance appearance = 5;
+  int32 temporary_copy_retention_hours = 6;
+  bool hide_file_size = 7;
+  bool hide_modified_date = 8;
+  bool hide_file_extensions = 9;
+  bool show_hidden_files = 10;
 }

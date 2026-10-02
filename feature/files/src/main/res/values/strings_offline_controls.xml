@@ -1,0 +1,16 @@
+<resources>
+    <string name="offline_local_space_used">Local space used: %1$s</string>
+    <string name="offline_filter_all">All</string>
+    <string name="offline_filter_temporary">Temporary</string>
+    <string name="offline_filter_pinned">Kept offline</string>
+    <!-- Two independently pluralized counts, folders first and files second. -->
+    <string name="browser_folder_summary">%1$s · %2$s</string>
+    <plurals name="browser_folder_count">
+        <item quantity="one">%1$d folder</item>
+        <item quantity="other">%1$d folders</item>
+    </plurals>
+    <plurals name="browser_file_count">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+</resources>

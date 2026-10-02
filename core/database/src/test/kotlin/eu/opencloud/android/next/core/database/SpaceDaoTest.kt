@@ -30,6 +30,47 @@ class SpaceDaoTest {
     fun tearDown() = database.close()
 
     @Test
+    fun `unimplemented remote mutations never change cached resources or spaces`() =
+        runTest {
+            val store = FileBrowserStore(database)
+            val originalSpace = space("account", "project", "Project")
+            dao.upsertAll(listOf(originalSpace))
+            val original =
+                ResourceEntity(
+                    "account",
+                    "project",
+                    "file",
+                    null,
+                    "/before",
+                    "before",
+                    eu.opencloud.android.next.core.model.ResourceKind.FILE,
+                    null,
+                    5,
+                    null,
+                    0,
+                    0,
+                )
+            store.replaceFolderSnapshot("account", "project", null, listOf(original))
+            val actions: List<suspend () -> Unit> =
+                listOf(
+                    { store.rename("account", "project", "file", "after") },
+                    { store.move("account", "project", "file", null) },
+                    { store.copy("account", "project", "file", null) },
+                    { store.createSpace("account", "Invented") },
+                )
+            actions.forEach { action ->
+                try {
+                    action()
+                    org.junit.Assert.fail("A server operation must confirm this mutation")
+                } catch (_: IllegalStateException) {
+                    assertEquals(original, store.resource("account", "project", "file"))
+                    assertEquals(listOf(original), store.children("account", "project", null))
+                    assertEquals(listOf(originalSpace), store.spaces("account"))
+                }
+            }
+        }
+
+    @Test
     fun `spaces are stored per account with graph metadata`() =
         runTest {
             dao.upsertAll(

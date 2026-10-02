@@ -11,6 +11,13 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            name = "OfflineScannerRelease"
+            url = uri(rootDir.resolve(".gradle/open-android-doc-scanner-0.1.0-rc11/maven"))
+            content {
+                includeGroup("dev.offlinescan")
+            }
+        }
     }
 }
 
@@ -33,3 +40,4 @@ include(":feature:transfers")
 include(":feature:settings")
 include(":feature:account")
 include(":feature:shares")
+include(":feature:spaces")

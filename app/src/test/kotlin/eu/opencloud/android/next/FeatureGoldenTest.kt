@@ -2,16 +2,20 @@ package eu.opencloud.android.next
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.ShareEntity
+import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.database.TransferDirection
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
@@ -31,14 +35,19 @@ import eu.opencloud.android.next.feature.shares.ResourceSharesScreen
 import eu.opencloud.android.next.feature.shares.ShareCategory
 import eu.opencloud.android.next.feature.shares.SharesScreen
 import eu.opencloud.android.next.feature.shares.SharesUiState
+import eu.opencloud.android.next.feature.spaces.SpacesScreen
+import eu.opencloud.android.next.feature.spaces.SpacesUiState
 import eu.opencloud.android.next.feature.transfers.TransfersScreen
 import eu.opencloud.android.next.feature.transfers.TransfersUiState
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w360dp-h800dp")
 class FeatureGoldenTest {
@@ -69,6 +78,65 @@ class FeatureGoldenTest {
 
     @Test fun transfersEmpty_matchesGolden() = captureTransfers(TransfersUiState(), "transfers_empty")
 
+    @Test
+    fun retryingTransfer_exposesPerTransferRetryAction() {
+        renderTransfers(
+            TransfersUiState(
+                active = listOf(transfer(TransferFixture("retry", "Retrying.xlsx", TransferState.RETRY, 0, 80))),
+            ),
+        )
+
+        composeRule.onNodeWithContentDescription("Retry").assertIsDisplayed()
+    }
+
+    @Test fun spacesEmpty_matchesGolden() =
+        capture("spaces_empty") {
+            SpacesScreen(SpacesUiState(loading = false), onOpenSpace = {})
+        }
+
+    @Test fun spacesLoading_matchesGolden() =
+        capture("spaces_loading") {
+            SpacesScreen(SpacesUiState(loading = true), onOpenSpace = {})
+        }
+
+    @Test fun spacesPopulated_matchesGolden() =
+        capture("spaces_populated") {
+            SpacesScreen(
+                state =
+                    SpacesUiState(
+                        loading = false,
+                        spaces =
+                            listOf(
+                                space("personal", "Personal", "Your private files", "Alice", 64, 36),
+                                space("mars", "Project Mars", "Mission planning and research", "Engineering", 72, 28),
+                                space("brand", "Brand assets", null, "Design team", 18, 82),
+                            ),
+                    ),
+                onOpenSpace = {},
+            )
+        }
+
+    @Test
+    fun spacesSelection_emitsDriveId() {
+        var selectedSpaceId: String? = null
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                SpacesScreen(
+                    state =
+                        SpacesUiState(
+                            loading = false,
+                            spaces = listOf(space("mars", "Project Mars", null, "Engineering", 72, 28)),
+                        ),
+                    onOpenSpace = { selectedSpaceId = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Open Space Project Mars").performClick()
+
+        assertEquals("mars", selectedSpaceId)
+    }
+
     @Test fun deletedFiles_matchesGolden() =
         capture("deleted_files") {
             DeletedFilesScreen(
@@ -96,6 +164,53 @@ class FeatureGoldenTest {
     @Test fun deletedFilesUnsupported_matchesGolden() =
         capture("deleted_files_unsupported") {
             DeletedFilesScreen(DeletedFilesUiState(supported = false), {}, {}, {}, {}, {})
+        }
+
+    @Test fun trashBulkActionsKeepSpaceIdentityAndRequireDeleteConfirmation() {
+        val resources =
+            listOf(
+                RemoteTrashResource("same", "one", "First.pdf", "/First.pdf", false, 0, 1024),
+                RemoteTrashResource("same", "two", "Second.pdf", "/Second.pdf", false, 0, 2048),
+            )
+        var restored = emptyList<RemoteTrashResource>()
+        var deleted = emptyList<RemoteTrashResource>()
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                DeletedFilesScreen(
+                    DeletedFilesUiState(resources = resources),
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    onRestoreMany = { restored = it },
+                    onDeleteMany = { deleted = it },
+                )
+            }
+        }
+        composeRule.onNodeWithText("Select all").performClick()
+        composeRule.onNodeWithContentDescription("Restore selected").performClick()
+        assertEquals(resources, restored)
+        composeRule.onNodeWithContentDescription("Permanently delete selected").performClick()
+        assertEquals(emptyList<RemoteTrashResource>(), deleted)
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.onNodeWithText("Clear selection").performClick()
+        composeRule.onNodeWithText("Empty recycle bin").performClick()
+        assertEquals(emptyList<RemoteTrashResource>(), deleted)
+        composeRule.onNodeWithText("Delete permanently").performClick()
+        assertEquals(resources, deleted)
+    }
+
+    @Test fun darkSettings_matchesGolden() =
+        capture("settings_dark") {
+            OpenCloudTheme(darkTheme = true) {
+                SettingsScreen(
+                    UserSettings(appearance = eu.opencloud.android.next.core.datastore.Appearance.DARK),
+                    {},
+                    {},
+                    {},
+                )
+            }
         }
 
     @Test fun settings_matchesGolden() =
@@ -171,6 +286,34 @@ class FeatureGoldenTest {
             )
         }
 
+    @Test fun shareDetailsShowsResourceAndScope_matchesGolden() {
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                SharesScreen(
+                    state =
+                        SharesUiState(
+                            category = ShareCategory.PUBLIC,
+                            shares =
+                                listOf(
+                                    share("folder-link", 3, "Design review", "/Projects/Campaign", 1, folder = true),
+                                ),
+                        ),
+                    onNavigateBack = {},
+                    onCategory = {},
+                    onRefresh = {},
+                    onUpdatePermissions = { _, _ -> },
+                    onRevoke = {},
+                    onDismissNotice = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Details").performClick()
+        composeRule.onNodeWithText("Share name").assertIsDisplayed()
+        composeRule.onNodeWithText("/Projects/Campaign").assertIsDisplayed()
+        composeRule.onNodeWithText("Expires: No expiration").assertIsDisplayed()
+        composeRule.onRoot().captureRoboImage(snapshotPath("share_details"), featureRoborazziOptions())
+    }
+
     @Test fun shareSheet_matchesGolden() {
         composeRule.activity.setContent {
             OpenCloudTheme {
@@ -213,6 +356,38 @@ class FeatureGoldenTest {
             filePath = snapshotPath("share_sheet"),
             roborazziOptions = featureRoborazziOptions(),
         )
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "w360dp-h400dp")
+    fun publicLinkControlsRemainReachableInShortViewport() {
+        var createdPermissions: Int? = null
+        composeRule.activity.setContent {
+            OpenCloudTheme {
+                ResourceSharesScreen(
+                    state =
+                        SharesUiState(
+                            account = sharingAccount(),
+                            resource = resource("roadmap", "Roadmap.pdf", ResourceKind.FILE, "/Projects/Roadmap.pdf"),
+                        ),
+                    onNavigateBack = {},
+                    onSearch = {},
+                    onCreateRecipient = { _, _ -> },
+                    onCreatePublic = { _, _, _, permissions -> createdPermissions = permissions },
+                    onUpdatePermissions = { _, _ -> },
+                    onRevoke = {},
+                    onDismissNotice = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Create public link", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText("Password (required)").performScrollTo().performTextInput("Example?Case123")
+        composeRule.onNodeWithText("View and download").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Create link", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onRoot().captureRoboImage(snapshotPath("public_link_short_viewport"), featureRoborazziOptions())
+        composeRule.onNodeWithText("View and edit").performScrollTo().performClick()
+        composeRule.onNodeWithText("Create link", substring = true).performScrollTo().performClick()
+        check(createdPermissions == 3)
     }
 
     @Test fun transfersActive_matchesGolden() =
@@ -384,7 +559,31 @@ class FeatureGoldenTest {
             publicLinkExpirationDays = 30,
         )
 
-    private fun snapshotPath(fileName: String) = "src/test/snapshots/images/$fileName.png"
+    @Suppress("LongParameterList") // Named fixture fields make visual scenarios readable.
+    private fun space(
+        id: String,
+        name: String,
+        description: String?,
+        ownerName: String,
+        used: Long,
+        remaining: Long,
+    ) = SpaceEntity(
+        accountId = "account",
+        driveId = id,
+        name = name,
+        type = if (id == "personal") "personal" else "project",
+        description = description,
+        ownerName = ownerName,
+        rootId = "$id-root",
+        rootWebDavUrl = "https://cloud.example/dav/spaces/$id",
+        rootETag = null,
+        quotaBytes = used + remaining,
+        quotaUsedBytes = used,
+        quotaRemainingBytes = remaining,
+        quotaState = "normal",
+    )
+
+    private fun snapshotPath(fileName: String) = "src/test/snapshots/rendered/$fileName.png"
 
     private fun failedTransfersState() =
         TransfersUiState(

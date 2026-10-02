@@ -1,6 +1,8 @@
 package eu.opencloud.android.next.core.designsystem.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -57,6 +59,17 @@ val LocalOpenCloudExtendedColors =
     }
 
 object OpenCloudDimensions {
+    val DocumentPreviewHeight = 180.dp
+    val WordmarkWidth = 170.dp
+    val WordmarkHeight = 35.dp
+    val ProfilePictureSize = 112.dp
+    val CompactMenuRowHeight = 44.dp
+    val PersonalIndicatorWidth = 74.dp
+    val PersonalIndicatorHeight = 42.dp
+    val PersonalCrownWidth = 80.dp
+    val PersonalNavigationSize = 44.dp
+    val PersonalNavigationIconSize = 34.dp
+    val DrawerMaxWidth = 280.dp
     val Zero = 0.dp
     val SpacingXxs = 4.dp
     val SpacingXs = 8.dp
@@ -134,16 +147,36 @@ private val OpenCloudTypography =
 
 @Composable
 @Suppress("FunctionNaming", "ktlint:standard:function-naming")
-fun OpenCloudTheme(content: @Composable () -> Unit) {
+fun OpenCloudTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
+    val colors =
+        if (darkTheme) {
+            darkColorScheme(
+                primary = Color(0xFF8AD3E3),
+                onPrimary = Color(0xFF003640),
+                primaryContainer = Color(0xFF004E5D),
+                onPrimaryContainer = Color(0xFFB0ECFA),
+                secondary = Color(0xFFB1CBD0),
+                secondaryContainer = Color(0xFF324B50),
+                background = Color(0xFF101416),
+                surface = Color(0xFF101416),
+                surfaceContainer = Color(0xFF1C2022),
+                onSurface = Color(0xFFE0E3E5),
+            )
+        } else {
+            OpenCloudLightColorScheme
+        }
     androidx.compose.runtime.CompositionLocalProvider(
         LocalOpenCloudExtendedColors provides
             OpenCloudExtendedColors(
-                chrome = OpenCloudColor.Chrome,
-                onChrome = OpenCloudColor.OnChrome,
+                chrome = if (darkTheme) colors.surface else OpenCloudColor.Chrome,
+                onChrome = if (darkTheme) colors.onSurface else OpenCloudColor.OnChrome,
             ),
     ) {
         MaterialTheme(
-            colorScheme = OpenCloudLightColorScheme,
+            colorScheme = colors,
             typography = OpenCloudTypography,
             content = content,
         )

@@ -56,7 +56,7 @@ class GraphFavoriteClientTest {
         )
     }
 
-    @Test fun `favorite failure propagates graph response body`() {
+    @Test fun `favorite failure redacts graph response body`() {
         server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"favorite denied"}"""))
 
         val exception =
@@ -65,7 +65,7 @@ class GraphFavoriteClientTest {
             }
 
         assertEquals(403, exception.statusCode)
-        assertTrue(exception.message.orEmpty().contains("favorite denied"))
+        assertEquals("Access was denied.", exception.message)
     }
 
     private fun assertGraphHeaders(request: okhttp3.mockwebserver.RecordedRequest) {

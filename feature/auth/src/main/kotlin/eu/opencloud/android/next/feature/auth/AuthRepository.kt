@@ -3,15 +3,14 @@ package eu.opencloud.android.next.feature.auth
 import eu.opencloud.android.next.core.model.auth.Account
 import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.AuthenticationType
-import eu.opencloud.android.next.core.model.auth.OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID
+import eu.opencloud.android.next.core.model.auth.NEXT_OIDC_REDIRECT_URI
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
 import eu.opencloud.android.next.core.model.auth.PkceRequest
 import eu.opencloud.android.next.core.model.auth.ServerCapabilities
 import eu.opencloud.android.next.core.model.auth.UserProfile
 import eu.opencloud.android.next.core.network.OpenCloudApi
+import eu.opencloud.android.next.core.security.AccountSessions
 import eu.opencloud.android.next.core.security.CredentialStore
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -20,16 +19,26 @@ import java.util.Base64
 class AuthRepository(
     private val api: OpenCloudApi,
     private val credentialStore: CredentialStore,
+    private val sessions: AccountSessions = AccountSessions(credentialStore),
 ) {
-    private val refreshMutex = Mutex()
+    private val registrations = ClientRegistrationResolver(api, credentialStore)
 
-    fun discover(serverInput: String): DiscoveryResult =
+    fun discover(
+        serverInput: String,
+        staticClientId: String? = null,
+    ): DiscoveryResult =
         api.discover(serverInput).let { discovery ->
             val metadata = api.webFinger(discovery.canonicalServerUrl)
             val oidc =
-                runCatching {
-                    api.oidcDiscovery(metadata?.issuer ?: discovery.canonicalServerUrl, metadata)
-                }.getOrNull()
+                try {
+                    registrations.resolve(
+                        discovery.canonicalServerUrl,
+                        api.oidcDiscovery(metadata?.issuer ?: discovery.canonicalServerUrl, metadata),
+                        staticClientId,
+                    )
+                } catch (failure: eu.opencloud.android.next.core.network.TransferHttpException) {
+                    if (failure.statusCode == 404 && metadata?.issuer == null) null else throw failure
+                }
             DiscoveryResult(discovery.canonicalServerUrl, oidc)
         }
 
@@ -65,7 +74,8 @@ class AuthRepository(
                 .toHttpUrl()
                 .newBuilder()
                 .addQueryParameter("response_type", "code")
-                .addQueryParameter("client_id", OPEN_CLOUD_ANDROID_OIDC_CLIENT_ID)
+                .addQueryParameter("prompt", "login")
+                .addQueryParameter("client_id", requireNotNull(configuration.clientId))
                 .addQueryParameter("redirect_uri", REDIRECT_URI)
                 .addQueryParameter("scope", configuration.scopes.joinToString(" "))
                 .addQueryParameter("state", state)
@@ -82,7 +92,16 @@ class AuthRepository(
         code: String,
         verifier: String,
     ): AuthenticatedSession {
-        val tokens = api.exchangeCode(configuration, code, REDIRECT_URI, verifier)
+        val registration = registrations.bindingForSession(serverUrl, configuration)
+        val tokens =
+            try {
+                api.exchangeCode(configuration, code, REDIRECT_URI, verifier)
+            } catch (failure: eu.opencloud.android.next.core.network.OpenCloudException) {
+                if (failure.error == eu.opencloud.android.next.core.network.OpenCloudError.ClientRegistrationRequired) {
+                    credentialStore.invalidateClientRegistration(registration)
+                }
+                throw failure
+            }
         val profile = api.bearerProfile(serverUrl, tokens.accessToken)
         val account =
             Account(
@@ -92,7 +111,7 @@ class AuthRepository(
                 profile.displayName,
                 AuthenticationType.OIDC,
             )
-        credentialStore.saveTokens(account.id, tokens)
+        sessions.save(account.id, tokens, registration)
         return AuthenticatedSession(
             account,
             profile,
@@ -104,26 +123,9 @@ class AuthRepository(
     suspend fun refreshIfNeeded(
         account: Account,
         configuration: OidcConfiguration,
-    ): AuthTokens? =
-        refreshMutex.withLock {
-            val current = credentialStore.readTokens(account.id) ?: return null
-            if (current.expiresAtEpochSeconds >
-                (System.currentTimeMillis() / 1000) + REFRESH_SKEW_SECONDS
-            ) {
-                return current
-            }
-            val refreshToken = current.refreshToken ?: return null
-            api
-                .refresh(configuration, refreshToken)
-                .let { refreshed ->
-                    if (refreshed.refreshToken ==
-                        null
-                    ) {
-                        refreshed.copy(refreshToken = refreshToken)
-                    } else {
-                        refreshed
-                    }
-                }.also { refreshed -> credentialStore.saveTokens(account.id, refreshed) }
+    ): AuthTokens =
+        sessions.tokens(account.id) { current ->
+            api.refresh(configuration, requireNotNull(current.refreshToken))
         }
 
     private fun accountId(
@@ -137,8 +139,7 @@ class AuthRepository(
         }
 
     private companion object {
-        const val REDIRECT_URI = "eu.opencloud.android.next://oauth"
-        const val REFRESH_SKEW_SECONDS = 60L
+        const val REDIRECT_URI = NEXT_OIDC_REDIRECT_URI
     }
 }
 

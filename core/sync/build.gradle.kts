@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -42,12 +43,13 @@ dependencies {
     implementation(project(":core:security"))
     implementation(project(":core:datastore"))
     implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.room.runtime)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.serialization.json)
     implementation(libs.okhttp)
     testImplementation(libs.junit)
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
-    testImplementation(libs.androidx.room.runtime)
     testImplementation(libs.robolectric)
 }

@@ -34,6 +34,14 @@ data class ServerCapabilities(
     val publicLinkExpirationSupported: Boolean = false,
     val publicLinkExpirationEnforced: Boolean = false,
     val publicLinkExpirationDays: Int? = null,
+    val appProviders: List<ServerAppProvider> = emptyList(),
+)
+
+/** Advertised endpoints only; consumers must validate them before sending credentials. */
+data class ServerAppProvider(
+    val appsUrl: String,
+    val openWebUrl: String?,
+    val openUrl: String? = null,
 )
 
 data class OidcConfiguration(

@@ -14,11 +14,14 @@ android {
             .toInt()
 
     defaultConfig {
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk =
             libs.versions.minSdk
                 .get()
                 .toInt()
     }
+
+    testOptions { unitTests.isIncludeAndroidResources = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -33,6 +36,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:security"))
+    implementation(project(":core:ui"))
     implementation(project(":core:database"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
@@ -40,6 +45,7 @@ dependencies {
     implementation(project(":core:sync"))
     implementation(project(":core:datastore"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.webkit)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.material3)
@@ -50,5 +56,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
+    implementation(libs.offline.scanner.compose)
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.room.runtime)
+    testImplementation(libs.robolectric)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }

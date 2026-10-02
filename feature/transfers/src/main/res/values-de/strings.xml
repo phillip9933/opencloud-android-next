@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="document_edits_title">Änderungen wiederherstellen</string>
+    <string name="document_edits_warning">Nicht abgeschlossene Änderungen sind möglicherweise unvollständig. Exportieren Sie eine Kopie und prüfen Sie sie, bevor Sie sie hochladen.</string>
+    <string name="document_edits_empty">Keine gespeicherten Änderungen zur Wiederherstellung.</string>
+    <string name="document_edits_refresh">Aktualisieren</string>
+    <string name="document_edits_close">Schließen</string>
+    <string name="document_edits_discard_title">Lokale Änderung verwerfen?</string>
+    <string name="document_edits_discard_confirmation">Nicht gespeicherte Änderungen an %1$s werden entfernt. Die Datei in der Cloud bleibt unverändert.</string>
+    <string name="document_edits_discard_action">Änderung verwerfen</string>
+    <string name="document_edits_cancel">Abbrechen</string>
+    <string name="document_edits_open_in_editor">In einem Editor öffnen</string>
+    <string name="document_edits_needs_review">Prüfung erforderlich</string>
+    <string name="document_edits_save_pending">Speichern ausstehend – zum erneuten Versuch aktualisieren</string>
+    <string name="document_edits_save_queued">Speichern vorgemerkt – Fortschritt unter „Uploads“ prüfen</string>
+    <string name="document_edits_export_copy">Kopie exportieren</string>
+    <string name="document_edits_discard">Verwerfen</string>
+    <string name="document_edits_recovery_copy_exported">Wiederherstellungskopie exportiert. Die Datei in der Cloud bleibt unverändert.</string>
+    <string name="document_edits_action_failed">Diese Aktion konnte nicht abgeschlossen werden. Entsperren Sie die App und versuchen Sie es erneut.</string>
+    <plurals name="document_edits_unreadable_records">
+        <item quantity="one">%1$d Entwurfseintrag konnte nicht gelesen werden. Die zugehörigen Dateien wurden beibehalten.</item>
+        <item quantity="other">%1$d Entwurfseinträge konnten nicht gelesen werden. Die zugehörigen Dateien wurden beibehalten.</item>
+    </plurals>
+    <!-- Uploads screen labels and actions. -->
+    <string name="transfers_title">Uploads</string>
+    <string name="transfers_back">Zurück</string>
+    <string name="transfers_recover_edits">Änderungen wiederherstellen</string>
+    <string name="transfers_upload_files">Dateien hochladen</string>
+    <string name="transfers_actions_description">Aktionen für Übertragungen</string>
+    <string name="transfers_retry_all_failed">Alle fehlgeschlagenen erneut versuchen</string>
+    <string name="transfers_clear_all">Alle entfernen</string>
+    <string name="transfers_active_queued">Aktiv und vorgemerkt</string>
+    <string name="transfers_needs_attention">Aktion erforderlich</string>
+    <string name="transfers_history">Verlauf</string>
+    <string name="transfers_action_title">Übertragungsaktion</string>
+    <string name="transfers_action_failed">Übertragungsaktion fehlgeschlagen.</string>
+    <string name="transfers_ok">OK</string>
+    <string name="transfers_clear_all_title">Alle Übertragungen entfernen?</string>
+    <string name="transfers_clear_all_confirmation">Aktive Vorgänge werden abgebrochen und die gesamte Übertragungsliste wird entfernt.</string>
+    <string name="transfers_cancel">Abbrechen</string>
+    <string name="transfers_empty_title">Keine Übertragungen</string>
+    <string name="transfers_empty_description">Uploads und Downloads erscheinen hier.</string>
+    <string name="transfers_replace">Ersetzen</string>
+    <string name="transfers_keep_both">Beide behalten</string>
+    <string name="transfers_retry">Erneut versuchen</string>
+    <string name="transfers_cancel_transfer">Übertragung abbrechen</string>
+    <!-- The value is the remote space and destination path; it may be empty when unavailable. -->
+    <string name="transfers_destination_upload">Nach: %1$s</string>
+    <string name="transfers_destination_download">Von: %1$s</string>
+    <!-- Each value is a date and time formatted for the current locale. -->
+    <string name="transfers_started">Gestartet %1$s</string>
+    <string name="transfers_completed">Abgeschlossen %1$s</string>
+    <string name="transfers_updated">Aktualisiert %1$s</string>
+    <!-- Transfer status labels. -->
+    <string name="transfers_preparing">Übertragung wird vorbereitet</string>
+    <string name="transfers_verifying">Übertragung wird überprüft</string>
+    <string name="transfers_transferring">Wird übertragen</string>
+    <string name="transfers_status_queued">Vorgemerkt</string>
+    <string name="transfers_status_retry">Erneuter Versuch</string>
+    <string name="transfers_status_conflict">Konflikt</string>
+    <string name="transfers_status_succeeded">Erfolgreich</string>
+    <string name="transfers_status_failed">Fehlgeschlagen</string>
+    <string name="transfers_status_cancelled">Abgebrochen</string>
+    <!-- %1$s is the localized transfer status; %2$s and %3$s are formatted transferred and total byte sizes. -->
+    <string name="transfers_status_progress">%1$s • %2$s / %3$s</string>
+    <!-- %1$d is the failed transfer count; %2$d is the number of transfers selected for retry. -->
+    <plurals name="transfers_retry_failures">
+        <item quantity="one">%1$d von %2$d fehlgeschlagener Übertragung konnte nicht erneut versucht werden.</item>
+        <item quantity="other">%1$d von %2$d fehlgeschlagenen Übertragungen konnten nicht erneut versucht werden.</item>
+    </plurals>
+</resources>

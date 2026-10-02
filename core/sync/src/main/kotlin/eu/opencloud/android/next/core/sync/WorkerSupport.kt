@@ -23,31 +23,35 @@ class WorkerAuthorizationProvider(
             val username = credentials.readBasicUsername(account.id) ?: account.userId
             return Credentials.basic(username, requireNotNull(credentials.readBasicPassword(account.id)))
         }
-        val current =
-            requireNotNull(credentials.readTokens(account.id)) { "Sign in again to continue background work." }
         val usable =
-            if (current.expiresAtEpochSeconds > nowSeconds() + REFRESH_SKEW_SECONDS) {
-                current
-            } else {
-                val endpoint = requireNotNull(account.oidcTokenEndpoint) { "The OIDC token endpoint is unavailable." }
-                val refreshToken = requireNotNull(current.refreshToken) { "Sign in again to continue background work." }
+            eu.opencloud.android.next.core.security.AccountSessions.get(context).tokens(account.id) { current ->
+                val binding =
+                    credentials.readClientRegistration("account:${account.id}")
+                        ?: throw eu.opencloud.android.next.core.network.OpenCloudException(
+                            eu.opencloud.android.next.core.network.OpenCloudError.AuthenticationRequired,
+                        )
+                if (binding.serverUrl != account.serverUrl ||
+                    binding.issuer != account.oidcIssuer ||
+                    binding.tokenEndpoint != account.oidcTokenEndpoint
+                ) {
+                    throw eu.opencloud.android.next.core.network.OpenCloudException(
+                        eu.opencloud.android.next.core.network.OpenCloudError.AuthenticationRequired,
+                    )
+                }
                 val api = OpenCloudApi(TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl))
-                val refreshed =
-                    api
-                        .refresh(
-                            OidcConfiguration(account.oidcIssuer.orEmpty(), "", endpoint, null, null, emptyList()),
-                            refreshToken,
-                        ).let { if (it.refreshToken == null) it.copy(refreshToken = refreshToken) else it }
-                credentials.saveTokens(account.id, refreshed)
-                refreshed
+                api.refresh(
+                    OidcConfiguration(
+                        binding.issuer,
+                        binding.authorizationEndpoint,
+                        binding.tokenEndpoint,
+                        null,
+                        binding.clientId,
+                        emptyList(),
+                    ),
+                    requireNotNull(current.refreshToken),
+                )
             }
         return "${usable.tokenType} ${usable.accessToken}"
-    }
-
-    private fun nowSeconds() = System.currentTimeMillis() / 1000
-
-    private companion object {
-        const val REFRESH_SKEW_SECONDS = 120L
     }
 }
 

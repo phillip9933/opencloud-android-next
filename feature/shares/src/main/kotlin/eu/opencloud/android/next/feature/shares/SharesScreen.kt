@@ -11,9 +11,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
@@ -39,6 +44,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,41 +52,38 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opencloud.android.next.core.database.AccountEntity
-import eu.opencloud.android.next.core.database.FileBrowserDatabase
-import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.ShareEntity
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
-import eu.opencloud.android.next.core.network.CreateShareRequest
 import eu.opencloud.android.next.core.network.OcsShareType
 import eu.opencloud.android.next.core.network.ShareRecipient
-import eu.opencloud.android.next.core.network.TransferHttpException
-import eu.opencloud.android.next.core.network.UpdateShareRequest
+import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.sync.ShareManager
 import eu.opencloud.android.next.core.sync.TransientPublicLink
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 enum class ShareCategory(
-    val label: String,
+    val labelRes: Int,
 ) {
-    WITH_ME("Shared with me"),
-    BY_ME("Shared by me"),
-    PUBLIC("Public links"),
+    WITH_ME(R.string.share_category_with_me),
+    BY_ME(R.string.share_category_by_me),
+    PUBLIC(R.string.share_category_public),
 }
 
 data class SharesUiState(
@@ -100,154 +103,13 @@ data class SharesUiState(
 class SharesViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
-    private val store = FileBrowserStore(FileBrowserDatabase.create(application))
-    private val manager = ShareManager(application, store)
-    private val mutableState = MutableStateFlow(SharesUiState())
-    val state = mutableState.asStateFlow()
-    private var accountId: String? = null
-
-    fun load(
-        accountId: String,
-        resource: ResourceEntity? = null,
-    ) {
-        if (this.accountId == accountId && mutableState.value.resource == resource) return
-        this.accountId = accountId
-        mutableState.value = mutableState.value.copy(resource = resource)
-        viewModelScope.launch(Dispatchers.IO) {
-            val account = store.account(accountId)
-            mutableState.value =
-                mutableState.value.copy(
-                    account = account,
-                )
-            manager.observe(accountId).collectLatest { values ->
-                mutableState.value =
-                    mutableState.value.copy(shares = values)
-            }
-        }
-        refresh()
-        resource?.let(::loadResource)
-    }
-
-    fun selectCategory(value: ShareCategory) {
-        mutableState.value = mutableState.value.copy(category = value)
-    }
-
-    fun refresh() {
-        val id = accountId ?: return
-        launchOperation { manager.refresh(id) }
-    }
-
-    fun loadResource(resource: ResourceEntity) {
-        val id = accountId ?: return
-        viewModelScope.launch {
-            mutableState.value = mutableState.value.copy(loading = true, resource = resource)
-            runCatching { withContext(Dispatchers.IO) { manager.sharesForResource(id, resource.path) } }
-                .onSuccess { mutableState.value = mutableState.value.copy(resourceShares = it, loading = false) }
-                .onFailure { fail(it) }
-        }
-    }
-
-    fun searchRecipients(query: String) {
-        val id = accountId ?: return
-        if (query.length < 2) {
-            mutableState.value = mutableState.value.copy(recipients = emptyList())
-            return
-        }
-        viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { manager.searchRecipients(id, query) } }
-                .onSuccess { mutableState.value = mutableState.value.copy(recipients = it) }
-                .onFailure(::fail)
-        }
-    }
-
-    fun createRecipientShare(
-        recipient: ShareRecipient,
-        permissions: Int,
-    ) {
-        val id = accountId ?: return
-        val resource = mutableState.value.resource ?: return
-        launchOperation("Share created.") {
-            manager.create(id, CreateShareRequest(resource.path, recipient.type, recipient.shareWith, permissions))
-            loadResource(resource)
-        }
-    }
-
-    fun createPublicLink(
-        label: String,
-        password: String?,
-        expiration: LocalDate?,
-        permissions: Int,
-    ) {
-        val id = accountId ?: return
-        val resource = mutableState.value.resource ?: return
-        launchOperation("Public link created.") {
-            val created =
-                manager.create(
-                    id,
-                    CreateShareRequest(
-                        resource.path,
-                        OcsShareType.PUBLIC_LINK,
-                        permissions = permissions,
-                        label = label,
-                        password = password,
-                        expirationDate = expiration,
-                    ),
-                )
-            mutableState.value = mutableState.value.copy(createdPublicLink = created.publicLink)
-            loadResource(resource)
-        }
-    }
-
-    fun updatePermissions(
-        share: ShareEntity,
-        permissions: Int,
-    ) {
-        val id = accountId ?: return
-        launchOperation("Permissions updated.") {
-            manager.update(id, share.remoteId, UpdateShareRequest(permissions = permissions))
-        }
-    }
-
-    fun revoke(share: ShareEntity) {
-        val id = accountId ?: return
-        launchOperation("Share revoked.") {
-            manager.revoke(id, share.remoteId)
-            mutableState.value.resource?.let(::loadResource)
-        }
-    }
-
-    fun dismissNotice() {
-        mutableState.value = mutableState.value.copy(error = null, message = null, createdPublicLink = null)
-    }
-
-    private fun launchOperation(
-        message: String? = null,
-        action: suspend () -> Unit,
-    ) {
-        viewModelScope.launch {
-            mutableState.value = mutableState.value.copy(saving = true)
-            runCatching { withContext(Dispatchers.IO) { action() } }
-                .onSuccess { mutableState.value = mutableState.value.copy(saving = false, message = message) }
-                .onFailure(::fail)
-        }
-    }
-
-    private fun fail(error: Throwable) {
-        mutableState.value =
-            mutableState.value.copy(loading = false, saving = false, error = error.toSharingMessage())
-    }
+    internal val controller =
+        SharesController(
+            viewModelScope,
+            AndroidSharesBackend(application),
+            errorMessage = { it.safeMessage(application) },
+        )
 }
-
-private fun Throwable.toSharingMessage(): String =
-    if (
-        this is TransferHttpException &&
-        statusCode == 400 &&
-        message.orEmpty().contains("password", ignoreCase = true)
-    ) {
-        "This server requires a password for public links."
-    } else {
-        message ?: "Sharing request failed."
-    }
 
 @Composable
 fun SharesRoute(
@@ -256,16 +118,16 @@ fun SharesRoute(
     modifier: Modifier = Modifier,
     viewModel: SharesViewModel = viewModel(key = "shares-$accountId"),
 ) {
-    val state by viewModel.state.collectAsState()
-    LaunchedEffect(accountId) { viewModel.load(accountId) }
+    val state by viewModel.controller.state.collectAsState()
+    LaunchedEffect(accountId) { viewModel.controller.load(accountId) }
     SharesScreen(
         state,
         onNavigateBack,
-        viewModel::selectCategory,
-        viewModel::refresh,
-        viewModel::updatePermissions,
-        viewModel::revoke,
-        viewModel::dismissNotice,
+        viewModel.controller::selectCategory,
+        viewModel.controller::refresh,
+        viewModel.controller::updatePermissions,
+        viewModel.controller::revoke,
+        viewModel.controller::dismissNotice,
         modifier,
     )
 }
@@ -274,18 +136,21 @@ fun SharesRoute(
 fun TopLevelSharesRoute(
     accountId: String,
     modifier: Modifier = Modifier,
+    onBrowseResource: ((ResourceEntity) -> Unit)? = null,
     viewModel: SharesViewModel = viewModel(key = "shares-$accountId"),
 ) {
-    val state by viewModel.state.collectAsState()
-    LaunchedEffect(accountId) { viewModel.load(accountId) }
+    val state by viewModel.controller.state.collectAsState()
+    LaunchedEffect(accountId) { viewModel.controller.load(accountId) }
     SharesContent(
         state = state,
-        onCategory = viewModel::selectCategory,
-        onRefresh = viewModel::refresh,
-        onUpdatePermissions = viewModel::updatePermissions,
-        onRevoke = viewModel::revoke,
-        onDismissNotice = viewModel::dismissNotice,
+        onCategory = viewModel.controller::selectCategory,
+        onRefresh = viewModel.controller::refresh,
+        onUpdatePermissions = viewModel.controller::updatePermissions,
+        onRevoke = viewModel.controller::revoke,
+        onDismissNotice = viewModel.controller::dismissNotice,
         modifier = modifier,
+        onBrowseResource = onBrowseResource,
+        incomingContent = { IncomingBrowserRoute(accountId) },
     )
 }
 
@@ -297,17 +162,17 @@ fun ResourceSharesRoute(
     modifier: Modifier = Modifier,
     viewModel: SharesViewModel = viewModel(key = "resource-shares-$accountId-${resource.remoteId}"),
 ) {
-    val state by viewModel.state.collectAsState()
-    LaunchedEffect(accountId, resource.remoteId) { viewModel.load(accountId, resource) }
+    val state by viewModel.controller.state.collectAsState()
+    LaunchedEffect(accountId, resource.remoteId) { viewModel.controller.load(accountId, resource) }
     ResourceSharesScreen(
         state,
         onNavigateBack,
-        viewModel::searchRecipients,
-        viewModel::createRecipientShare,
-        viewModel::createPublicLink,
-        viewModel::updatePermissions,
-        viewModel::revoke,
-        viewModel::dismissNotice,
+        viewModel.controller::searchRecipients,
+        viewModel.controller::createRecipientShare,
+        viewModel.controller::createPublicLink,
+        viewModel.controller::updatePermissions,
+        viewModel.controller::revoke,
+        viewModel.controller::dismissNotice,
         modifier,
     )
 }
@@ -329,15 +194,15 @@ fun SharesScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Shares") },
+                title = { Text(stringResource(R.string.shares_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.shares_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = onRefresh) {
-                        Icon(Icons.Default.Refresh, "Refresh shares")
+                        Icon(Icons.Default.Refresh, stringResource(R.string.shares_refresh))
                     }
                 },
             )
@@ -358,6 +223,7 @@ fun SharesScreen(
 
 @Composable
 @Suppress("LongParameterList")
+@OptIn(ExperimentalMaterial3Api::class)
 fun SharesContent(
     state: SharesUiState,
     onCategory: (ShareCategory) -> Unit,
@@ -367,6 +233,8 @@ fun SharesContent(
     onDismissNotice: () -> Unit,
     modifier: Modifier = Modifier,
     showRefreshAction: Boolean = true,
+    onBrowseResource: ((ResourceEntity) -> Unit)? = null,
+    incomingContent: (@Composable () -> Unit)? = null,
 ) {
     val visible =
         when (state.category) {
@@ -383,40 +251,57 @@ fun SharesContent(
                 }
         }
 
-    Column(modifier.fillMaxSize()) {
-        if (showRefreshAction) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                IconButton(onClick = onRefresh) {
-                    Icon(Icons.Default.Refresh, "Refresh shares")
+    if (state.category == ShareCategory.WITH_ME && incomingContent != null) {
+        Column(modifier.fillMaxSize()) {
+            ShareCategoryTabs(state.category, onCategory)
+            incomingContent()
+        }
+        return
+    }
+    PullToRefreshBox(isRefreshing = state.saving, onRefresh = onRefresh, modifier = modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            if (showRefreshAction) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(onClick = onRefresh) {
+                        Icon(Icons.Default.Refresh, stringResource(R.string.shares_refresh))
+                    }
                 }
             }
-        }
-        TabRow(selectedTabIndex = state.category.ordinal) {
-            ShareCategory.entries.forEach { category ->
-                Tab(
-                    selected = state.category == category,
-                    onClick = { onCategory(category) },
-                    text = { Text(category.label) },
-                )
+            ShareCategoryTabs(state.category, onCategory)
+            if (state.loading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (visible.isEmpty()) {
+                ShareEmpty(state.category)
+            } else {
+                ShareList(visible, onUpdatePermissions, onRevoke, onBrowseResource)
             }
-        }
-        if (state.loading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (visible.isEmpty()) {
-            ShareEmpty(state.category)
-        } else {
-            ShareList(visible, onUpdatePermissions, onRevoke)
         }
     }
     ShareNotice(state, onDismissNotice)
+}
+
+@Composable
+private fun ShareCategoryTabs(
+    selected: ShareCategory,
+    onCategory: (ShareCategory) -> Unit,
+) {
+    TabRow(selectedTabIndex = selected.ordinal) {
+        ShareCategory.entries.forEach { category ->
+            Tab(
+                selected = selected == category,
+                onClick = { onCategory(category) },
+                text = { Text(stringResource(category.labelRes)) },
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -435,10 +320,9 @@ fun ResourceSharesScreen(
     initialInviteOpen: Boolean = false,
 ) {
     val context = LocalContext.current
-    var showInvite by remember { mutableStateOf(initialInviteOpen) }
-    var showPublic by remember { mutableStateOf(false) }
+    var showInvite by rememberSaveable { mutableStateOf(initialInviteOpen) }
+    var showPublic by rememberSaveable { mutableStateOf(false) }
     val internalShares = state.resourceShares.filter { it.shareType != OcsShareType.PUBLIC_LINK.value }
-    val publicLinks = state.resourceShares.filter { it.shareType == OcsShareType.PUBLIC_LINK.value }
     val sharingEnabled = state.account?.sharingEnabled == true
     val publicSharingEnabled = sharingEnabled && state.account?.publicSharingEnabled == true
 
@@ -458,16 +342,16 @@ fun ResourceSharesScreen(
         ) {
             item {
                 Text(
-                    text = state.resource?.name ?: "Share",
+                    text = state.resource?.name ?: stringResource(R.string.share_metadata_fallback_name),
                     style = MaterialTheme.typography.headlineSmall,
                 )
             }
             item {
-                Text("Internal sharing", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.shares_internal_heading), style = MaterialTheme.typography.titleMedium)
             }
             item {
                 Text(
-                    "Share with people and groups from this OpenCloud server.",
+                    stringResource(R.string.shares_internal_description),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -479,13 +363,13 @@ fun ResourceSharesScreen(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Default.Person, null)
-                        Text(" Add people")
+                        Text(" " + stringResource(R.string.shares_add_people))
                     }
                 }
             } else {
                 item {
                     Text(
-                        "Sharing is not supported by this server.",
+                        stringResource(R.string.shares_not_supported),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -493,7 +377,7 @@ fun ResourceSharesScreen(
             if (internalShares.isEmpty()) {
                 item {
                     Text(
-                        "No people or groups have access yet.",
+                        stringResource(R.string.shares_no_internal_shares),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -502,55 +386,13 @@ fun ResourceSharesScreen(
                     ShareRow(share, onUpdatePermissions, onRevoke)
                 }
             }
-            item {
-                Text(
-                    "External sharing",
-                    modifier = Modifier.padding(top = OpenCloudDimensions.SpacingSm),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            item {
-                Text(
-                    "Create a public link for people outside this OpenCloud server.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            if (publicSharingEnabled) {
-                item {
-                    Button(
-                        onClick = {
-                            state.createdPublicLink?.let(context::copyPublicLink) ?: run { showPublic = true }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            if (state.createdPublicLink == null) Icons.Default.Link else Icons.Default.ContentCopy,
-                            null,
-                        )
-                        Text(if (state.createdPublicLink == null) " Create public link" else " Copy link")
-                    }
-                }
-            } else {
-                item {
-                    Text(
-                        "Public link sharing is not supported by this server.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (publicLinks.isEmpty()) {
-                item {
-                    Text(
-                        "No public links have been created.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                items(publicLinks, key = { "public-${it.remoteId}" }) { share ->
-                    ShareRow(share, onUpdatePermissions, onRevoke)
-                }
-            }
+            externalSharing(
+                state,
+                publicSharingEnabled,
+                { state.createdPublicLink?.let(context::copyPublicLink) ?: run { showPublic = true } },
+                onUpdatePermissions,
+                onRevoke,
+            )
             if (state.loading || state.saving) {
                 item {
                     Row(
@@ -585,14 +427,85 @@ fun ResourceSharesScreen(
     )
 }
 
+private fun androidx.compose.foundation.lazy.LazyListScope.externalSharing(
+    state: SharesUiState,
+    enabled: Boolean,
+    onCreateOrCopy: () -> Unit,
+    onUpdatePermissions: (ShareEntity, Int) -> Unit,
+    onRevoke: (ShareEntity) -> Unit,
+) {
+    val publicLinks = state.resourceShares.filter { it.shareType == OcsShareType.PUBLIC_LINK.value }
+    item {
+        Text(
+            stringResource(R.string.shares_external_heading),
+            modifier = Modifier.padding(top = OpenCloudDimensions.SpacingSm),
+            style = MaterialTheme.typography.titleMedium,
+        )
+    }
+    item {
+        Text(
+            stringResource(R.string.shares_external_description),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    if (enabled) {
+        item {
+            Button(
+                onClick = {
+                    onCreateOrCopy()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    if (state.createdPublicLink == null) Icons.Default.Link else Icons.Default.ContentCopy,
+                    null,
+                )
+                Text(
+                    " " +
+                        stringResource(
+                            if (state.createdPublicLink ==
+                                null
+                            ) {
+                                R.string.shares_create_public_link
+                            } else {
+                                R.string.shares_copy_link
+                            },
+                        ),
+                )
+            }
+        }
+    } else {
+        item {
+            Text(
+                stringResource(R.string.shares_public_not_supported),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    if (publicLinks.isEmpty()) {
+        item {
+            Text(
+                stringResource(R.string.shares_no_public_links),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    } else {
+        items(publicLinks, key = { "public-${it.remoteId}" }) { share ->
+            ShareRow(share, onUpdatePermissions, onRevoke)
+        }
+    }
+}
+
 @Composable
 private fun ShareList(
     values: List<ShareEntity>,
     onUpdatePermissions: (ShareEntity, Int) -> Unit,
     onRevoke: (ShareEntity) -> Unit,
+    onBrowseResource: ((ResourceEntity) -> Unit)?,
 ) = LazyColumn {
     items(values, key = { it.remoteId }) { share ->
-        ShareRow(share, onUpdatePermissions, onRevoke)
+        ShareRow(share, onUpdatePermissions, onRevoke, onBrowseResource)
     }
 }
 
@@ -601,14 +514,62 @@ private fun ShareRow(
     share: ShareEntity,
     onUpdatePermissions: (ShareEntity, Int) -> Unit,
     onRevoke: (ShareEntity) -> Unit,
+    onBrowseResource: ((ResourceEntity) -> Unit)? = null,
 ) {
-    var editing by remember(share.remoteId) { mutableStateOf(false) }
-    val title = share.displayName ?: share.label ?: share.shareWith ?: share.path.substringAfterLast('/')
-    val expiration = if (share.expiresAtEpochMillis != null) " • Expires" else ""
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var copying by remember { mutableStateOf(false) }
+    var copyError by remember { mutableStateOf<String?>(null) }
+    var editing by rememberSaveable(share.remoteId) { mutableStateOf(false) }
+    val title =
+        if (share.shareType == OcsShareType.PUBLIC_LINK.value) {
+            share.label?.takeIf(String::isNotBlank)
+                ?: share.path.substringAfterLast('/').ifBlank { stringResource(R.string.shares_public_link_fallback) }
+        } else {
+            share.displayName ?: share.label ?: share.shareWith ?: share.path.substringAfterLast('/')
+        }
+    val expiration =
+        if (share.expiresAtEpochMillis !=
+            null
+        ) {
+            " • ${stringResource(R.string.share_metadata_expires_short)}"
+        } else {
+            ""
+        }
+    val copyFailureMessage = stringResource(R.string.shares_copy_link_failed)
     ListItem(
+        modifier =
+            Modifier.clickable(enabled = share.shareType == OcsShareType.PUBLIC_LINK.value && !copying) {
+                copying = true
+                scope.launch {
+                    try {
+                        val link =
+                            withContext(
+                                Dispatchers.IO,
+                            ) { ShareManager(context).publicLink(share.accountId, share.remoteId) }
+                        context.copyPublicLink(link)
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        copyError = copyFailureMessage
+                    } finally {
+                        copying = false
+                    }
+                }
+            },
         headlineContent = { Text(title) },
         supportingContent = {
-            Text("${shareTypeLabel(share)} • ${permissionLabel(share.permissions)}$expiration")
+            Column {
+                Text(sharedItemSummary(share))
+                Text(
+                    stringResource(
+                        R.string.shares_row_metadata,
+                        shareTypeLabel(share),
+                        permissionLabel(share.permissions),
+                        expiration,
+                    ),
+                )
+            }
         },
         leadingContent = {
             Icon(
@@ -624,7 +585,7 @@ private fun ShareRow(
         },
         trailingContent = {
             TextButton(onClick = { editing = true }) {
-                Text("Manage")
+                Text(stringResource(R.string.shares_details))
             }
         },
     )
@@ -634,7 +595,13 @@ private fun ShareRow(
             onDismiss = { editing = false },
             onUpdate = onUpdatePermissions,
             onRevoke = onRevoke,
+            onBrowseResource = onBrowseResource,
         )
+    }
+    copyError?.let { message ->
+        AlertDialog(onDismissRequest = { copyError = null }, text = { Text(message) }, confirmButton = {
+            TextButton(onClick = { copyError = null }) { Text(stringResource(R.string.share_ok)) }
+        })
     }
 }
 
@@ -644,21 +611,39 @@ private fun ManageShareDialog(
     onDismiss: () -> Unit,
     onUpdate: (ShareEntity, Int) -> Unit,
     onRevoke: (ShareEntity) -> Unit,
+    onBrowseResource: ((ResourceEntity) -> Unit)?,
 ) {
-    var permissions by remember { mutableIntStateOf(share.permissions) }
+    var permissions by rememberSaveable { mutableIntStateOf(share.permissions) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Manage share") },
+        title = { Text(stringResource(R.string.shares_details_title)) },
         text = {
-            Column {
-                PermissionControls(permissions, share.isFolder) { permissions = it }
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
+            ) {
+                ShareResourceDetails(
+                    share,
+                    onBrowseResource?.let { browse ->
+                        { resource ->
+                            onDismiss()
+                            browse(resource)
+                        }
+                    },
+                )
+                Text(stringResource(R.string.shares_permissions), style = MaterialTheme.typography.titleSmall)
+                if (share.shareType == OcsShareType.PUBLIC_LINK.value) {
+                    PublicLinkPermissions(permissions, share.isFolder) { permissions = it }
+                } else {
+                    PermissionControls(permissions, share.isFolder) { permissions = it }
+                }
                 TextButton(
                     onClick = {
                         onRevoke(share)
                         onDismiss()
                     },
                 ) {
-                    Text("Revoke share", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.shares_revoke), color = MaterialTheme.colorScheme.error)
                 }
             }
         },
@@ -669,12 +654,12 @@ private fun ManageShareDialog(
                     onDismiss()
                 },
             ) {
-                Text("Save")
+                Text(stringResource(R.string.shares_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(stringResource(R.string.shares_cancel))
             }
         },
     )
@@ -688,14 +673,20 @@ private fun InviteSheet(
     onSearch: (String) -> Unit,
     onCreate: (ShareRecipient, Int) -> Unit,
 ) {
-    var query by remember { mutableStateOf("") }
-    var permissions by remember { mutableIntStateOf(1) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var permissions by rememberSaveable { mutableIntStateOf(1) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(OpenCloudDimensions.SpacingMd),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .verticalScroll(
+                        rememberScrollState(),
+                    ).padding(OpenCloudDimensions.SpacingMd),
             verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
         ) {
-            Text("Share with people or groups", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.shares_invite_title), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = query,
                 onValueChange = {
@@ -703,11 +694,20 @@ private fun InviteSheet(
                     onSearch(it)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search recipients") },
+                label = { Text(stringResource(R.string.shares_search_recipients)) },
             )
             PermissionControls(permissions, state.resource?.kind?.name == "FOLDER") { permissions = it }
             state.recipients.forEach { recipient ->
-                val recipientType = if (recipient.type == OcsShareType.GROUP) "Group" else "User"
+                val recipientType =
+                    stringResource(
+                        if (recipient.type ==
+                            OcsShareType.GROUP
+                        ) {
+                            R.string.shares_recipient_group
+                        } else {
+                            R.string.shares_recipient_user
+                        },
+                    )
                 ListItem(
                     headlineContent = { Text(recipient.label) },
                     supportingContent = {
@@ -737,10 +737,10 @@ private fun PublicLinkSheet(
     onDismiss: () -> Unit,
     onCreate: (String, String?, LocalDate?, Int) -> Unit,
 ) {
-    var label by remember { mutableStateOf("") }
+    var label by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var expiration by remember { mutableStateOf("") }
-    var permissions by remember { mutableIntStateOf(1) }
+    var expiration by rememberSaveable { mutableStateOf("") }
+    var permissions by rememberSaveable { mutableIntStateOf(1) }
     val expirationRequired = account?.publicLinkExpirationEnforced == true
     val expirationDate = runCatching { LocalDate.parse(expiration) }.getOrNull()
     val expirationValid = expiration.isBlank() || expirationDate?.let { !it.isBefore(LocalDate.now()) } == true
@@ -751,22 +751,28 @@ private fun PublicLinkSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(OpenCloudDimensions.SpacingMd),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .verticalScroll(
+                        rememberScrollState(),
+                    ).padding(OpenCloudDimensions.SpacingMd),
             verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
         ) {
-            Text("Create public link", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.shares_create_public_link), style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = label,
                 onValueChange = { label = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Link name (optional)") },
+                label = { Text(stringResource(R.string.shares_link_name_optional)) },
             )
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Password (required)") },
-                supportingText = { Text("This server requires public links to be password protected.") },
+                label = { Text(stringResource(R.string.shares_password_required)) },
+                supportingText = { Text(stringResource(R.string.shares_password_required_by_server)) },
                 visualTransformation = PasswordVisualTransformation(),
             )
             OutlinedTextField(
@@ -776,23 +782,25 @@ private fun PublicLinkSheet(
                 label = {
                     Text(
                         if (expirationRequired) {
-                            "Expiration YYYY-MM-DD (required)"
+                            stringResource(R.string.shares_expiration_required)
                         } else {
-                            "Expiration YYYY-MM-DD (optional)"
+                            stringResource(R.string.shares_expiration_optional)
                         },
                     )
                 },
                 supportingText = {
                     Text(
                         listOfNotNull(
-                            account?.publicLinkExpirationDays?.let { "Maximum $it days" },
-                            if (!expirationValid) "Choose today or a future date" else null,
+                            account?.publicLinkExpirationDays?.let { days ->
+                                pluralStringResource(R.plurals.shares_expiration_max_days, days, days)
+                            },
+                            if (!expirationValid) stringResource(R.string.shares_expiration_future) else null,
                         ).joinToString(" • "),
                     )
                 },
             )
-            Text("Permissions", style = MaterialTheme.typography.titleMedium)
-            PermissionControls(permissions, folder) { permissions = it }
+            Text(stringResource(R.string.shares_permissions), style = MaterialTheme.typography.titleMedium)
+            PublicLinkPermissions(permissions, folder) { permissions = it }
             Button(
                 onClick = {
                     onCreate(label, password, expirationDate, permissions)
@@ -801,7 +809,42 @@ private fun PublicLinkSheet(
                 enabled = valid,
             ) {
                 Icon(Icons.Default.ContentCopy, null)
-                Text(" Create link")
+                Text(" " + stringResource(R.string.shares_create_link))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PublicLinkPermissions(
+    value: Int,
+    folder: Boolean,
+    onChange: (Int) -> Unit,
+) {
+    val roles =
+        if (folder) {
+            listOf(
+                1 to R.string.shares_permission_view_download,
+                5 to R.string.shares_permission_view_download_upload,
+                15 to R.string.shares_permission_edit_contents,
+                4 to R.string.shares_permission_upload_only,
+            )
+        } else {
+            listOf(1 to R.string.shares_permission_view_download, 3 to R.string.shares_permission_view_edit)
+        }
+    Column {
+        roles.forEach { (permissions, labelRes) ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = OpenCloudDimensions.TouchTarget)
+                    .selectable(value == permissions, role = androidx.compose.ui.semantics.Role.RadioButton) {
+                        onChange(permissions)
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.RadioButton(selected = value == permissions, onClick = null)
+                Text(stringResource(labelRes), Modifier.padding(OpenCloudDimensions.SpacingSm))
             }
         }
     }
@@ -814,19 +857,19 @@ private fun PermissionControls(
     onChange: (Int) -> Unit,
 ) {
     Column {
-        PermissionToggle("Read", value and 1 != 0, enabled = false) {}
-        PermissionToggle("Update", value and 2 != 0) {
+        PermissionToggle(stringResource(R.string.shares_permission_read), value and 1 != 0, enabled = false) {}
+        PermissionToggle(stringResource(R.string.shares_permission_update), value and 2 != 0) {
             onChange(value.toggle(2, it) or 1)
         }
         if (folder) {
-            PermissionToggle("Create", value and 4 != 0) {
+            PermissionToggle(stringResource(R.string.shares_permission_create), value and 4 != 0) {
                 onChange(value.toggle(4, it) or 1)
             }
-            PermissionToggle("Delete", value and 8 != 0) {
+            PermissionToggle(stringResource(R.string.shares_permission_delete), value and 8 != 0) {
                 onChange(value.toggle(8, it) or 1)
             }
         }
-        PermissionToggle("Re-share", value and 16 != 0) {
+        PermissionToggle(stringResource(R.string.shares_permission_reshare), value and 16 != 0) {
             onChange(value.toggle(16, it) or 1)
         }
     }
@@ -848,21 +891,26 @@ private fun Int.toggle(
     enabled: Boolean,
 ) = if (enabled) this or flag else this and flag.inv()
 
+@Composable
 private fun shareTypeLabel(share: ShareEntity) =
     when (share.shareType) {
-        1 -> "Group"
-        3 -> "Public link"
-        else -> if (share.sharedWithMe) "Shared with you" else "User"
+        1 -> stringResource(R.string.shares_recipient_group)
+        3 -> stringResource(R.string.shares_public_link_fallback)
+        else ->
+            stringResource(
+                if (share.sharedWithMe) R.string.shares_shared_with_you else R.string.shares_recipient_user,
+            )
     }
 
-private fun permissionLabel(value: Int) =
-    buildList {
-        add("Read")
-        if (value and 2 != 0) add("Update")
-        if (value and 4 != 0) add("Create")
-        if (value and 8 != 0) add("Delete")
-        if (value and 16 != 0) add("Share")
-    }.joinToString(", ")
+@Composable
+private fun permissionLabel(value: Int): String {
+    val labels = mutableListOf(stringResource(R.string.shares_permission_read))
+    if (value and 2 != 0) labels += stringResource(R.string.shares_permission_update)
+    if (value and 4 != 0) labels += stringResource(R.string.shares_permission_create)
+    if (value and 8 != 0) labels += stringResource(R.string.shares_permission_delete)
+    if (value and 16 != 0) labels += stringResource(R.string.shares_permission_share)
+    return labels.joinToString(", ")
+}
 
 @Composable
 private fun ShareEmpty(category: ShareCategory) =
@@ -871,9 +919,9 @@ private fun ShareEmpty(category: ShareCategory) =
             Icon(Icons.Default.Share, null)
             Text(
                 when (category) {
-                    ShareCategory.WITH_ME -> "Nothing has been shared with you."
-                    ShareCategory.BY_ME -> "You have not shared any files."
-                    ShareCategory.PUBLIC -> "You have not created any public links."
+                    ShareCategory.WITH_ME -> stringResource(R.string.shares_empty_with_me)
+                    ShareCategory.BY_ME -> stringResource(R.string.shares_empty_by_me)
+                    ShareCategory.PUBLIC -> stringResource(R.string.shares_empty_public)
                 },
             )
         }
@@ -889,7 +937,19 @@ private fun ShareNotice(
     if (notice != null) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text(if (state.error != null) "Sharing" else "Done") },
+            title = {
+                Text(
+                    stringResource(
+                        if (state.error !=
+                            null
+                        ) {
+                            R.string.shares_dialog_error_title
+                        } else {
+                            R.string.shares_dialog_done_title
+                        },
+                    ),
+                )
+            },
             text = { Text(notice) },
             confirmButton = {
                 Row {
@@ -900,11 +960,11 @@ private fun ShareNotice(
                                 onDismiss()
                             },
                         ) {
-                            Text("Copy link")
+                            Text(stringResource(R.string.shares_copy_link))
                         }
                     }
                     TextButton(onClick = onDismiss) {
-                        Text("OK")
+                        Text(stringResource(R.string.share_ok))
                     }
                 }
             },
@@ -914,5 +974,5 @@ private fun ShareNotice(
 
 private fun Context.copyPublicLink(link: TransientPublicLink) {
     getSystemService(ClipboardManager::class.java)
-        .setPrimaryClip(ClipData.newPlainText("OpenCloud public link", link.valueForClipboard()))
+        .setPrimaryClip(ClipData.newPlainText(getString(R.string.shares_clipboard_label), link.valueForClipboard()))
 }

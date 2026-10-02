@@ -39,16 +39,23 @@ android {
             libs.versions.targetSdk
                 .get()
                 .toInt()
-        versionCode = 1
-        versionName = "0.1.0"
+        // The scanner SDK ships native processing for 64-bit Android only.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        versionCode = 2
+        versionName = "0.1.0-beta.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "DEV_SERVER_URL", localPropertyBuildConfigValue("dev.server.url"))
-        buildConfigField("String", "DEV_SERVER_USERNAME", localPropertyBuildConfigValue("dev.server.username"))
-        buildConfigField("String", "DEV_SERVER_PASSWORD", localPropertyBuildConfigValue("dev.server.password"))
+        buildConfigField("String", "DEV_SERVER_URL", "\"\"")
+        buildConfigField("String", "DEV_SERVER_USERNAME", "\"\"")
+        buildConfigField("String", "DEV_SERVER_PASSWORD", "\"\"")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "DEV_SERVER_URL", localPropertyBuildConfigValue("dev.server.url"))
+            buildConfigField("String", "DEV_SERVER_USERNAME", localPropertyBuildConfigValue("dev.server.username"))
+            buildConfigField("String", "DEV_SERVER_PASSWORD", localPropertyBuildConfigValue("dev.server.password"))
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -83,6 +90,8 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.fragment)
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:ui"))
@@ -99,6 +108,7 @@ dependencies {
     implementation(project(":feature:settings"))
     implementation(project(":feature:account"))
     implementation(project(":feature:shares"))
+    implementation(project(":feature:spaces"))
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.browser)
@@ -116,7 +126,9 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.okhttp)
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.room.runtime)
     testImplementation(libs.androidx.activity.compose)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.robolectric)

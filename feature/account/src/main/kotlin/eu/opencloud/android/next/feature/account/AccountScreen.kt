@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -31,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -38,7 +38,8 @@ import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.datastore.SettingsRepository
-import eu.opencloud.android.next.core.security.KeystoreCredentialStore
+import eu.opencloud.android.next.core.network.safeMessage
+import eu.opencloud.android.next.core.network.toOpenCloudError
 import eu.opencloud.android.next.core.sync.TransferManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +47,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 data class AccountUiState(
     val accounts: List<AccountEntity> = emptyList(),
@@ -61,7 +61,6 @@ class AccountViewModel(
     private val store = FileBrowserStore(FileBrowserDatabase.create(application))
     private val settings = SettingsRepository.create(application)
     private val transfers = TransferManager(application, store)
-    private val credentials = KeystoreCredentialStore(application)
     private val mutableState = MutableStateFlow(AccountUiState())
     val state = mutableState.asStateFlow()
 
@@ -99,12 +98,14 @@ class AccountViewModel(
             runCatching {
                 withContext(Dispatchers.IO) {
                     transfers.cancelAccountWork(account.id)
-                    File(
-                        getApplication<Application>().filesDir,
-                        "resources/${safePart(account.id)}",
-                    ).deleteRecursively()
-                    credentials.remove(account.id)
+                    eu.opencloud.android.next.core.security.AccountSessions
+                        .get(getApplication())
+                        .remove(account.id)
                     store.removeAccount(account.id)
+                    eu.opencloud.android.next.core.sync
+                        .clearAccountPrivateFiles(getApplication(), account.id)
+                    eu.opencloud.android.next.core.sync.AccountProfiles
+                        .clear(getApplication(), account.id)
                     val next = store.activeAccounts().firstOrNull()?.id
                     settings.setActiveAccountId(next)
                     getApplication<Application>().contentResolver.notifyChange(
@@ -118,7 +119,10 @@ class AccountViewModel(
                 onRemoved(next)
             }.onFailure {
                 mutableState.value =
-                    mutableState.value.copy(busy = false, error = it.message ?: "Account could not be removed.")
+                    mutableState.value.copy(
+                        busy = false,
+                        error = it.toOpenCloudError().safeMessage(getApplication<Application>()),
+                    )
             }
         }
     }
@@ -140,6 +144,14 @@ fun AccountRoute(
     viewModel: AccountViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var detailsId by androidx.compose.runtime.saveable
+        .rememberSaveable { mutableStateOf<String?>(null) }
+    val detailsAccount = state.accounts.firstOrNull { it.id == detailsId }
+    if (detailsAccount != null) {
+        androidx.activity.compose.BackHandler { detailsId = null }
+        AccountDetailsRoute(detailsAccount, onNavigateBack = { detailsId = null }, modifier = modifier)
+        return
+    }
     AccountScreen(
         state = state.copy(activeAccountId = state.activeAccountId ?: activeAccountId),
         onNavigateBack = onNavigateBack,
@@ -147,6 +159,7 @@ fun AccountRoute(
         onRemove = { viewModel.remove(it, onAccountRemove) },
         onAddAccount = onAddAccount,
         onDismissError = viewModel::dismissError,
+        onDetails = { detailsId = it },
         modifier = modifier,
     )
 }
@@ -162,37 +175,51 @@ fun AccountScreen(
     onAddAccount: () -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
+    onDetails: (String) -> Unit = {},
 ) {
     var confirmRemove by remember { mutableStateOf<AccountEntity?>(null) }
     Scaffold(
         modifier = modifier,
         topBar = {
             TopAppBar(title = {
-                Text("Accounts")
+                Text(stringResource(R.string.account_title_accounts))
             }, navigationIcon = {
                 IconButton(
                     onClick = onNavigateBack,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.account_back),
+                    )
+                }
             })
         },
     ) { padding ->
         if (state.accounts.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { Text("No accounts") }
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.account_empty))
+            }
         } else {
             LazyColumn(contentPadding = padding) {
                 item {
                     ListItem(
-                        headlineContent = { Text("Add account") },
-                        supportingContent = { Text("Sign in to another OpenCloud server") },
+                        headlineContent = { Text(stringResource(R.string.account_add)) },
+                        supportingContent = { Text(stringResource(R.string.account_sign_in_another_server)) },
                         leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
                         modifier = Modifier.clickable(onClick = onAddAccount),
                     )
                 }
                 items(state.accounts, key = AccountEntity::id) { account ->
                     ListItem(
+                        modifier = Modifier.clickable { onDetails(account.id) },
                         headlineContent = { Text(account.displayName) },
                         supportingContent = { Text("${account.userId} • ${account.serverUrl}") },
-                        leadingContent = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                        leadingContent = {
+                            eu.opencloud.android.next.core.ui.ProfileAvatar(
+                                account.id,
+                                name = account.displayName,
+                            )
+                        },
                         trailingContent = {
                             androidx.compose.foundation.layout.Row {
                                 RadioButton(
@@ -204,7 +231,11 @@ fun AccountScreen(
                                 }, enabled = !state.busy) {
                                     Icon(
                                         Icons.Default.Delete,
-                                        "Remove ${account.displayName}",
+                                        contentDescription =
+                                            stringResource(
+                                                R.string.account_remove_accessibility,
+                                                account.displayName,
+                                            ),
                                     )
                                 }
                             }
@@ -217,26 +248,26 @@ fun AccountScreen(
     confirmRemove?.let { account ->
         AlertDialog(
             onDismissRequest = { confirmRemove = null },
-            title = { Text("Sign out and remove account?") },
+            title = { Text(stringResource(R.string.account_remove_title)) },
             text = {
-                Text(
-                    "Local files, credentials, transfers, backups, and system file-picker access for ${account.displayName} will be removed.",
-                )
+                Text(stringResource(R.string.account_remove_confirmation, account.displayName))
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemove = null
                     onRemove(account)
-                }) { Text("Remove") }
+                }) { Text(stringResource(R.string.account_remove)) }
             },
-            dismissButton = { TextButton(onClick = { confirmRemove = null }) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = null }) { Text(stringResource(R.string.account_cancel)) }
+            },
         )
     }
     state.error?.let {
         AlertDialog(onDismissRequest = onDismissError, title = {
-            Text("Accounts")
-        }, text = { Text(it) }, confirmButton = { TextButton(onClick = onDismissError) { Text("OK") } })
+            Text(stringResource(R.string.account_title_accounts))
+        }, text = { Text(it) }, confirmButton = {
+            TextButton(onClick = onDismissError) { Text(stringResource(R.string.account_ok)) }
+        })
     }
 }
-
-private fun safePart(value: String): String = value.replace(Regex("[^A-Za-z0-9._-]"), "_")

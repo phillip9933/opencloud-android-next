@@ -32,7 +32,10 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.biometric)
     implementation(project(":core:model"))
+    implementation(project(":core:network"))
     implementation(libs.okhttp)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }

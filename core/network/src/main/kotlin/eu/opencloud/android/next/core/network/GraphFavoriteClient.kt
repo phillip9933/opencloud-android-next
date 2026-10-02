@@ -34,15 +34,14 @@ class GraphFavoriteClient(
             }
 
         client.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
                 runCatching {
                     Log.e(
                         LOG_TAG,
-                        "${request.method} ${request.url} failed with HTTP ${response.code}\n$body",
+                        "${request.method} failed with HTTP ${response.code}",
                     )
                 }
-                throw TransferHttpException(response.code, body.replace(Regex("\\s+"), " ").trim().take(512))
+                throw TransferHttpException(response.code)
             }
         }
     }

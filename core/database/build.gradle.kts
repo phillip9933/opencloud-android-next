@@ -14,6 +14,7 @@ android {
             .toInt()
 
     defaultConfig {
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk =
             libs.versions.minSdk
                 .get()
@@ -34,6 +35,7 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+    sourceSets.getByName("test").resources.srcDir("schemas")
 }
 
 ksp {
@@ -49,4 +51,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

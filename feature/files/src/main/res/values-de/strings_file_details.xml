@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="file_details_kept_offline">Offline verfügbar</string>
+    <string name="file_details_selected_offline">Für Offline-Nutzung ausgewählt</string>
+    <string name="file_details_temporary_copy">Temporäre lokale Kopie</string>
+    <string name="file_details_temporary_copy_short">Temporäre Kopie</string>
+    <string name="file_details_cloud_only">Nur in der Cloud</string>
+    <string name="file_details_folder">Ordner</string>
+    <string name="file_details_checking_copy">Lokale Kopie wird geprüft…</string>
+    <string name="file_details_kept_pending">Offline verfügbar: Download ausstehend</string>
+    <string name="file_details_kept_retained">Offline verfügbar: bleibt erhalten, bis Sie sie entfernen</string>
+    <string name="file_details_temporary_never">Temporäre lokale Kopie: automatische Bereinigung ist auf „Nie“ eingestellt</string>
+    <string name="file_details_now">jetzt</string>
+    <string name="file_details_after_date">nach %1$s</string>
+    <string name="file_details_temporary_cleanup">Temporäre lokale Kopie: kann %1$s bereinigt werden. Durch Öffnen wird der Timer zurückgesetzt. Android führt die Bereinigung möglicherweise später aus.</string>
+    <string name="file_details_photo_metadata">Fotometadaten (EXIF)</string>
+    <string name="file_details_no_photo_metadata">Dieses Bild enthält keine lesbaren EXIF-Metadaten.</string>
+    <string name="file_details_download_error">Fotometadaten konnten nicht heruntergeladen werden. Prüfen Sie die Übertragung und versuchen Sie es erneut.</string>
+    <string name="file_details_downloading_photo">Foto wird heruntergeladen…</string>
+    <string name="file_details_download_photo">Foto herunterladen, um Metadaten anzuzeigen</string>
+    <string name="file_details_close">Schließen</string>
+    <string name="file_details_location">Ort: %1$s</string>
+    <string name="file_details_type">Typ: %1$s</string>
+    <string name="file_details_size">Größe: %1$s</string>
+    <string name="file_details_unknown">Unbekannt</string>
+    <string name="file_details_modified">Geändert: %1$s</string>
+    <string name="file_details_exif_taken">Aufgenommen</string>
+    <string name="file_details_exif_make">Kamerahersteller</string>
+    <string name="file_details_exif_model">Kameramodell</string>
+    <string name="file_details_exif_width">Breite</string>
+    <string name="file_details_exif_height">Höhe</string>
+    <string name="file_details_exif_exposure">Belichtungszeit (Sekunden)</string>
+    <string name="file_details_exif_aperture">Blende</string>
+    <string name="file_details_exif_iso">ISO</string>
+    <string name="file_details_exif_focal_length">Brennweite</string>
+    <string name="file_details_exif_value">%1$s: %2$s</string>
+    <string name="file_details_exif_gps">GPS: %1$s, %2$s</string>
+</resources>

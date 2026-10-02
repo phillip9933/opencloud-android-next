@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="document_edits_title">Recover edits</string>
+    <string name="document_edits_warning">Unfinished edits may be incomplete. Export a copy to inspect it before uploading.</string>
+    <string name="document_edits_empty">No saved edits to recover.</string>
+    <string name="document_edits_refresh">Refresh</string>
+    <string name="document_edits_close">Close</string>
+    <string name="document_edits_discard_title">Discard local edit?</string>
+    <string name="document_edits_discard_confirmation">Unsaved changes to %1$s will be removed. The cloud file is unchanged.</string>
+    <string name="document_edits_discard_action">Discard edit</string>
+    <string name="document_edits_cancel">Cancel</string>
+    <string name="document_edits_open_in_editor">Open in an editor</string>
+    <string name="document_edits_needs_review">Needs review</string>
+    <string name="document_edits_save_pending">Save pending — refresh to retry</string>
+    <string name="document_edits_save_queued">Save queued — check Uploads for progress</string>
+    <string name="document_edits_export_copy">Export copy</string>
+    <string name="document_edits_discard">Discard</string>
+    <string name="document_edits_recovery_copy_exported">Recovery copy exported. The cloud file is unchanged.</string>
+    <string name="document_edits_action_failed">Could not finish this action. Unlock the app and retry.</string>
+
+    <plurals name="document_edits_unreadable_records">
+        <item quantity="one">%1$d draft record could not be read. Its files have been retained.</item>
+        <item quantity="other">%1$d draft records could not be read. Their files have been retained.</item>
+    </plurals>
+
+    <!-- Uploads screen labels and actions. -->
+    <string name="transfers_title">Uploads</string>
+    <string name="transfers_back">Back</string>
+    <string name="transfers_recover_edits">Recover edits</string>
+    <string name="transfers_upload_files">Upload files</string>
+    <string name="transfers_actions_description">Transfer actions</string>
+    <string name="transfers_retry_all_failed">Retry all failed</string>
+    <string name="transfers_clear_all">Clear all</string>
+    <string name="transfers_active_queued">Active &amp; queued</string>
+    <string name="transfers_needs_attention">Needs attention</string>
+    <string name="transfers_history">History</string>
+    <string name="transfers_action_title">Transfer action</string>
+    <string name="transfers_action_failed">Transfer action failed.</string>
+    <string name="transfers_ok">OK</string>
+    <string name="transfers_clear_all_title">Clear all transfers?</string>
+    <string name="transfers_clear_all_confirmation">Active work will be cancelled and the complete transfer list will be removed.</string>
+    <string name="transfers_cancel">Cancel</string>
+    <string name="transfers_empty_title">No transfers</string>
+    <string name="transfers_empty_description">Uploads and downloads will appear here.</string>
+    <string name="transfers_replace">Overwrite cloud copy</string>
+    <string name="transfers_keep_both">Rename new copy</string>
+    <string name="transfers_retry">Retry</string>
+    <string name="transfers_cancel_transfer">Cancel transfer</string>
+
+    <!-- The value is the remote space and destination path; it may be empty when unavailable. -->
+    <string name="transfers_destination_upload">To: %1$s</string>
+    <string name="transfers_destination_download">From: %1$s</string>
+    <!-- Each value is a date and time formatted for the current locale. -->
+    <string name="transfers_started">Started %1$s</string>
+    <string name="transfers_completed">Completed %1$s</string>
+    <string name="transfers_updated">Updated %1$s</string>
+
+    <!-- Transfer status labels. -->
+    <string name="transfers_preparing">Preparing transfer</string>
+    <string name="transfers_verifying">Verifying transfer</string>
+    <string name="transfers_transferring">Transferring</string>
+    <string name="transfers_status_queued">Queued</string>
+    <string name="transfers_status_retry">Retry</string>
+    <string name="transfers_status_conflict">Conflict</string>
+    <string name="transfers_status_succeeded">Succeeded</string>
+    <string name="transfers_status_failed">Failed</string>
+    <string name="transfers_status_cancelled">Cancelled</string>
+    <!-- %1$s is the localized transfer status; %2$s and %3$s are formatted transferred and total byte sizes. -->
+    <string name="transfers_status_progress">%1$s • %2$s / %3$s</string>
+    <!-- %1$d is the failed transfer count; %2$d is the number of transfers selected for retry. -->
+    <plurals name="transfers_retry_failures">
+        <item quantity="one">%1$d of %2$d failed transfer could not be retried.</item>
+        <item quantity="other">%1$d of %2$d failed transfers could not be retried.</item>
+    </plurals>
+</resources>

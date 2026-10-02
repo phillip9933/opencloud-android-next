@@ -34,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -89,6 +90,7 @@ class SearchViewModel(
                             remoteSupported = result.remoteSupported,
                             isRemoteLoading = result.remoteLoading,
                             remoteError = result.remoteError,
+                            remoteResultsCapped = result.remoteResultsCapped,
                         )
                 }
         }
@@ -111,14 +113,17 @@ class SearchViewModel(
 
     fun dismissActions() = showActions(null)
 
-    fun downloadForOffline(resource: ResourceEntity) =
-        runAction("Offline synchronization queued.") { transfers.makeAvailableOffline(resource) }
+    fun downloadForOffline(resource: ResourceEntity) {
+        runAction(getApplication<Application>().getString(R.string.search_offline_queued)) {
+            transfers.makeAvailableOffline(resource)
+        }
+    }
 
     fun unavailableAction() {
         mutableState.value =
             mutableState.value.copy(
                 actionResource = null,
-                message = "Open this item in Files to change its location or name.",
+                message = getApplication<Application>().getString(R.string.search_open_in_files),
             )
     }
 
@@ -136,7 +141,8 @@ class SearchViewModel(
                 .onFailure {
                     mutableState.value =
                         mutableState.value.copy(
-                            message = it.message ?: "The action failed.",
+                            message =
+                                it.message ?: getApplication<Application>().getString(R.string.search_action_failed),
                         )
                 }
         }
@@ -149,6 +155,7 @@ data class SearchUiState(
     val remoteSupported: Boolean = false,
     val isRemoteLoading: Boolean = false,
     val remoteError: String? = null,
+    val remoteResultsCapped: Boolean = false,
     val actionResource: ResourceEntity? = null,
     val message: String? = null,
 )
@@ -199,13 +206,13 @@ fun SearchScreen(
                         value = state.query,
                         onValueChange = onQueryChange,
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search files and folders") },
+                        placeholder = { Text(stringResource(R.string.search_placeholder)) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (state.query.isNotEmpty()) {
                                 IconButton(
                                     onClick = { onQueryChange("") },
-                                ) { Icon(Icons.Default.Clear, "Clear search") }
+                                ) { Icon(Icons.Default.Clear, stringResource(R.string.search_clear)) }
                             }
                         },
                         singleLine = true,
@@ -213,7 +220,10 @@ fun SearchScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.search_back),
+                        )
                     }
                 },
             )
@@ -235,9 +245,9 @@ fun SearchScreen(
     state.message?.let { message ->
         AlertDialog(
             onDismissRequest = onDismissMessage,
-            title = { Text("Search action") },
+            title = { Text(stringResource(R.string.search_action_title)) },
             text = { Text(message) },
-            confirmButton = { TextButton(onClick = onDismissMessage) { Text("OK") } },
+            confirmButton = { TextButton(onClick = onDismissMessage) { Text(stringResource(R.string.search_ok)) } },
         )
     }
 }
@@ -251,27 +261,30 @@ private fun SearchContent(
     when {
         state.query.isBlank() ->
             SearchMessage(
-                "Search OpenCloud",
-                "Results from this device appear as you type.",
+                stringResource(R.string.search_empty_title),
+                stringResource(R.string.search_empty_message),
                 modifier,
             )
         state.resources.isEmpty() && state.isRemoteLoading ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         state.resources.isEmpty() && state.remoteError != null ->
-            SearchMessage("Server search unavailable", "No on-device results were found.", modifier, offline = true)
-        state.resources.isEmpty() -> SearchMessage("No results", "Try another file or folder name.", modifier)
+            SearchMessage(
+                stringResource(R.string.search_unavailable_title),
+                stringResource(R.string.search_unavailable_message),
+                modifier,
+                offline = true,
+            )
+        state.resources.isEmpty() ->
+            SearchMessage(
+                stringResource(R.string.search_no_results_title),
+                stringResource(R.string.search_no_results_message),
+                modifier,
+            )
         else ->
             LazyColumn(modifier = modifier.fillMaxSize()) {
                 item {
-                    val status =
-                        when {
-                            state.isRemoteLoading -> "Searching server…"
-                            state.remoteError != null -> "On-device results • server unavailable"
-                            state.remoteSupported -> "On-device and server results"
-                            else -> "On-device results"
-                        }
                     Text(
-                        status,
+                        searchStatus(state),
                         Modifier.padding(OpenCloudDimensions.SpacingMd),
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -282,9 +295,7 @@ private fun SearchContent(
                         supportingContent = { Text(resource.path) },
                         leadingContent = {
                             Icon(
-                                if (resource.kind ==
-                                    ResourceKind.FOLDER
-                                ) {
+                                if (resource.kind == ResourceKind.FOLDER) {
                                     Icons.Default.Folder
                                 } else {
                                     Icons.AutoMirrored.Filled.InsertDriveFile
@@ -298,6 +309,16 @@ private fun SearchContent(
             }
     }
 }
+
+@Composable
+private fun searchStatus(state: SearchUiState): String =
+    when {
+        state.isRemoteLoading -> stringResource(R.string.search_status_loading)
+        state.remoteError != null -> stringResource(R.string.search_status_server_error)
+        state.remoteSupported && state.remoteResultsCapped -> stringResource(R.string.search_status_capped)
+        state.remoteSupported -> stringResource(R.string.search_status_combined)
+        else -> stringResource(R.string.search_status_device)
+    }
 
 @Composable
 private fun SearchMessage(

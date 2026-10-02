@@ -45,8 +45,10 @@ class TrashManager(
         accountId: String,
         resource: RemoteTrashResource,
     ) {
-        val account = requireNotNull(store.account(accountId))
-        val space = requireNotNull(store.space(accountId, resource.spaceId))
+        val account = requireNotNull(store.account(accountId)) { "The account is unavailable." }
+        val space = requireNotNull(store.space(accountId, resource.spaceId)) { "The space is unavailable." }
+        check(!space.isDisabled && !space.isDeleted) { "The space is unavailable." }
+        store.requireAllowedVaultPath(accountId, resource.spaceId, resource.originalPath, resource.folder)
         val root = requireNotNull(space.rootWebDavUrl) { "The destination WebDAV URL is unavailable." }
         val authorization = WorkerAuthorizationProvider(context).authorization(account)
         val httpClient = httpClient(account.serverUrl)
@@ -56,14 +58,18 @@ class TrashManager(
             root.childUrl(resource.originalPath),
             authorization,
         )
+        val parentPath = resource.originalPath.substringBeforeLast('/', "").ifBlank { "/" }
+        val parent = store.resourceAtPath(accountId, resource.spaceId, parentPath)
+        TransferManager(context, store).refreshFolder(accountId, resource.spaceId, parent?.remoteId)
     }
 
     suspend fun permanentlyDelete(
         accountId: String,
         resource: RemoteTrashResource,
     ) {
-        val account = requireNotNull(store.account(accountId))
-        val space = requireNotNull(store.space(accountId, resource.spaceId))
+        val account = requireNotNull(store.account(accountId)) { "The account is unavailable." }
+        val space = requireNotNull(store.space(accountId, resource.spaceId)) { "The space is unavailable." }
+        check(!space.isDisabled && !space.isDeleted) { "The space is unavailable." }
         val root = requireNotNull(space.rootWebDavUrl) { "The space WebDAV URL is unavailable." }
         val authorization = WorkerAuthorizationProvider(context).authorization(account)
         val httpClient = httpClient(account.serverUrl)

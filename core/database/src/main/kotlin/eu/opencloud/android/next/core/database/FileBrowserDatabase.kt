@@ -15,6 +15,7 @@ import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.Update
+import androidx.room.Upsert
 import androidx.room.migration.Migration
 import androidx.room.withTransaction
 import eu.opencloud.android.next.core.model.ResourceKind
@@ -28,14 +29,37 @@ import kotlinx.coroutines.flow.Flow
         SpaceEntity::class,
         ResourceEntity::class,
         TransferEntity::class,
+        TransferQueueEntry::class,
         FolderBackupEntity::class,
+        BackupReceipt::class,
         ShareEntity::class,
+        OfflineRunEntity::class,
+        OfflineNodeEntity::class,
+        FavoriteCursorEntity::class,
+        PendingDiscoveryEntity::class,
+        FileOperationEntity::class,
+        PendingPinEntity::class,
+        OperationPinEntity::class,
+        IncomingShareEntity::class,
+        IncomingShareRefresh::class,
+        SharedFolderScopeEntity::class,
+        SharedFolderEntry::class,
+        SharedFolderCachedPage::class,
+        SharedDownloadIntent::class,
+        SharedLocalFile::class,
+        SharedVaultExclusion::class,
+        ExcludedCacheEntity::class,
+        VaultExclusion::class,
     ],
-    version = 9,
+    version = 23,
     exportSchema = true,
 )
 @TypeConverters(FileBrowserConverters::class)
 abstract class FileBrowserDatabase : RoomDatabase() {
+    internal val snapshotVersions = SnapshotVersions()
+    internal val incomingShareVersions = SnapshotVersions()
+    internal val sharedFolderVersions = SnapshotVersions()
+
     abstract fun accountDao(): AccountDao
 
     abstract fun spaceDao(): SpaceDao
@@ -46,12 +70,39 @@ abstract class FileBrowserDatabase : RoomDatabase() {
 
     abstract fun folderBackupDao(): FolderBackupDao
 
+    abstract fun backupReceiptDao(): BackupReceiptDao
+
     abstract fun shareDao(): ShareDao
+
+    abstract fun incomingShareDao(): IncomingShareDao
+
+    abstract fun sharedFolderCacheDao(): SharedFolderCacheDao
+
+    abstract fun sharedDownloadDao(): SharedDownloadDao
+
+    abstract fun sharedLocalFileDao(): SharedLocalFileDao
+
+    abstract fun sharedVaultExclusionDao(): SharedVaultExclusionDao
+
+    abstract fun offlineTraversalDao(): OfflineTraversalDao
+
+    abstract fun favoriteCursorDao(): FavoriteCursorDao
+
+    abstract fun pendingDiscoveryDao(): PendingDiscoveryDao
+
+    abstract fun fileOperationDao(): FileOperationDao
+
+    abstract fun pendingPinDao(): PendingPinDao
+
+    abstract fun excludedCacheDao(): ExcludedCacheDao
+
+    abstract fun vaultExclusionDao(): VaultExclusionDao
 
     companion object {
         @Volatile
         private var instance: FileBrowserDatabase? = null
 
+        @Suppress("SpreadOperator") // Copies migration references once when opening the database.
         fun create(context: Context): FileBrowserDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room
@@ -59,16 +110,8 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                         context.applicationContext,
                         FileBrowserDatabase::class.java,
                         "opencloud-file-browser.db",
-                    ).addMigrations(
-                        MIGRATION_1_2,
-                        MIGRATION_2_3,
-                        MIGRATION_3_4,
-                        MIGRATION_4_5,
-                        MIGRATION_5_6,
-                        MIGRATION_6_7,
-                        MIGRATION_7_8,
-                        MIGRATION_8_9,
-                    ).build()
+                    ).addMigrations(*MIGRATIONS)
+                    .build()
                     .also { instance = it }
             }
 
@@ -186,6 +229,17 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                 }
             }
 
+        val MIGRATION_9_10 =
+            object : Migration(9, 10) {
+                override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE transfers ADD COLUMN errorCode TEXT")
+                    db.execSQL("ALTER TABLE transfers ADD COLUMN notBeforeEpochMillis INTEGER NOT NULL DEFAULT 0")
+                    db.execSQL(
+                        "UPDATE transfers SET error = 'The operation could not be completed.' WHERE error IS NOT NULL",
+                    )
+                }
+            }
+
         private val MIGRATION_8_9 =
             object : Migration(8, 9) {
                 override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -198,6 +252,32 @@ abstract class FileBrowserDatabase : RoomDatabase() {
                     db.execSQL("ALTER TABLE `spaces` ADD COLUMN `quotaState` TEXT")
                 }
             }
+
+        val MIGRATIONS: Array<Migration> =
+            arrayOf(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7,
+                MIGRATION_7_8,
+                MIGRATION_8_9,
+                MIGRATION_9_10,
+                MIGRATION_10_11,
+                MIGRATION_11_12,
+                MIGRATION_12_13,
+                MIGRATION_13_14,
+                MIGRATION_14_15,
+                MIGRATION_15_16,
+                MIGRATION_16_17,
+                MIGRATION_17_18,
+                MIGRATION_18_19,
+                MIGRATION_19_20,
+                MIGRATION_20_21,
+                MIGRATION_21_22,
+                MIGRATION_22_23,
+            )
     }
 }
 
@@ -264,6 +344,8 @@ data class SpaceEntity(
     indices = [
         Index(value = ["accountId", "spaceId", "parentId", "name"], unique = true),
         Index(value = ["accountId", "spaceId", "parentId"]),
+        Index(value = ["accountId", "spaceId", "parentId", "remoteId"]),
+        Index(value = ["offlinePinned", "kind", "accountId", "spaceId"]),
     ],
 )
 data class ResourceEntity(
@@ -315,6 +397,12 @@ data class TransferEntity(
     val attemptCount: Int = 0,
     val createdAtEpochMillis: Long,
     val updatedAtEpochMillis: Long,
+    val errorCode: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val notBeforeEpochMillis: Long = 0,
+    @androidx.room.ColumnInfo(defaultValue = "0") val verificationPending: Boolean = false,
+    val expectedETag: String? = null,
+    val verifiedETag: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "'SPACE'") val locationKind: String = "SPACE",
 )
 
 enum class TransferDirection { UPLOAD, DOWNLOAD }
@@ -338,6 +426,7 @@ data class FolderBackupEntity(
     val deleteAfterUpload: Boolean,
     val enabled: Boolean = true,
     val lastSafeScanEpochMillis: Long = 0,
+    @androidx.room.ColumnInfo(defaultValue = "'NONE'") val dateOrganization: String = "NONE",
 )
 
 @Entity(
@@ -364,7 +453,10 @@ data class ShareEntity(
 
 @Dao
 interface AccountDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Query("SELECT id FROM accounts")
+    suspend fun allIds(): List<String>
+
+    @Upsert
     suspend fun upsert(account: AccountEntity)
 
     @Query("SELECT * FROM accounts WHERE id = :accountId AND isActive = 1 LIMIT 1")
@@ -413,10 +505,68 @@ interface SpaceDao {
 @Dao
 interface ResourceDao {
     @Query(
+        "UPDATE resources SET path = :newPath || substr(path, length(:oldPath) + 1) " +
+            "WHERE accountId = :accountId AND spaceId = :spaceId " +
+            "AND substr(path, 1, length(:oldPath) + 1) = :oldPath || '/'",
+    )
+    suspend fun rebaseDescendants(
+        accountId: String,
+        spaceId: String,
+        oldPath: String,
+        newPath: String,
+    )
+
+    @Query("SELECT EXISTS(SELECT 1 FROM resources WHERE localPath = :path AND hasLocalCopy = 1)")
+    suspend fun referencesCache(path: String): Boolean
+
+    @Query(
+        "UPDATE resources SET hasLocalCopy = 0, localPath = NULL WHERE accountId = :accountId AND spaceId = :spaceId AND path = :path",
+    )
+    suspend fun invalidatePathCache(
+        accountId: String,
+        spaceId: String,
+        path: String,
+    )
+
+    @Query("SELECT * FROM resources WHERE accountId = :accountId AND spaceId = :spaceId AND path = :path LIMIT 1")
+    suspend fun findByPath(
+        accountId: String,
+        spaceId: String,
+        path: String,
+    ): ResourceEntity?
+
+    @Query(
+        "SELECT r.* FROM resources r JOIN spaces s ON s.accountId = r.accountId AND s.driveId = r.spaceId " +
+            "JOIN accounts a ON a.id = r.accountId WHERE r.accountId = :accountId AND a.isActive = 1 " +
+            "AND s.isDisabled = 0 AND s.isDeleted = 0 AND instr(lower(r.name), lower(:query)) > 0 " +
+            "ORDER BY r.spaceId, r.remoteId LIMIT 100",
+    )
+    suspend fun providerSearch(
+        accountId: String,
+        query: String,
+    ): List<ResourceEntity>
+
+    @Query(
         "SELECT * FROM resources WHERE accountId = :accountId AND isFavorite = 1 " +
             "ORDER BY CASE kind WHEN 'FOLDER' THEN 0 ELSE 1 END, name COLLATE NOCASE",
     )
     fun observeFavorites(accountId: String): Flow<List<ResourceEntity>>
+
+    @Query(
+        "SELECT r.* FROM resources r JOIN spaces s ON s.accountId = r.accountId AND s.driveId = r.spaceId " +
+            "WHERE r.accountId = :accountId AND r.hasLocalCopy = 1 AND r.localPath IS NOT NULL " +
+            "AND s.isDisabled = 0 AND s.isDeleted = 0 ORDER BY r.name COLLATE NOCASE",
+    )
+    fun observeOffline(accountId: String): Flow<List<ResourceEntity>>
+
+    @Query(
+        "SELECT r.* FROM resources r JOIN spaces s ON s.accountId = r.accountId AND s.driveId = r.spaceId " +
+            "WHERE r.accountId = :accountId AND r.remoteId IN (:ids) AND s.isDisabled = 0 AND s.isDeleted = 0",
+    )
+    fun observeRecent(
+        accountId: String,
+        ids: List<String>,
+    ): Flow<List<ResourceEntity>>
 
     @Query(
         "SELECT * FROM resources WHERE accountId = :accountId " +
@@ -465,6 +615,37 @@ interface ResourceDao {
         parentId: String?,
     ): List<ResourceEntity>
 
+    @Query(
+        "SELECT COUNT(*) FROM resources WHERE accountId = :accountId AND spaceId = :spaceId AND parentId IS :parentId",
+    )
+    suspend fun countChildren(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+    ): Int
+
+    @Query(
+        "SELECT * FROM resources WHERE accountId = :accountId AND spaceId = :spaceId AND parentId IS :parentId " +
+            "ORDER BY CASE kind WHEN 'FOLDER' THEN 0 ELSE 1 END, name COLLATE NOCASE, remoteId LIMIT 128 OFFSET :offset",
+    )
+    suspend fun childrenPage(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        offset: Int,
+    ): List<ResourceEntity>
+
+    @Query(
+        "SELECT * FROM resources WHERE accountId = :accountId AND spaceId = :spaceId " +
+            "AND parentId IS :parentId AND name = :name LIMIT 1",
+    )
+    suspend fun findChild(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        name: String,
+    ): ResourceEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(resource: ResourceEntity)
 
@@ -478,7 +659,7 @@ interface ResourceDao {
     suspend fun update(resource: ResourceEntity)
 
     @Query(
-        "UPDATE resources SET hasLocalCopy = :hasLocalCopy, localPath = :localPath, offlinePinned = :offlinePinned " +
+        "UPDATE resources SET hasLocalCopy = :hasLocalCopy, localPath = :localPath " +
             "WHERE accountId = :accountId AND spaceId = :spaceId AND remoteId = :resourceId",
     )
     @Suppress("LongParameterList")
@@ -488,7 +669,6 @@ interface ResourceDao {
         resourceId: String,
         hasLocalCopy: Boolean,
         localPath: String?,
-        offlinePinned: Boolean,
     )
 
     @Query(
@@ -513,13 +693,25 @@ interface ResourceDao {
         favorite: Boolean,
     )
 
+    @Query("UPDATE resources SET isFavorite = 0 WHERE accountId = :accountId AND spaceId = :spaceId")
+    suspend fun clearFavorites(
+        accountId: String,
+        spaceId: String,
+    )
+
     @Query("SELECT * FROM resources WHERE offlinePinned = 1")
     suspend fun findOfflinePinned(): List<ResourceEntity>
+
+    @Query("SELECT * FROM resources WHERE accountId = :accountId AND offlinePinned = 1")
+    fun observeOfflinePins(accountId: String): Flow<List<ResourceEntity>>
 
     @Delete
     suspend fun delete(resource: ResourceEntity)
 
-    @Query("DELETE FROM resources WHERE accountId = :accountId AND spaceId = :spaceId AND path LIKE :pathPrefix")
+    @Query(
+        "DELETE FROM resources WHERE accountId = :accountId AND spaceId = :spaceId " +
+            "AND substr(path, 1, length(:pathPrefix)) = :pathPrefix",
+    )
     suspend fun deleteDescendants(
         accountId: String,
         spaceId: String,
@@ -536,8 +728,147 @@ interface ResourceDao {
     suspend fun deleteForAccount(accountId: String)
 }
 
+private val PENDING_TRANSFER_STATES = setOf("QUEUED", "RUNNING", "RETRY")
+
 @Dao
 interface TransferDao {
+    @Query(
+        "UPDATE transfers SET state = 'CANCELLED', error = NULL, errorCode = NULL " +
+            "WHERE accountId = :accountId AND spaceId = :spaceId AND state IN ('QUEUED', 'RUNNING', 'RETRY') " +
+            "AND (destinationPath = :path OR substr(destinationPath, 1, length(:path) + 1) = :path || '/')",
+    )
+    suspend fun cancelTree(
+        accountId: String,
+        spaceId: String,
+        path: String,
+    )
+
+    @Query(
+        "UPDATE transfers SET state = 'CANCELLED', error = NULL, errorCode = NULL " +
+            "WHERE accountId = :accountId AND spaceId = :spaceId AND state IN ('QUEUED', 'RUNNING', 'RETRY')",
+    )
+    suspend fun cancelSpace(
+        accountId: String,
+        spaceId: String,
+    )
+
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM transfers t JOIN transfer_queue q ON q.transferId = t.id " +
+            "WHERE t.id != :id AND t.accountId = :account AND t.spaceId = :space " +
+            "AND t.destinationPath = :path AND t.direction = 'UPLOAD' " +
+            "AND (t.state = 'RUNNING' OR (t.state IN ('QUEUED', 'RETRY') " +
+            "AND q.sequence < (SELECT sequence FROM transfer_queue WHERE transferId = :id))))",
+    )
+    suspend fun uploadDestinationBusy(
+        id: String,
+        account: String,
+        space: String,
+        path: String,
+    ): Boolean
+
+    @Transaction
+    suspend fun retry(
+        expected: TransferEntity,
+        replacement: TransferEntity,
+    ): TransferEntity? {
+        val current = findById(expected.id)
+        if (current == null ||
+            current != expected ||
+            current.state !in setOf("FAILED", "CANCELLED", "CONFLICT", "RETRY")
+        ) {
+            return null
+        }
+        require(replacement.id == current.id && replacement.state == "QUEUED")
+        update(replacement)
+        removeQueueEntry(current.id)
+        insertQueueEntry(TransferQueueEntry(transferId = current.id))
+        return replacement
+    }
+
+    @Query(
+        "UPDATE transfers SET bytesTransferred = :bytes, updatedAtEpochMillis = :now, " +
+            "verificationPending = CASE WHEN direction = 'UPLOAD' AND :bytes = bytesTotal " +
+            "THEN 1 ELSE verificationPending END " +
+            "WHERE id = :id AND workId = :workerId AND state = 'RUNNING'",
+    )
+    suspend fun updateProgress(
+        id: String,
+        workerId: String?,
+        bytes: Long,
+        now: Long,
+    ): Int
+
+    @Transaction
+    suspend fun claim(
+        id: String,
+        workerId: String,
+        now: Long,
+    ): TransferEntity? {
+        val current = findById(id)
+        val ownedByAnotherWorker = current?.workId != null && current.workId != workerId
+        if (current == null ||
+            current.state !in PENDING_TRANSFER_STATES ||
+            ownedByAnotherWorker
+        ) {
+            return null
+        }
+        val running = current.copy(state = TransferState.RUNNING.name, workId = workerId, updatedAtEpochMillis = now)
+        val blocked =
+            current.direction == "UPLOAD" &&
+                uploadDestinationBusy(
+                    current.id,
+                    current.accountId,
+                    current.spaceId,
+                    current.destinationPath,
+                )
+        return if (blocked) {
+            // This worker has not started network I/O. Release its persisted RUNNING marker
+            // so overlapping intents left by an older process cannot wait on each other forever.
+            if (current.state == TransferState.RUNNING.name) {
+                update(current.copy(state = TransferState.RETRY.name, updatedAtEpochMillis = now))
+            }
+            null
+        } else {
+            update(running)
+            running
+        }
+    }
+
+    @Transaction
+    suspend fun updateActive(transfer: TransferEntity): Boolean {
+        val current = findById(transfer.id)
+        if (current == null ||
+            current.state !in PENDING_TRANSFER_STATES ||
+            current.workId != transfer.workId
+        ) {
+            return false
+        }
+        update(transfer)
+        return true
+    }
+
+    @Transaction
+    suspend fun schedule(
+        transfer: TransferEntity,
+        workId: String,
+        now: Long,
+    ): Boolean {
+        val current = findById(transfer.id)
+        if (current == null ||
+            current.state !in PENDING_TRANSFER_STATES ||
+            current.workId != transfer.workId
+        ) {
+            return false
+        }
+        update(current.copy(workId = workId, updatedAtEpochMillis = now))
+        return true
+    }
+
+    @Query(
+        "UPDATE transfers SET state = 'CANCELLED', error = NULL, errorCode = NULL WHERE id = :id AND state != 'SUCCEEDED'",
+    )
+    suspend fun cancel(id: String)
+
     @Query("SELECT * FROM transfers WHERE accountId = :accountId ORDER BY createdAtEpochMillis DESC")
     fun observeForAccount(accountId: String): Flow<List<TransferEntity>>
 
@@ -563,6 +894,20 @@ interface TransferDao {
 
     @Query(
         "SELECT * FROM transfers WHERE accountId = :accountId AND spaceId = :spaceId " +
+            "AND resourceId = :resourceId AND direction = 'DOWNLOAD' " +
+            "AND destinationPath = :path AND bytesTotal = :size " +
+            "AND state IN ('FAILED', 'CONFLICT') LIMIT 1",
+    )
+    suspend fun findBlockedDownload(
+        accountId: String,
+        spaceId: String,
+        resourceId: String,
+        path: String,
+        size: Long,
+    ): TransferEntity?
+
+    @Query(
+        "SELECT * FROM transfers WHERE accountId = :accountId AND spaceId = :spaceId " +
             "AND sourceUri = :sourceUri AND destinationPath = :destinationPath AND direction = 'UPLOAD' " +
             "AND state IN ('QUEUED', 'RUNNING', 'RETRY') LIMIT 1",
     )
@@ -573,8 +918,20 @@ interface TransferDao {
         destinationPath: String,
     ): TransferEntity?
 
+    @Transaction
+    suspend fun insert(transfer: TransferEntity) {
+        insertTransfer(transfer)
+        insertQueueEntry(TransferQueueEntry(transferId = transfer.id))
+    }
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
-    suspend fun insert(transfer: TransferEntity)
+    suspend fun insertTransfer(transfer: TransferEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertQueueEntry(entry: TransferQueueEntry)
+
+    @Query("DELETE FROM transfer_queue WHERE transferId = :id")
+    suspend fun removeQueueEntry(id: String)
 
     @Update
     suspend fun update(transfer: TransferEntity)
@@ -591,6 +948,18 @@ interface TransferDao {
 
 @Dao
 interface FolderBackupDao {
+    @Query(
+        "UPDATE folder_backups SET enabled = 0 WHERE accountId = :accountId AND spaceId = :spaceId " +
+            "AND (:path IS NULL OR rtrim(destinationPath, '/') = :path " +
+            "OR substr(destinationPath, 1, length(:path) + 1) = :path || '/' " +
+            "OR substr(:path, 1, length(rtrim(destinationPath, '/')) + 1) = rtrim(destinationPath, '/') || '/')",
+    )
+    suspend fun disableVault(
+        accountId: String,
+        spaceId: String,
+        path: String?,
+    )
+
     @Query("SELECT * FROM folder_backups WHERE accountId = :accountId ORDER BY mediaType")
     fun observeForAccount(accountId: String): Flow<List<FolderBackupEntity>>
 
@@ -631,6 +1000,47 @@ interface ShareDao {
 class FileBrowserStore(
     private val database: FileBrowserDatabase,
 ) {
+    suspend fun favoriteCursor(accountId: String): FavoriteCursorEntity? = database.favoriteCursorDao().find(accountId)
+
+    suspend fun advanceFavoriteCursor(
+        accountId: String,
+        spaceId: String,
+        resourceId: String,
+        expected: FavoriteCursorEntity?,
+    ): FavoriteCursorEntity? =
+        database.withTransaction {
+            if (database.accountDao().findById(accountId)?.isActive != true ||
+                database.favoriteCursorDao().find(accountId) != expected
+            ) {
+                return@withTransaction null
+            }
+            val next =
+                FavoriteCursorEntity(
+                    accountId,
+                    spaceId,
+                    resourceId,
+                    java.util.UUID
+                        .randomUUID()
+                        .toString(),
+                )
+            database.favoriteCursorDao().save(next)
+            next
+        }
+
+    suspend fun beginFolderSnapshot(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+    ): SnapshotToken =
+        database.withTransaction {
+            database.snapshotVersions.beginFolder(accountId, FolderSnapshotScope(spaceId, parentId))
+        }
+
+    suspend fun beginSnapshot(accountId: String): SnapshotToken =
+        database.withTransaction {
+            database.snapshotVersions.begin(accountId)
+        }
+
     private val spaces = database.spaceDao()
     private val resources = database.resourceDao()
     private val transfers = database.transferDao()
@@ -665,7 +1075,39 @@ class FileBrowserStore(
 
     fun observeAccounts(): Flow<List<AccountEntity>> = database.accountDao().observeActive()
 
+    suspend fun publishCapabilities(
+        accountId: String,
+        serverUrl: String,
+        capabilities: ServerCapabilities,
+    ): Boolean =
+        database.withTransaction {
+            val current = database.accountDao().findById(accountId) ?: return@withTransaction false
+            if (current.serverUrl != serverUrl) return@withTransaction false
+            database.accountDao().upsert(
+                current.copy(
+                    tusSupported = capabilities.tusSupported,
+                    remoteSearchUrl = capabilities.remoteSearchUrl,
+                    trashSupported = capabilities.trashSupported,
+                    sharingEnabled = capabilities.sharingEnabled,
+                    publicSharingEnabled = capabilities.publicSharingEnabled,
+                    publicLinkPasswordSupported = capabilities.publicLinkPasswordSupported,
+                    publicLinkPasswordEnforced = capabilities.publicLinkPasswordEnforced,
+                    publicLinkExpirationSupported = capabilities.publicLinkExpirationSupported,
+                    publicLinkExpirationEnforced = capabilities.publicLinkExpirationEnforced,
+                    publicLinkExpirationDays = capabilities.publicLinkExpirationDays,
+                ),
+            )
+            true
+        }
+
     fun observeFavorites(accountId: String): Flow<List<ResourceEntity>> = resources.observeFavorites(accountId)
+
+    fun observeOffline(accountId: String): Flow<List<ResourceEntity>> = resources.observeOffline(accountId)
+
+    fun observeRecent(
+        accountId: String,
+        ids: List<String>,
+    ): Flow<List<ResourceEntity>> = resources.observeRecent(accountId, ids)
 
     fun observeSpaces(accountId: String): Flow<List<SpaceEntity>> = spaces.observeSpaces(accountId)
 
@@ -701,17 +1143,114 @@ class FileBrowserStore(
 
     suspend fun createTransfer(transfer: TransferEntity) = transfers.insert(transfer)
 
+    suspend fun enqueueTransfer(transfer: TransferEntity): TransferEntity =
+        database.withTransaction {
+            require(
+                !database.vaultExclusionDao().denies(transfer.accountId, transfer.spaceId, transfer.destinationPath),
+            ) {
+                "Encrypted vault locations are unavailable."
+            }
+            require(transfer.locationKind == "SPACE")
+            requireNotNull(database.accountDao().findById(transfer.accountId)) { "The account is unavailable." }
+            val space = requireNotNull(spaces.findById(transfer.accountId, transfer.spaceId))
+            require(!space.isDisabled && !space.isDeleted) { "The space is unavailable." }
+            val existing =
+                if (transfer.direction == TransferDirection.DOWNLOAD.name) {
+                    val resourceId = requireNotNull(transfer.resourceId)
+                    val resource = requireNotNull(resources.findById(transfer.accountId, transfer.spaceId, resourceId))
+                    require(
+                        resource.kind == ResourceKind.FILE &&
+                            resource.path == transfer.destinationPath &&
+                            resource.sizeBytes == transfer.bytesTotal,
+                    ) { "The file changed. Refresh before downloading." }
+                    if (transfer.offlinePin) {
+                        resources.setOfflinePinned(
+                            transfer.accountId,
+                            transfer.spaceId,
+                            resourceId,
+                            true,
+                        )
+                    }
+                    transfers.findActiveDownload(transfer.accountId, transfer.spaceId, resourceId)
+                } else {
+                    require(transfer.direction == TransferDirection.UPLOAD.name)
+                    transfers.findActiveUpload(
+                        transfer.accountId,
+                        transfer.spaceId,
+                        requireNotNull(transfer.sourceUri),
+                        transfer.destinationPath,
+                    )
+                }
+            existing ?: transfer.also { transfers.insert(it) }
+        }
+
     suspend fun updateTransfer(transfer: TransferEntity) = transfers.update(transfer)
+
+    suspend fun retryTransfer(
+        expected: TransferEntity,
+        replacement: TransferEntity,
+    ): TransferEntity? = database.retryAllowedTransfer(expected, replacement)
+
+    suspend fun claimTransfer(
+        id: String,
+        workerId: String,
+        now: Long,
+    ) = database.claimAllowedTransfer(id, workerId, now)
+
+    suspend fun updateActiveTransfer(transfer: TransferEntity) = transfers.updateActive(transfer)
+
+    suspend fun updateTransferProgress(
+        transfer: TransferEntity,
+        bytes: Long,
+        now: Long,
+    ): Boolean = transfers.updateProgress(transfer.id, transfer.workId, bytes, now) == 1
+
+    suspend fun recordScheduledWork(
+        transfer: TransferEntity,
+        workId: String,
+        now: Long,
+    ) = transfers.schedule(transfer, workId, now)
+
+    suspend fun cancelTransfer(id: String) = transfers.cancel(id)
 
     suspend fun activeAccounts(): List<AccountEntity> = database.accountDao().findActive()
 
     suspend fun setFavorite(
         resource: ResourceEntity,
         favorite: Boolean,
-    ) = resources.setFavorite(resource.accountId, resource.spaceId, resource.remoteId, favorite)
+    ) = database.withTransaction {
+        database.snapshotVersions.begin(resource.accountId)
+        resources.setFavorite(resource.accountId, resource.spaceId, resource.remoteId, favorite)
+    }
+
+    /** Reconciles cached identities only; it does not invent parent/location metadata for unseen items. */
+    suspend fun replaceFavoriteSnapshot(
+        accountId: String,
+        snapshot: Map<String, Set<String>>,
+        token: SnapshotToken,
+    ): Boolean =
+        database.withTransaction {
+            if (!database.snapshotVersions.accept(accountId, token)) return@withTransaction false
+            snapshot.forEach { (spaceId, ids) ->
+                resources.clearFavorites(accountId, spaceId)
+                ids.forEach { resources.setFavorite(accountId, spaceId, it, true) }
+            }
+            true
+        }
 
     suspend fun removeAccount(accountId: String) {
         database.withTransaction {
+            database.snapshotVersions.begin(accountId)
+            database.incomingShareVersions.begin(accountId)
+            database.sharedFolderVersions.begin(accountId)
+            database.offlineTraversalDao().deleteAccount(accountId)
+            database.favoriteCursorDao().delete(accountId)
+            database.pendingDiscoveryDao().deleteAccount(accountId)
+            database.pendingPinDao().deleteOperationPins(accountId)
+            database.fileOperationDao().deleteAccount(accountId)
+            database.pendingPinDao().deleteAccount(accountId)
+            database.backupReceiptDao().deleteAccount(accountId)
+            database.vaultExclusionDao().deleteAccount(accountId)
             backups.deleteForAccount(accountId)
             transfers.deleteAllForAccount(accountId)
             resources.deleteForAccount(accountId)
@@ -733,6 +1272,14 @@ class FileBrowserStore(
         }
     }
 
+    /** Publish one server-confirmed mutation without depending on a subsequent account-wide refresh. */
+    suspend fun saveConfirmedShare(value: ShareEntity): Boolean =
+        database.withTransaction {
+            if (database.accountDao().findById(value.accountId)?.isActive != true) return@withTransaction false
+            shares.upsertAll(listOf(value))
+            true
+        }
+
     suspend fun deleteShare(
         accountId: String,
         shareId: String,
@@ -744,14 +1291,86 @@ class FileBrowserStore(
         parentId: String?,
     ): List<ResourceEntity> = resources.findChildren(accountId, spaceId, parentId)
 
+    suspend fun childCount(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+    ): Int = resources.countChildren(accountId, spaceId, parentId)
+
+    suspend fun childrenPage(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        offset: Int,
+    ): List<ResourceEntity> = resources.childrenPage(accountId, spaceId, parentId, offset.coerceAtLeast(0))
+
+    suspend fun child(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        name: String,
+    ): ResourceEntity? = resources.findChild(accountId, spaceId, parentId, name)
+
     suspend fun resources(
         accountId: String,
         spaceId: String,
     ): List<ResourceEntity> = resources.findBySpace(accountId, spaceId)
 
+    suspend fun providerSearch(
+        accountId: String,
+        query: String,
+    ): List<ResourceEntity> = resources.providerSearch(accountId, query)
+
     suspend fun transfer(id: String): TransferEntity? = transfers.findById(id)
 
+    suspend fun referencesCache(path: String): Boolean = resources.referencesCache(path)
+
+    suspend fun pendingDiscoveries(after: String = ""): List<PendingDiscoveryEntity> =
+        database.pendingDiscoveryDao().page(after)
+
+    suspend fun pendingDiscovery(revision: String): PendingDiscoveryEntity? =
+        database.pendingDiscoveryDao().find(revision)
+
+    suspend fun acknowledgeDiscovery(revision: String) = database.pendingDiscoveryDao().acknowledge(revision)
+
+    suspend fun queueFolderRefresh(
+        accountId: String,
+        spaceId: String,
+        folderId: String?,
+    ) = database.withTransaction {
+        val space = spaces.findById(accountId, spaceId)
+        val available = space != null && !space.isDisabled && !space.isDeleted
+        if (database.accountDao().findById(accountId) != null && available) {
+            database.snapshotVersions.begin(accountId)
+            database.pendingDiscoveryDao().save(
+                PendingDiscoveryEntity(
+                    accountId,
+                    spaceId,
+                    folderId.orEmpty(),
+                    java.util.UUID
+                        .randomUUID()
+                        .toString(),
+                ),
+            )
+        }
+    }
+
+    suspend fun resourceAtPath(
+        accountId: String,
+        spaceId: String,
+        path: String,
+    ): ResourceEntity? = resources.findByPath(accountId, spaceId, path)
+
     suspend fun pendingTransfers(): List<TransferEntity> = transfers.findPending()
+
+    suspend fun blockedDownload(resource: ResourceEntity): TransferEntity? =
+        transfers.findBlockedDownload(
+            resource.accountId,
+            resource.spaceId,
+            resource.remoteId,
+            resource.path,
+            resource.sizeBytes,
+        )
 
     suspend fun activeTransfers(accountId: String): List<TransferEntity> = transfers.findForAccount(accountId)
 
@@ -773,33 +1392,93 @@ class FileBrowserStore(
         spaceId: String,
         resourceId: String,
         localPath: String,
-        offlinePinned: Boolean,
-    ) = resources.updateLocalCopy(accountId, spaceId, resourceId, true, localPath, offlinePinned)
+    ) = resources.updateLocalCopy(accountId, spaceId, resourceId, true, localPath)
 
-    suspend fun completeUpload(
+    fun observeOfflinePins(accountId: String): Flow<List<ResourceEntity>> = resources.observeOfflinePins(accountId)
+
+    suspend fun expireTemporaryCopy(
+        expected: ResourceEntity,
+        deleteIfOld: () -> Boolean,
+    ): Boolean =
+        database.withTransaction {
+            val current = resources.findById(expected.accountId, expected.spaceId, expected.remoteId)
+            if (current != expected || current.offlinePinned) return@withTransaction false
+            if (database.offlineTraversalDao().coveringRoot(
+                    current.accountId,
+                    current.spaceId,
+                    current.remoteId,
+                    current.path,
+                ) !=
+                null ||
+                transfers.findActiveDownload(current.accountId, current.spaceId, current.remoteId) != null
+            ) {
+                return@withTransaction false
+            }
+            if (!deleteIfOld()) return@withTransaction false
+            resources.updateLocalCopy(current.accountId, current.spaceId, current.remoteId, false, null)
+            true
+        }
+
+    suspend fun clearLocalCopy(resource: ResourceEntity) =
+        database.withTransaction {
+            setOfflinePinned(resource, false)
+            resources.updateLocalCopy(resource.accountId, resource.spaceId, resource.remoteId, false, null)
+        }
+
+    suspend fun clearMatchingLocalCopy(expected: ResourceEntity): Boolean =
+        database.withTransaction {
+            val current = resources.findById(expected.accountId, expected.spaceId, expected.remoteId)
+            if (current?.localPath != expected.localPath ||
+                current?.eTag != expected.eTag ||
+                current?.sizeBytes != expected.sizeBytes
+            ) {
+                false
+            } else {
+                clearLocalCopy(expected)
+                true
+            }
+        }
+
+    suspend fun publishDownload(
         transfer: TransferEntity,
-        eTag: String?,
-    ) {
-        val parent = transfer.destinationPath.substringBeforeLast('/', "").ifBlank { null }
-        val parentResource = resources.findBySpace(transfer.accountId, transfer.spaceId).find { it.path == parent }
-        val now = System.currentTimeMillis()
-        resources.upsert(
-            ResourceEntity(
-                accountId = transfer.accountId,
-                spaceId = transfer.spaceId,
-                remoteId = transfer.resourceId ?: "uploaded-${transfer.id}",
-                parentId = parentResource?.remoteId,
-                path = transfer.destinationPath,
-                name = transfer.displayName,
-                kind = ResourceKind.FILE,
-                mimeType = transfer.mimeType,
-                sizeBytes = transfer.bytesTotal,
-                eTag = eTag,
-                modifiedAtEpochMillis = now,
-                createdAtEpochMillis = now,
-            ),
-        )
-    }
+        expected: ResourceEntity,
+        localPath: String,
+    ): Boolean =
+        database.withTransaction {
+            val active = transfers.findById(transfer.id)
+            val space = spaces.findById(expected.accountId, expected.spaceId)
+            val spaceAvailable = space != null && !space.isDisabled && !space.isDeleted
+            val available = database.accountDao().findById(expected.accountId) != null && spaceAvailable
+            val current = resources.findById(expected.accountId, expected.spaceId, expected.remoteId)
+            val unchanged =
+                current?.path == expected.path &&
+                    current?.eTag == expected.eTag &&
+                    current?.sizeBytes == expected.sizeBytes
+            val owned = active?.state == "RUNNING" && active.workId == transfer.workId
+            if (!owned || !unchanged || !available) {
+                return@withTransaction false
+            }
+            resources.updateLocalCopy(expected.accountId, expected.spaceId, expected.remoteId, true, localPath)
+            true
+        }
+
+    suspend fun completeUpload(transfer: TransferEntity): Boolean =
+        database.withTransaction {
+            val active = transfers.findById(transfer.id)
+            val space = spaces.findById(transfer.accountId, transfer.spaceId)
+            val owned = active?.state == "RUNNING" && active.workId == transfer.workId
+            val available = space != null && !space.isDisabled && !space.isDeleted
+            if (!owned || !available || database.accountDao().findById(transfer.accountId) == null) {
+                return@withTransaction false
+            }
+            database.snapshotVersions.begin(transfer.accountId)
+            // Discovery owns resource identity and metadata. Only invalidate previously cached bytes here.
+            resources.invalidatePathCache(transfer.accountId, transfer.spaceId, transfer.destinationPath)
+            val parentPath = transfer.destinationPath.substringBeforeLast('/', "")
+            val parent = resources.findByPath(transfer.accountId, transfer.spaceId, parentPath)
+            queueFolderRefresh(transfer.accountId, transfer.spaceId, parent?.remoteId)
+            true
+        }
 
     suspend fun clearTransferHistory(accountId: String) = transfers.deleteHistory(accountId)
 
@@ -809,28 +1488,80 @@ class FileBrowserStore(
 
     suspend fun backup(id: String): FolderBackupEntity? = backups.findById(id)
 
-    suspend fun saveBackup(configuration: FolderBackupEntity) = backups.upsert(configuration)
+    suspend fun saveBackup(configuration: FolderBackupEntity) = BackupScanStore(database).save(configuration)
 
-    suspend fun deleteBackup(id: String) = backups.delete(id)
+    suspend fun deleteBackup(id: String) =
+        database.withTransaction {
+            database.backupReceiptDao().deletePair(id)
+            backups.delete(id)
+        }
 
     suspend fun setOfflinePinned(
         resource: ResourceEntity,
         pinned: Boolean,
-    ) = resources.setOfflinePinned(resource.accountId, resource.spaceId, resource.remoteId, pinned)
+    ) = VaultMutationGuard(database).setOfflinePinned(resource, pinned)
+
+    suspend fun requireCurrentMutableResource(
+        resource: ResourceEntity,
+        includeDescendants: Boolean = true,
+    ): ResourceEntity = VaultMutationGuard(database).requireCurrentResource(resource, includeDescendants)
+
+    suspend fun requireAllowedFolderDestination(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        expectedParentPath: String?,
+        destinationPath: String,
+    ) = VaultMutationGuard(database).requireFolderDestination(
+        accountId,
+        spaceId,
+        parentId,
+        expectedParentPath,
+        destinationPath,
+    )
+
+    suspend fun requireAllowedVaultPath(
+        accountId: String,
+        spaceId: String,
+        path: String,
+        includeChildren: Boolean = false,
+    ) = VaultMutationGuard(database).requireAllowedPath(accountId, spaceId, path, includeChildren)
 
     suspend fun offlinePinnedResources(): List<ResourceEntity> = resources.findOfflinePinned()
 
     suspend fun replaceRemoteSpaces(
         accountId: String,
         snapshot: List<SpaceEntity>,
-    ) {
+        token: SnapshotToken? = null,
+        excludedVaultIds: Set<String> = emptySet(),
+    ): Boolean =
         database.withTransaction {
+            require(snapshot.all { it.accountId == accountId })
+            require(snapshot.map { it.driveId }.distinct().size == snapshot.size)
+            require(excludedVaultIds.none { it.isBlank() })
+            require(snapshot.none { it.driveId in excludedVaultIds })
+            if (!database.snapshotVersions.accept(accountId, token)) return@withTransaction false
             val incomingIds = snapshot.mapTo(mutableSetOf()) { it.driveId }
             spaces.findSpaces(accountId).filterNot { it.driveId in incomingIds }.forEach { stale ->
-                resources.deleteAll(accountId, stale.driveId)
-                spaces.delete(stale)
+                // Absence can mean revoked access, not deletion. Retain pins, cache and durable intent.
+                spaces.upsertAll(listOf(stale.copy(isDisabled = true)))
             }
             spaces.upsertAll(snapshot)
+            snapshot.forEach { database.vaultExclusionDao().confirmPlain(accountId, it.driveId, "") }
+            if (excludedVaultIds.isNotEmpty()) database.snapshotVersions.begin(accountId)
+            excludedVaultIds.forEach { spaceId ->
+                database.excludeVaultDrive(accountId, spaceId)
+            }
+            true
+        }
+
+    private suspend fun rebaseMovedFolder(
+        local: ResourceEntity?,
+        remote: ResourceEntity,
+    ) {
+        if (local?.kind == ResourceKind.FOLDER && remote.kind == ResourceKind.FOLDER && local.path != remote.path) {
+            database.snapshotVersions.begin(remote.accountId)
+            resources.rebaseDescendants(remote.accountId, remote.spaceId, local.path, remote.path)
         }
     }
 
@@ -839,133 +1570,98 @@ class FileBrowserStore(
         spaceId: String,
         parentId: String?,
         snapshot: List<ResourceEntity>,
-    ) {
+        token: SnapshotToken? = null,
+    ): Boolean = replaceDiscoveredFolderSnapshot(accountId, spaceId, parentId, FolderSnapshot(snapshot), token)
+
+    suspend fun replaceDiscoveredFolderSnapshot(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+        discovered: FolderSnapshot,
+        token: SnapshotToken? = null,
+    ): Boolean =
         database.withTransaction {
+            val snapshot = discovered.resources
+            require(snapshot.all { it.accountId == accountId && it.spaceId == spaceId && it.parentId == parentId })
+            require(snapshot.map { it.remoteId }.distinct().size == snapshot.size)
+            require(snapshot.map { it.path }.distinct().size == snapshot.size)
+            require(snapshot.map { it.name }.distinct().size == snapshot.size)
+            if (!database.snapshotVersions.accept(accountId, token, FolderSnapshotScope(spaceId, parentId))) {
+                return@withTransaction false
+            }
+            database.reconcileVaultFolders(accountId, spaceId, parentId, discovered)
+            snapshot.forEach { database.vaultExclusionDao().confirmPlain(accountId, spaceId, it.path.trimEnd('/')) }
             val existing = resources.findChildren(accountId, spaceId, parentId)
             val incomingIds = snapshot.mapTo(mutableSetOf()) { it.remoteId }
             existing.filterNot { it.remoteId in incomingIds }.forEach { stale ->
                 if (stale.kind ==
                     ResourceKind.FOLDER
                 ) {
-                    resources.deleteDescendants(accountId, spaceId, "${stale.path}/%")
+                    database.snapshotVersions.begin(accountId)
+                    resources.deleteDescendants(accountId, spaceId, "${stale.path.trimEnd('/')}/")
                 }
                 resources.delete(stale)
             }
             snapshot.forEach { remote ->
                 val local = resources.findById(accountId, spaceId, remote.remoteId)
+                rebaseMovedFolder(local, remote)
+                val pendingPin = database.pendingPinDao().selected(accountId, spaceId, remote.path)
+                val sameContent =
+                    local?.eTag == remote.eTag &&
+                        local?.sizeBytes == remote.sizeBytes &&
+                        local?.kind == remote.kind
                 resources.upsert(
                     remote.copy(
-                        hasLocalCopy = local?.hasLocalCopy ?: false,
-                        localPath = local?.localPath,
-                        offlinePinned = local?.offlinePinned ?: false,
+                        hasLocalCopy = sameContent && local?.hasLocalCopy == true,
+                        localPath = local?.localPath?.takeIf { sameContent },
+                        offlinePinned = pendingPin || local?.offlinePinned == true,
                         isFavorite = remote.isFavorite,
                     ),
                 )
+                if (pendingPin) database.pendingPinDao().acknowledge(accountId, spaceId, remote.path)
             }
+            true
         }
-    }
 
+    @Suppress("UNUSED_PARAMETER", "UnusedParameter") // Unsafe local-only operation is contained pending server support.
     suspend fun createSpace(
         accountId: String,
         name: String,
     ) {
-        val normalizedName = name.trim().requireValidName()
-        val localId = newLocalId()
-        spaces.insert(
-            SpaceEntity(
-                accountId = accountId,
-                driveId = localId,
-                name = normalizedName,
-                type = "project",
-                description = null,
-                ownerName = null,
-                rootId = "$localId-root",
-                rootWebDavUrl = null,
-                rootETag = null,
-                quotaBytes = null,
-            ),
-        )
+        error("This action is not available yet.")
     }
 
     @Transaction
-    suspend fun createFolder(
-        accountId: String,
-        spaceId: String,
-        parentId: String?,
-        name: String,
-    ) {
-        val normalizedName = name.trim().requireValidName()
-        val parent = parentId?.let { resources.findById(accountId, spaceId, it) }
-        resources.insert(
-            newResource(
-                accountId = accountId,
-                spaceId = spaceId,
-                parentId = parentId,
-                path = parent.childPath(normalizedName),
-                name = normalizedName,
-            ),
-        )
-    }
-
-    @Transaction
+    @Suppress("UNUSED_PARAMETER", "UnusedParameter") // Unsafe local-only operation is contained pending server support.
     suspend fun rename(
         accountId: String,
         spaceId: String,
         resourceId: String,
         name: String,
     ) {
-        val resource = requireNotNull(resources.findById(accountId, spaceId, resourceId))
-        val normalizedName = name.trim().requireValidName()
-        val parent = resource.parentId?.let { resources.findById(accountId, spaceId, it) }
-        resources.update(
-            resource.copy(
-                name = normalizedName,
-                path = parent.childPath(normalizedName),
-                modifiedAtEpochMillis = System.currentTimeMillis(),
-            ),
-        )
+        error("This action is not available yet.")
     }
 
     @Transaction
+    @Suppress("UNUSED_PARAMETER", "UnusedParameter") // Unsafe local-only operation is contained pending server support.
     suspend fun move(
         accountId: String,
         spaceId: String,
         resourceId: String,
         targetParentId: String?,
     ) {
-        val resource = requireNotNull(resources.findById(accountId, spaceId, resourceId))
-        require(resource.remoteId != targetParentId) { "A folder cannot contain itself." }
-        val target = targetParentId?.let { resources.findById(accountId, spaceId, it) }
-        require(target == null || target.kind == ResourceKind.FOLDER) { "Choose a folder as the destination." }
-        resources.update(
-            resource.copy(
-                parentId = targetParentId,
-                path = target.childPath(resource.name),
-                modifiedAtEpochMillis = System.currentTimeMillis(),
-            ),
-        )
+        error("This action is not available yet.")
     }
 
     @Transaction
+    @Suppress("UNUSED_PARAMETER", "UnusedParameter") // Unsafe local-only operation is contained pending server support.
     suspend fun copy(
         accountId: String,
         spaceId: String,
         resourceId: String,
         targetParentId: String?,
     ) {
-        val resource = requireNotNull(resources.findById(accountId, spaceId, resourceId))
-        val target = targetParentId?.let { resources.findById(accountId, spaceId, it) }
-        val copyName = "${resource.name} copy"
-        resources.insert(
-            resource.copy(
-                remoteId = newLocalId(),
-                parentId = targetParentId,
-                path = target.childPath(copyName),
-                name = copyName,
-                createdAtEpochMillis = System.currentTimeMillis(),
-                modifiedAtEpochMillis = System.currentTimeMillis(),
-            ),
-        )
+        error("This action is not available yet.")
     }
 
     @Transaction
@@ -973,44 +1669,15 @@ class FileBrowserStore(
         accountId: String,
         spaceId: String,
         resourceId: String,
-    ) {
+    ) = database.withTransaction {
+        database.snapshotVersions.begin(accountId)
         resources.findById(accountId, spaceId, resourceId)?.let { resource ->
             if (resource.kind == ResourceKind.FOLDER) {
-                resources.deleteDescendants(accountId, spaceId, "${resource.path}/%")
+                resources.deleteDescendants(accountId, spaceId, "${resource.path.trimEnd('/')}/")
             }
             resources.delete(resource)
         }
     }
-
-    private fun newResource(
-        accountId: String,
-        spaceId: String,
-        parentId: String?,
-        path: String,
-        name: String,
-    ) = ResourceEntity(
-        accountId,
-        spaceId,
-        newLocalId(),
-        parentId,
-        path,
-        name,
-        ResourceKind.FOLDER,
-        null,
-        0,
-        null,
-        System.currentTimeMillis(),
-        System.currentTimeMillis(),
-    )
 }
-
-private fun ResourceEntity?.childPath(name: String): String = "${this?.path?.trimEnd('/') ?: ""}/$name"
-
-private fun String.requireValidName(): String {
-    require(isNotBlank() && '/' !in this) { "Enter a valid name without a slash." }
-    return this
-}
-
-private fun newLocalId(): String = "local-${java.util.UUID.randomUUID()}"
 
 internal fun String.toLikePattern(): String = "%${replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")}%"

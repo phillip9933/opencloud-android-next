@@ -1,0 +1,7 @@
+<resources>
+    <string name="browser_project_space">Space: %1$s</string>
+    <string name="browser_all_spaces">All spaces</string>
+    <string name="browser_recents">Recents</string>
+    <string name="browser_offline">Offline</string>
+    <string name="browser_add_destination">Add to: %1$s</string>
+</resources>

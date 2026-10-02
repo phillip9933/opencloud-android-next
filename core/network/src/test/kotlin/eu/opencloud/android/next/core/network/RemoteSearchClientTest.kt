@@ -10,6 +10,40 @@ import org.junit.Before
 import org.junit.Test
 
 class RemoteSearchClientTest {
+    @Test fun `search rejects cross origin hrefs and does not forward authorization on redirects`() {
+        MockWebServer().use { other ->
+            server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", other.url("search")))
+            org.junit.Assert.assertThrows(TransferHttpException::class.java) {
+                client.search(server.url("dav/spaces/").toString(), "test", "Bearer test")
+            }
+            assertEquals(0, other.requestCount)
+            server.enqueue(
+                MockResponse().setResponseCode(207).setBody(
+                    """<d:multistatus xmlns:d="DAV:"><d:response><d:href>${other.url(
+                        "dav/spaces/s/file",
+                    )}</d:href></d:response></d:multistatus>""",
+                ),
+            )
+            org.junit.Assert.assertThrows(OpenCloudException::class.java) {
+                client.search(server.url("dav/spaces/").toString(), "test", "Bearer test")
+            }
+        }
+    }
+
+    @Test fun `search preserves plus and skips vault descendants with alternate resource ids`() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(
+                    207,
+                ).setBody(
+                    """<d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:response><d:href>/dav/spaces/s/Test + test/a.txt</d:href><oc:id>a</oc:id></d:response><d:response><d:href>/dav/spaces/s/Secret.vault/data</d:href><oc:id>secret</oc:id></d:response></d:multistatus>""",
+                ),
+        )
+        val results = client.search(server.url("dav/spaces/").toString(), "test", "Bearer test")
+        assertEquals(1, results.size)
+        assertEquals("/Test + test/a.txt", results.single().path)
+    }
+
     private lateinit var server: MockWebServer
     private lateinit var client: RemoteSearchClient
 

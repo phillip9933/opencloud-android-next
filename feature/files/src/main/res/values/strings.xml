@@ -1,0 +1,9 @@
+<resources>
+    <string name="favorites_sync_running">Checking favorites. Waiting for a connection if needed.</string>
+    <string name="favorites_sync_more">More favorites may remain to be checked.</string>
+    <string name="favorites_sync_failed">Favorites could not be fully refreshed. Try again.</string>
+    <string name="favorites_sync_unavailable">Favorites search is unavailable for this account. Cached favorites are shown.</string>
+    <string name="favorites_sync_continue">Continue checking</string>
+    <string name="favorites_sync_refresh">Refresh favorites</string>
+
+</resources>

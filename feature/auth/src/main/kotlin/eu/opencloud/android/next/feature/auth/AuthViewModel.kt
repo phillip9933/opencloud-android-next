@@ -1,6 +1,7 @@
 package eu.opencloud.android.next.feature.auth
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import eu.opencloud.android.next.core.database.AccountEntity
@@ -11,6 +12,8 @@ import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.AuthenticationType
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
 import eu.opencloud.android.next.core.network.OpenCloudApi
+import eu.opencloud.android.next.core.network.safeMessage
+import eu.opencloud.android.next.core.network.toOpenCloudError
 import eu.opencloud.android.next.core.security.KeystoreCredentialStore
 import eu.opencloud.android.next.core.security.TlsPolicy
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +36,6 @@ class AuthViewModel(
     private val settings = SettingsRepository.create(application)
     private var repository = repositoryFor("")
     private var discovery: DiscoveryResult? = null
-    private var pkce: eu.opencloud.android.next.core.model.auth.PkceRequest? = null
 
     private val mutableState = MutableStateFlow(AuthUiState(isRestoringSession = true))
     val state: StateFlow<AuthUiState> = mutableState.asStateFlow()
@@ -55,27 +57,29 @@ class AuthViewModel(
         }
     }
 
-    fun discover(serverInput: String) =
-        launchAuth {
-            mutableState.value = mutableState.value.copy(isLoading = true, error = null)
-            val result = repositoryFor(serverInput).discover(serverInput)
-            discovery = result
-            repository = repositoryFor(result.serverUrl)
-            mutableState.value =
-                mutableState.value.copy(
-                    isLoading = false,
-                    serverUrl = result.serverUrl,
-                    authenticationMode =
-                        if (result.oidcConfiguration ==
-                            null
-                        ) {
-                            AuthenticationMode.BASIC
-                        } else {
-                            AuthenticationMode.OIDC
-                        },
-                    oidcConfiguration = result.oidcConfiguration,
-                )
-        }
+    fun discover(
+        serverInput: String,
+        staticClientId: String? = null,
+    ) = launchAuth {
+        mutableState.value = mutableState.value.copy(isLoading = true, error = null)
+        val result = repositoryFor(serverInput).discover(serverInput, staticClientId)
+        discovery = result
+        repository = repositoryFor(result.serverUrl)
+        mutableState.value =
+            mutableState.value.copy(
+                isLoading = false,
+                serverUrl = result.serverUrl,
+                authenticationMode =
+                    if (result.oidcConfiguration ==
+                        null
+                    ) {
+                        AuthenticationMode.BASIC
+                    } else {
+                        AuthenticationMode.OIDC
+                    },
+                oidcConfiguration = result.oidcConfiguration,
+            )
+    }
 
     fun loginBasic(
         username: String,
@@ -92,67 +96,83 @@ class AuthViewModel(
         password: String,
     ) = launchAuth {
         require(serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()) {
-            "Configure dev.server.url, dev.server.username, and dev.server.password in local.properties."
+            getApplication<Application>().getString(R.string.auth_required_fields)
         }
-        repository = repositoryFor(serverUrl)
-        mutableState.value = mutableState.value.copy(serverUrl = serverUrl, isLoading = true, error = null)
-        setSession(repository.loginBasic(serverUrl, username, password))
+        val normalized =
+            eu.opencloud.android.next.core.network
+                .EndpointPolicy()
+                .endpoint(
+                    if ("://" in
+                        serverUrl
+                    ) {
+                        serverUrl.trim()
+                    } else {
+                        "https://${serverUrl.trim()}"
+                    },
+                    allowQuery = false,
+                ).toString()
+                .trimEnd('/')
+        repository = repositoryFor(normalized)
+        mutableState.value = mutableState.value.copy(serverUrl = normalized, isLoading = true, error = null)
+        setSession(repository.loginBasic(normalized, username, password))
     }
 
+    @Suppress("TooGenericExceptionCaught")
     fun beginOidc(): String? {
         val configuration = mutableState.value.oidcConfiguration ?: return null
-        return repository.beginPkce(configuration).also { request -> pkce = request }.authorizationUrl
+        return try {
+            val request = repository.beginPkce(configuration)
+            credentialStore.savePendingLogin(
+                eu.opencloud.android.next.core.security.PendingOidcLogin(
+                    requireNotNull(mutableState.value.serverUrl),
+                    configuration,
+                    request,
+                    System.currentTimeMillis(),
+                ),
+            )
+            request.authorizationUrl
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            mutableState.value =
+                mutableState.value.copy(error = exception.toAuthError(getApplication(), certificateErrorMessage()))
+            null
+        }
     }
 
     fun completeOidcCallback(callback: String) =
         launchAuth {
             val callbackUri = android.net.Uri.parse(callback)
-            val authorizationError = callbackUri.getQueryParameter("error")
-            if (!authorizationError.isNullOrBlank()) {
-                val description = callbackUri.getQueryParameter("error_description")
+            require(callbackUri.scheme == "eu.opencloud.android.next" && callbackUri.authority == "oauth")
+            require(callbackUri.path.isNullOrEmpty() && callbackUri.fragment == null)
+            val states = callbackUri.getQueryParameters("state")
+            require(states.size == 1 && states.single().isNotBlank())
+            val pending = credentialStore.consumePendingLogin(states.single(), System.currentTimeMillis())
+            if (pending == null) {
                 mutableState.value =
                     mutableState.value.copy(
                         isLoading = false,
-                        error = description ?: "The sign-in request was rejected: $authorizationError",
+                        error = getApplication<Application>().getString(R.string.auth_oidc_session_expired),
                     )
                 return@launchAuth
             }
-            val request = pkce
-            if (request == null) {
+            val codes = callbackUri.getQueryParameters("code")
+            if (callbackUri.getQueryParameter("error") != null || codes.size != 1 || codes.single().isBlank()) {
                 mutableState.value =
                     mutableState.value.copy(
                         isLoading = false,
-                        error = "The sign-in session expired before the callback was received. Please sign in again.",
+                        error = getApplication<Application>().getString(R.string.auth_sign_in_cancelled),
                     )
                 return@launchAuth
             }
-            val state = callbackUri.getQueryParameter("state")
-            val code = callbackUri.getQueryParameter("code")
-            if (state != request.state || code.isNullOrBlank()) {
-                mutableState.value =
-                    mutableState.value.copy(
-                        isLoading = false,
-                        error = "The sign-in callback could not be verified.",
-                    )
-                return@launchAuth
-            }
-            val configuration = mutableState.value.oidcConfiguration
-            val discoveryResult = discovery
-            if (configuration == null || discoveryResult == null) {
-                mutableState.value =
-                    mutableState.value.copy(
-                        isLoading = false,
-                        error = "The server sign-in configuration is no longer available. Please start again.",
-                    )
-                return@launchAuth
-            }
-            mutableState.value = mutableState.value.copy(isLoading = true, error = null)
+            repository = repositoryFor(pending.serverUrl)
+            mutableState.value = mutableState.value.copy(isLoading = true, error = null, serverUrl = pending.serverUrl)
             setSession(
                 repository.completePkce(
-                    discoveryResult.serverUrl,
-                    configuration,
-                    code,
-                    request.codeVerifier,
+                    pending.serverUrl,
+                    pending.configuration,
+                    codes.single(),
+                    pending.request.codeVerifier,
                 ),
             )
         }
@@ -180,6 +200,8 @@ class AuthViewModel(
         return AuthRepository(
             OpenCloudApi(tlsPolicy.applyTo(baseClient, serverUrl)),
             credentialStore,
+            eu.opencloud.android.next.core.security.AccountSessions
+                .get(getApplication()),
         )
     }
 
@@ -204,10 +226,16 @@ class AuthViewModel(
                 throw exception
             } catch (exception: Exception) {
                 // Network, protocol, and TLS failures are intentionally mapped to one safe UI error boundary.
-                mutableState.value = mutableState.value.copy(isLoading = false, error = exception.toAuthError())
+                mutableState.value =
+                    mutableState.value.copy(
+                        isLoading = false,
+                        error = exception.toAuthError(getApplication(), certificateErrorMessage()),
+                    )
             }
         }
     }
+
+    private fun certificateErrorMessage() = getApplication<Application>().getString(R.string.auth_certificate_untrusted)
 }
 
 data class AuthUiState(
@@ -226,12 +254,29 @@ enum class AuthenticationMode {
     OIDC,
 }
 
-private fun Throwable.toAuthError(): String =
+internal fun Throwable.toAuthError(): String =
+    toAuthError(
+        "The server certificate could not be trusted. " +
+            "Review the certificate fingerprint before approving an explicit pin.",
+    )
+
+internal fun Throwable.toAuthError(
+    context: Context,
+    certificateErrorMessage: String,
+): String =
     when {
         this is SSLHandshakeException || cause is SSLHandshakeException || cause is CertificateException ->
-            "The server certificate could not be trusted. Review the certificate fingerprint before approving an explicit pin."
-        message?.contains("HTTP 401") == true -> "The server rejected these credentials."
-        else -> message ?: "Unable to connect to the server."
+            certificateErrorMessage
+        this is eu.opencloud.android.next.core.network.OpenCloudException -> error.safeMessage(context)
+        else -> toOpenCloudError().safeMessage(context)
+    }
+
+internal fun Throwable.toAuthError(certificateErrorMessage: String): String =
+    when {
+        this is SSLHandshakeException || cause is SSLHandshakeException || cause is CertificateException ->
+            certificateErrorMessage
+        this is eu.opencloud.android.next.core.network.OpenCloudException -> error.safeMessage()
+        else -> toOpenCloudError().safeMessage()
     }
 
 internal fun hasUsablePersistedCredential(

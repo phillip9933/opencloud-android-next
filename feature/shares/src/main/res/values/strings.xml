@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_metadata_name_label">Share name</string>
+    <string name="share_metadata_fallback_name">Share</string>
+    <!-- %1$s is the formatted share creation date. -->
+    <string name="share_metadata_created">Created: %1$s</string>
+    <!-- %1$s is the formatted expiration date or the no-expiration label. -->
+    <string name="share_metadata_expires">Expires: %1$s</string>
+    <string name="share_metadata_no_expiration">No expiration</string>
+    <string name="share_metadata_location_label">Location</string>
+    <string name="share_metadata_location_unavailable">The server did not provide a location.</string>
+    <!-- Explain that a folder share includes descendants and can be browsed. -->
+    <string name="share_metadata_folder_scope">This share includes this folder and its contents, including subfolders. Open the folder to browse its current contents.</string>
+    <string name="share_browse_folder">Browse folder contents</string>
+    <string name="share_show_in_folder">Show in folder</string>
+    <string name="share_locating_item">Locating shared item…</string>
+    <string name="share_item_unavailable">This item is not available in the local file index. Refresh its Space and try again.</string>
+    <!-- %1$s is File or Folder and %2$s is the shared path or fallback label. -->
+    <string name="share_item_summary">%1$s: %2$s</string>
+    <string name="share_item_type_folder">Folder</string>
+    <string name="share_item_type_file">File</string>
+    <string name="share_item_location_unavailable">Location unavailable</string>
+    <string name="share_metadata_expires_short">Expires</string>
+    <string name="share_ok">OK</string>
+    <string name="share_category_with_me">Shared with me</string>
+    <string name="share_category_by_me">Shared by me</string>
+    <string name="share_category_public">Public links</string>
+    <string name="shares_title">Shares</string>
+    <string name="shares_back">Back</string>
+    <string name="shares_refresh">Refresh shares</string>
+    <string name="shares_internal_heading">Internal sharing</string>
+    <string name="shares_internal_description">Share with people and groups from this OpenCloud server.</string>
+    <string name="shares_add_people">Add people</string>
+    <string name="shares_not_supported">Sharing is not supported by this server.</string>
+    <string name="shares_no_internal_shares">No people or groups have access yet.</string>
+    <string name="shares_external_heading">External sharing</string>
+    <string name="shares_external_description">Create a public link for people outside this OpenCloud server.</string>
+    <string name="shares_create_public_link">Create public link</string>
+    <string name="shares_copy_link">Copy link</string>
+    <string name="shares_public_not_supported">Public link sharing is not supported by this server.</string>
+    <string name="shares_no_public_links">No public links have been created.</string>
+    <string name="shares_public_link_fallback">Public link</string>
+    <!-- %1$s is the share type, %2$s is the permission list, and %3$s is optional expiration text. -->
+    <string name="shares_row_metadata">%1$s • %2$s%3$s</string>
+    <string name="shares_copy_link_failed">The link could not be copied. Check your connection and try again.</string>
+    <string name="shares_details">Details</string>
+    <string name="shares_details_title">Share details</string>
+    <string name="shares_permissions">Permissions</string>
+    <string name="shares_revoke">Revoke share</string>
+    <string name="shares_save">Save</string>
+    <string name="shares_cancel">Cancel</string>
+    <string name="shares_invite_title">Share with people or groups</string>
+    <string name="shares_search_recipients">Search recipients</string>
+    <string name="shares_recipient_group">Group</string>
+    <string name="shares_recipient_user">User</string>
+    <string name="shares_shared_with_you">Shared with you</string>
+    <string name="shares_link_name_optional">Link name (optional)</string>
+    <string name="shares_password_required">Password (required)</string>
+    <string name="shares_password_required_by_server">This server requires public links to be password protected.</string>
+    <string name="shares_expiration_required">Expiration YYYY-MM-DD (required)</string>
+    <string name="shares_expiration_optional">Expiration YYYY-MM-DD (optional)</string>
+    <!-- %1$d is the maximum number of days before a public link expires. -->
+    <plurals name="shares_expiration_max_days">
+        <item quantity="one">Maximum %1$d day</item>
+        <item quantity="other">Maximum %1$d days</item>
+    </plurals>
+    <string name="shares_expiration_future">Choose today or a future date</string>
+    <string name="shares_create_link">Create link</string>
+    <string name="shares_permission_view_download">View and download</string>
+    <string name="shares_permission_view_download_upload">View, download and upload</string>
+    <string name="shares_permission_edit_contents">Edit contents</string>
+    <string name="shares_permission_upload_only">Upload only</string>
+    <string name="shares_permission_view_edit">View and edit</string>
+    <string name="shares_permission_read">Read</string>
+    <string name="shares_permission_update">Update</string>
+    <string name="shares_permission_create">Create</string>
+    <string name="shares_permission_delete">Delete</string>
+    <string name="shares_permission_reshare">Re-share</string>
+    <string name="shares_permission_share">Share</string>
+    <string name="shares_empty_with_me">Nothing has been shared with you.</string>
+    <string name="shares_empty_by_me">You have not shared any files.</string>
+    <string name="shares_empty_public">You have not created any public links.</string>
+    <string name="shares_dialog_error_title">Sharing</string>
+    <string name="shares_dialog_done_title">Done</string>
+    <!-- %1$s is the file name whose local-copy actions are shown. -->
+    <string name="shares_actions_for_file">Actions for %1$s</string>
+    <string name="shares_make_copy_temporary">Make copy temporary</string>
+    <string name="shares_keep_local_copy">Keep local copy</string>
+    <string name="shares_remove_local_copy">Remove local copy</string>
+    <string name="shares_clipboard_label">OpenCloud public link</string>
+    <string name="incoming_open_no_app">No installed app can open this file type.</string>
+    <string name="incoming_open_access_unavailable">File access is unavailable. Unlock and refresh before trying again.</string>
+    <string name="incoming_parent_folder">Parent folder</string>
+    <string name="incoming_shared_folders">Shared folders</string>
+    <string name="incoming_refresh_folder">Refresh shared folder</string>
+    <string name="incoming_upload">Upload</string>
+    <string name="incoming_upload_source_unavailable">This source cannot keep file access for a background upload. Choose another source.</string>
+    <string name="incoming_try_again">Try again</string>
+    <string name="incoming_no_shared_folders">No shared folders available.</string>
+    <string name="incoming_empty_folder">This folder is empty.</string>
+    <string name="incoming_copy_kept_online_required">Kept on device · online access required</string>
+    <string name="incoming_copy_temporary">Temporary local copy</string>
+    <string name="incoming_copy_cloud_only">Cloud only</string>
+    <!-- %1$d is the number of shared folders unavailable in the current view. -->
+    <plurals name="incoming_unavailable_folders">
+        <item quantity="one">%1$d shared folder is currently unavailable.</item>
+        <item quantity="other">%1$d shared folders are currently unavailable.</item>
+    </plurals>
+</resources>

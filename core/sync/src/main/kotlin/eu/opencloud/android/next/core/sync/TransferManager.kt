@@ -18,11 +18,13 @@ import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.TransferDirection
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
-import eu.opencloud.android.next.core.model.ResourceKind
-import eu.opencloud.android.next.core.network.GraphFavoriteClient
+import eu.opencloud.android.next.core.model.AppClock
+import eu.opencloud.android.next.core.model.SystemAppClock
 import eu.opencloud.android.next.core.network.TransferClient
-import eu.opencloud.android.next.core.network.WebDavFeatureClient
 import eu.opencloud.android.next.core.security.TlsPolicy
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.util.UUID
@@ -32,20 +34,77 @@ class TransferManager(
     private val context: Context,
     private val store: FileBrowserStore = FileBrowserStore(FileBrowserDatabase.create(context)),
     private val workManager: WorkManager = WorkManager.getInstance(context),
+    private val clock: AppClock = SystemAppClock,
+    private val sharedQueue: SharedDownloadQueue? = null,
 ) {
+    private val mutationOperations =
+        TransferMutationOperations(context, store, ::refreshAfterMutation)
+    private val localCopies = LocalCopyOperations(context, store, workManager)
+
+    private suspend fun refreshAfterMutation(
+        accountId: String,
+        spaceId: String,
+        parentId: String?,
+    ) {
+        store.queueFolderRefresh(accountId, spaceId, parentId)
+        reconcileDiscovery()
+    }
+
+    suspend fun enqueueSharedDownload(
+        request: SharedDownloadRequest,
+        offlinePin: Boolean,
+    ): TransferEntity {
+        val accepted = sharedDownloads().enqueue(request, UUID.randomUUID().toString(), offlinePin, clock.epochMillis())
+        enqueueDownloadWork(accepted)
+        return requireNotNull(store.transfer(accepted.id))
+    }
+
+    private fun sharedDownloads() = sharedQueue ?: SharedDownloadQueue.create(context)
+
+    suspend fun enqueueSharedUpload(
+        destination: SharedFolderRequest,
+        source: Uri,
+    ): String {
+        require(source.scheme == "content") { "Choose a readable local file." }
+        val metadata = sourceMetadata(source)
+        val name = metadata.name.requireValidSegment()
+        val now = clock.epochMillis()
+        val transfer =
+            TransferEntity(
+                id = UUID.randomUUID().toString(),
+                accountId = destination.account,
+                spaceId = destination.scope,
+                resourceId = destination.remoteId,
+                direction = "UPLOAD",
+                sourceUri = source.toString(),
+                destinationPath = destination.path.trimEnd('/') + "/" + name,
+                displayName = name,
+                mimeType = metadata.mimeType,
+                bytesTotal = metadata.size,
+                locationKind = "SHARED_FOLDER",
+                createdAtEpochMillis = now,
+                updatedAtEpochMillis = now,
+            )
+        val accepted = IncomingFolderUploadQueue.create(context).enqueue(destination, transfer)
+        enqueueUploadWork(accepted)
+        return accepted.id
+    }
+
     suspend fun enqueueUpload(
         accountId: String,
         spaceId: String,
         parentPath: String?,
         source: Uri,
-        deleteSourceAfterSuccess: Boolean = false,
+        backup: eu.opencloud.android.next.core.database.FolderBackupEntity? = null,
     ): String {
+        require(
+            backup?.deleteAfterUpload != true,
+        ) { "Source deletion is unavailable until upload verification is complete." }
         require(source.scheme == "content" || source.scheme == "file") { "Choose a readable local file." }
         val metadata = sourceMetadata(source)
         val name = metadata.name.requireValidSegment()
         val destination = "${parentPath?.trimEnd('/').orEmpty()}/$name"
-        store.activeUpload(accountId, spaceId, source.toString(), destination)?.let { return it.id }
-        val now = System.currentTimeMillis()
+        val now = clock.epochMillis()
         val transfer =
             TransferEntity(
                 id = UUID.randomUUID().toString(),
@@ -58,13 +117,21 @@ class TransferManager(
                 displayName = name,
                 mimeType = metadata.mimeType,
                 bytesTotal = metadata.size,
-                deleteSourceAfterSuccess = deleteSourceAfterSuccess,
+                deleteSourceAfterSuccess = false,
                 createdAtEpochMillis = now,
                 updatedAtEpochMillis = now,
             )
-        store.createTransfer(transfer)
-        enqueueUploadWork(transfer)
-        return transfer.id
+        val accepted =
+            if (backup == null) {
+                store.enqueueTransfer(transfer)
+            } else {
+                eu.opencloud.android.next.core.database
+                    .BackupScanStore(
+                        FileBrowserDatabase.create(context),
+                    ).enqueue(backup, transfer)
+            }
+        enqueueUploadWork(accepted)
+        return accepted.id
     }
 
     suspend fun enqueueDownload(
@@ -72,8 +139,7 @@ class TransferManager(
         offlinePin: Boolean,
     ): String {
         require(resource.kind.name == "FILE") { "Only files can be downloaded." }
-        store.activeDownload(resource.accountId, resource.spaceId, resource.remoteId)?.let { return it.id }
-        val now = System.currentTimeMillis()
+        val now = clock.epochMillis()
         val transfer =
             TransferEntity(
                 id = UUID.randomUUID().toString(),
@@ -90,9 +156,16 @@ class TransferManager(
                 createdAtEpochMillis = now,
                 updatedAtEpochMillis = now,
             )
-        store.createTransfer(transfer)
-        enqueueDownloadWork(transfer)
-        return transfer.id
+        val accepted = store.enqueueTransfer(transfer)
+        enqueueDownloadWork(accepted)
+        return accepted.id
+    }
+
+    suspend fun ensureOfflineDownload(resource: ResourceEntity) {
+        val current = store.resource(resource.accountId, resource.spaceId, resource.remoteId) ?: return
+        if (cachedDownload(context, current) == null && store.blockedDownload(current) == null) {
+            enqueueDownload(current, false)
+        }
     }
 
     suspend fun makeAvailableOffline(resource: ResourceEntity) {
@@ -115,7 +188,50 @@ class TransferManager(
                 request,
             )
         } else {
-            enqueueDownload(resource, true)
+            val current = store.resource(resource.accountId, resource.spaceId, resource.remoteId) ?: return
+            if (cachedDownload(context, current) == null) enqueueDownload(current, true)
+        }
+    }
+
+    suspend fun removeAllLocalCopies(accountId: String) = localCopies.removeAll(accountId)
+
+    suspend fun removeLocalCopy(
+        resource: ResourceEntity,
+        requireSameCopy: Boolean = false,
+    ) = localCopies.remove(resource, requireSameCopy)
+
+    suspend fun ensureBackupDestination(
+        accountId: String,
+        spaceId: String,
+        path: String,
+    ) {
+        require(!FileBrowserDatabase.create(context).vaultExclusionDao().denies(accountId, spaceId, path, true)) {
+            "Encrypted vault locations are unavailable."
+        }
+        val account = requireNotNull(store.account(accountId))
+        val space = requireNotNull(store.space(accountId, spaceId))
+        require(account.isActive && !space.isDisabled && !space.isDeleted) { "The backup location is unavailable." }
+        val root = webDavRoot(space)
+        val http = TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl)
+        val authorization = WorkerAuthorizationProvider(context).authorization(account)
+        val created =
+            withRequestCancellation(
+                cancelRequests = { http.dispatcher.cancelAll() },
+                isOwned = {
+                    val currentAccount = store.account(accountId)
+                    val currentSpace = store.space(accountId, spaceId)
+                    val available = currentSpace != null && !currentSpace.isDisabled && !currentSpace.isDeleted
+                    currentAccount?.isActive == true &&
+                        available &&
+                        !FileBrowserDatabase.create(context).vaultExclusionDao().denies(accountId, spaceId, path, true)
+                },
+            ) {
+                val coroutine = kotlinx.coroutines.currentCoroutineContext()
+                ensureBackupCollections(root, path, http, authorization) { coroutine.ensureActive() }
+            }
+        if (created) {
+            store.queueFolderRefresh(accountId, spaceId, null)
+            reconcileDiscovery()
         }
     }
 
@@ -124,21 +240,7 @@ class TransferManager(
         spaceId: String,
         parentId: String?,
         name: String,
-    ) {
-        val normalizedName = name.trim().requireValidSegment()
-        val account = requireNotNull(store.account(accountId)) { "The account is unavailable." }
-        val space = requireNotNull(store.space(accountId, spaceId)) { "The space is unavailable." }
-        val parent = parentId?.let { requireNotNull(store.resource(accountId, spaceId, it)) }
-        require(parent == null || parent.kind == ResourceKind.FOLDER) { "Choose a folder as the parent." }
-        val destinationPath = "${parent?.path?.trimEnd('/').orEmpty()}/$normalizedName"
-        val root =
-            space.rootWebDavUrl?.takeIf(String::isNotBlank)
-                ?: "${account.serverUrl.trimEnd('/')}/remote.php/dav/files/${Uri.encode(account.userId)}"
-        val client = TransferClient(TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl))
-        val authorization = WorkerAuthorizationProvider(context).authorization(account)
-        client.createCollection(root.childUrl(destinationPath), authorization)
-        store.createFolder(accountId, spaceId, parentId, normalizedName)
-    }
+    ) = mutationOperations.createFolder(accountId, spaceId, parentId, name)
 
     fun refreshAccount(accountId: String): UUID {
         val request =
@@ -183,6 +285,9 @@ class TransferManager(
         overwrite: Boolean,
         keepBoth: Boolean = false,
     ) {
+        require(transfer.direction == "UPLOAD" && transfer.state == "CONFLICT")
+        require(overwrite != keepBoth) { "Choose either replace or keep both." }
+        require(transfer.locationKind != "SHARED_FOLDER" || !overwrite) { "Shared uploads only support keep both." }
         val destination = if (keepBoth) conflictCopyPath(transfer.destinationPath) else transfer.destinationPath
         val reset =
             transfer.copy(
@@ -190,43 +295,72 @@ class TransferManager(
                 displayName = destination.substringAfterLast('/'),
                 state = TransferState.QUEUED.name,
                 error = null,
+                errorCode = null,
+                notBeforeEpochMillis = 0,
+                attemptCount = 0,
                 overwrite = overwrite,
-                workId = null,
-                updatedAtEpochMillis = System.currentTimeMillis(),
+                bytesTransferred = 0,
+                verificationPending = false,
+                expectedETag = null,
+                verifiedETag = null,
+                tusUrl = null,
+                tusOffset = 0,
+                workId = UUID.randomUUID().toString(),
+                updatedAtEpochMillis = clock.epochMillis(),
             )
-        store.updateTransfer(reset)
-        enqueueUploadWork(reset, ExistingWorkPolicy.REPLACE)
+        val retried =
+            if (transfer.locationKind == "SHARED_FOLDER") {
+                IncomingFolderUploadQueue.create(context).retry(transfer, reset)
+            } else {
+                store.retryTransfer(transfer, reset)
+            }
+        retried?.let { enqueueUploadWork(it) }
     }
 
     suspend fun retry(transfer: TransferEntity) {
-        require(transfer.state == TransferState.FAILED.name || transfer.state == TransferState.CANCELLED.name) {
-            "Only failed or cancelled transfers can be retried."
+        require(
+            transfer.state in
+                setOf(
+                    TransferState.FAILED.name,
+                    TransferState.CANCELLED.name,
+                    TransferState.RETRY.name,
+                ),
+        ) {
+            "Only failed, cancelled, or waiting transfers can be retried."
         }
         val reset =
             transfer.copy(
                 state = TransferState.QUEUED.name,
                 error = null,
-                workId = null,
-                updatedAtEpochMillis = System.currentTimeMillis(),
+                errorCode = null,
+                notBeforeEpochMillis = 0,
+                attemptCount = 0,
+                verificationPending = transfer.requiresUploadVerificationOnRetry(),
+                workId = UUID.randomUUID().toString(),
+                updatedAtEpochMillis = clock.epochMillis(),
             )
-        store.updateTransfer(reset)
-        if (reset.direction == TransferDirection.UPLOAD.name) {
-            enqueueUploadWork(reset, ExistingWorkPolicy.REPLACE)
-        } else {
-            enqueueDownloadWork(reset, ExistingWorkPolicy.REPLACE)
+        val retried =
+            if (transfer.locationKind == "SHARED_FOLDER") {
+                if (transfer.direction == "UPLOAD") {
+                    IncomingFolderUploadQueue.create(context).retry(transfer, reset)
+                } else {
+                    sharedDownloads().retry(transfer, requireNotNull(reset.workId), clock.epochMillis())
+                }
+            } else {
+                store.retryTransfer(transfer, reset)
+            }
+        retried?.let { accepted ->
+            if (accepted.direction == TransferDirection.UPLOAD.name) {
+                enqueueUploadWork(accepted)
+            } else {
+                enqueueDownloadWork(accepted)
+            }
         }
     }
 
     suspend fun cancel(transfer: TransferEntity) {
-        transfer.workId?.let { workManager.cancelWorkById(UUID.fromString(it)) }
-        store.updateTransfer(
-            transfer.copy(
-                state = TransferState.CANCELLED.name,
-                error = null,
-                workId = null,
-                updatedAtEpochMillis = System.currentTimeMillis(),
-            ),
-        )
+        store.cancelTransfer(transfer.id)
+        workManager.cancelUniqueWork("transfer-${transfer.id}")
     }
 
     suspend fun clearHistory(accountId: String) = store.clearTransferHistory(accountId)
@@ -246,14 +380,22 @@ class TransferManager(
             transfer.copy(
                 state = TransferState.CANCELLED.name,
                 error = null,
-                updatedAtEpochMillis = System.currentTimeMillis(),
+                errorCode = null,
+                notBeforeEpochMillis = 0,
+                attemptCount = 0,
+                updatedAtEpochMillis = clock.epochMillis(),
             ),
         )
     }
 
     suspend fun saveBackup(configuration: eu.opencloud.android.next.core.database.FolderBackupEntity) {
+        require(configuration.dateOrganization in setOf("NONE", "YEAR_MONTH"))
         store.saveBackup(configuration)
         scheduleBackups()
+        scanBackupsNow()
+    }
+
+    fun scanBackupsNow() {
         val immediate =
             OneTimeWorkRequestBuilder<FolderBackupScanWorker>()
                 .setConstraints(backupConstraints(BuildConfig.DEBUG))
@@ -271,6 +413,7 @@ class TransferManager(
     }
 
     suspend fun reconcile() {
+        reconcileDiscovery()
         store.pendingTransfers().forEach { transfer ->
             if (transfer.direction ==
                 TransferDirection.UPLOAD.name
@@ -282,26 +425,48 @@ class TransferManager(
         }
     }
 
+    suspend fun reconcileDiscovery() {
+        var after = ""
+        while (true) {
+            val page = store.pendingDiscoveries(after)
+            if (page.isEmpty()) return
+            page.forEach { pending ->
+                val request =
+                    OneTimeWorkRequestBuilder<FolderDiscoveryWorker>()
+                        .setInputData(
+                            workDataOf(
+                                FolderDiscoveryWorker.ACCOUNT_ID to pending.accountId,
+                                FolderDiscoveryWorker.SPACE_ID to pending.spaceId,
+                                FolderDiscoveryWorker.FOLDER_ID to pending.folderKey.ifEmpty { null },
+                                FolderDiscoveryWorker.REVISION to pending.revision,
+                            ),
+                        ).setConstraints(networkConstraints())
+                        .addTag(accountWorkTag(pending.accountId))
+                        .build()
+                workManager
+                    .enqueueUniqueWork(
+                        "confirmed-discovery-${pending.revision}",
+                        ExistingWorkPolicy.KEEP,
+                        request,
+                    ).result
+                    .get()
+                if (store.pendingDiscovery(pending.revision) == null) workManager.cancelWorkById(request.id)
+            }
+            after = page.last().revision
+        }
+    }
+
     suspend fun setFavorite(
         resource: ResourceEntity,
         favorite: Boolean,
-    ) {
-        val account = requireNotNull(store.account(resource.accountId))
-        val authorization = WorkerAuthorizationProvider(context).authorization(account)
-        GraphFavoriteClient(TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl))
-            .setFavorite(account.serverUrl, resource.remoteId, authorization, favorite)
-        store.setFavorite(resource, favorite)
-    }
+    ) = mutationOperations.setFavorite(resource, favorite)
 
-    suspend fun delete(resource: ResourceEntity) {
-        val account = requireNotNull(store.account(resource.accountId))
-        val space = requireNotNull(store.space(resource.accountId, resource.spaceId))
-        val root = requireNotNull(space.rootWebDavUrl) { "The space WebDAV URL is unavailable." }
-        val authorization = WorkerAuthorizationProvider(context).authorization(account)
-        WebDavFeatureClient(TlsPolicy(context).applyTo(OkHttpClient.Builder().build(), account.serverUrl))
-            .delete(root.childUrl(resource.path), authorization)
-        store.delete(resource.accountId, resource.spaceId, resource.remoteId)
-    }
+    suspend fun delete(resource: ResourceEntity) = mutationOperations.delete(resource)
+
+    suspend fun renameFile(
+        resource: ResourceEntity,
+        name: String,
+    ) = mutationOperations.renameFile(resource, name)
 
     suspend fun cancelAccountWork(accountId: String) {
         store
@@ -314,8 +479,14 @@ class TransferManager(
     }
 
     fun scheduleCleanup() {
-        val request = PeriodicWorkRequestBuilder<CacheCleanupWorker>(1, TimeUnit.DAYS).build()
-        workManager.enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+        scheduleExcludedCacheCleanup(context)
+        workManager.enqueueUniqueWork(
+            STARTUP_CLEANUP_WORK,
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<CacheCleanupWorker>().build(),
+        )
+        val request = PeriodicWorkRequestBuilder<CacheCleanupWorker>(1, TimeUnit.HOURS).build()
+        workManager.enqueueUniquePeriodicWork(CLEANUP_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
         val offline =
             PeriodicWorkRequestBuilder<OfflineSyncWorker>(
                 15,
@@ -325,38 +496,67 @@ class TransferManager(
         scheduleBackups()
     }
 
-    private suspend fun enqueueUploadWork(
-        transfer: TransferEntity,
-        policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP,
-    ) {
-        val request =
-            OneTimeWorkRequestBuilder<UploadWorker>()
-                .setInputData(workDataOf(TransferWorker.TRANSFER_ID to transfer.id))
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .addTag(accountWorkTag(transfer.accountId))
-                .build()
-        store.updateTransfer(
-            transfer.copy(workId = request.id.toString(), updatedAtEpochMillis = System.currentTimeMillis()),
-        )
-        workManager.enqueueUniqueWork("transfer-${transfer.id}", policy, request)
+    private suspend fun enqueueUploadWork(transfer: TransferEntity) = enqueueTransferWork(transfer)
+
+    private suspend fun enqueueDownloadWork(transfer: TransferEntity) = enqueueTransferWork(transfer)
+
+    private suspend fun enqueueTransferWork(transfer: TransferEntity) {
+        schedulingMutex.withLock {
+            val current = store.transfer(transfer.id) ?: return@withLock
+            if (current.state !in setOf("QUEUED", "RUNNING", "RETRY")) return@withLock
+            val name = "transfer-${current.id}"
+            val existing = workManager.getWorkInfosForUniqueWork(name).get().firstOrNull { !it.state.isFinished }
+            val matchesIntent = current.workId == null || existing?.id?.toString() == current.workId
+            if (existing != null && matchesIntent) {
+                store.recordScheduledWork(current, existing.id.toString(), clock.epochMillis())
+                return@withLock
+            }
+            val persistedId = current.workId?.let(UUID::fromString)
+            val requestId = persistedId?.takeIf { workManager.getWorkInfoById(it).get() == null } ?: UUID.randomUUID()
+            val builder =
+                if (current.direction == TransferDirection.UPLOAD.name) {
+                    OneTimeWorkRequestBuilder<UploadWorker>()
+                } else {
+                    OneTimeWorkRequestBuilder<DownloadWorker>()
+                }
+            val request =
+                builder
+                    .setId(requestId)
+                    .setInputData(workDataOf(TransferWorker.TRANSFER_ID to current.id))
+                    .setInitialDelay(
+                        (current.notBeforeEpochMillis - clock.epochMillis()).coerceIn(0, TimeUnit.DAYS.toMillis(1)),
+                        TimeUnit.MILLISECONDS,
+                    ).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                    .setConstraints(constraintsForTransfer(current))
+                    .addTag(accountWorkTag(current.accountId))
+                    .build()
+            if (!store.recordScheduledWork(current, request.id.toString(), clock.epochMillis())) return@withLock
+            // A different active ID belongs to the superseded attempt. Durable intent wins.
+            workManager.enqueueUniqueWork(name, ExistingWorkPolicy.REPLACE, request).result.get()
+            val latest = store.transfer(current.id)
+            if (latest == null ||
+                latest.state == TransferState.CANCELLED.name ||
+                latest.workId != request.id.toString()
+            ) {
+                workManager.cancelWorkById(request.id)
+            }
+        }
     }
 
-    private suspend fun enqueueDownloadWork(
-        transfer: TransferEntity,
-        policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP,
-    ) {
-        val request =
-            OneTimeWorkRequestBuilder<DownloadWorker>()
-                .setInputData(workDataOf(TransferWorker.TRANSFER_ID to transfer.id))
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .addTag(accountWorkTag(transfer.accountId))
-                .build()
-        store.updateTransfer(
-            transfer.copy(workId = request.id.toString(), updatedAtEpochMillis = System.currentTimeMillis()),
-        )
-        workManager.enqueueUniqueWork("transfer-${transfer.id}", policy, request)
+    private suspend fun constraintsForTransfer(transfer: TransferEntity): Constraints {
+        val pairs =
+            store.enabledBackups().filter { pair ->
+                transfer.direction == TransferDirection.UPLOAD.name &&
+                    pair.accountId == transfer.accountId &&
+                    pair.spaceId == transfer.spaceId &&
+                    transfer.sourceUri?.startsWith(pair.sourceTreeUri.trimEnd('/') + "/document/") == true &&
+                    transfer.destinationPath.startsWith(pair.destinationPath.trimEnd('/') + "/")
+            }
+        return Constraints
+            .Builder()
+            .setRequiredNetworkType(if (pairs.any { it.wifiOnly }) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .setRequiresCharging(pairs.any { it.chargingOnly })
+            .build()
     }
 
     private fun sourceMetadata(uri: Uri): SourceMetadata {
@@ -369,9 +569,13 @@ class TransferManager(
             }
         }
         if (size < 0) {
-            size = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+            size =
+                try {
+                    context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+                } catch (_: java.io.FileNotFoundException) {
+                    -1L // Some providers support streams but cannot expose an asset descriptor.
+                }
         }
-        require(size >= 0) { "The selected file size could not be determined." }
         return SourceMetadata(name, context.contentResolver.getType(uri), size)
     }
 
@@ -403,7 +607,9 @@ class TransferManager(
     )
 
     private companion object {
+        val schedulingMutex = Mutex()
         const val CLEANUP_WORK = "opencloud-cache-cleanup"
+        const val STARTUP_CLEANUP_WORK = "opencloud-startup-cache-cleanup"
         const val OFFLINE_WORK = "opencloud-offline-sync"
         const val BACKUP_WORK = "opencloud-folder-backups"
         const val BACKUP_SCAN_WORK = "opencloud-folder-backup-scan"
@@ -412,9 +618,38 @@ class TransferManager(
 
 fun accountWorkTag(accountId: String) = "opencloud-account-$accountId"
 
+internal fun ensureBackupCollections(
+    root: String,
+    path: String,
+    http: OkHttpClient,
+    authorization: String,
+    checkActive: () -> Unit = {},
+): Boolean {
+    path.split('/').filter(String::isNotBlank).forEach { it.requireValidSegment() }
+    val dav =
+        eu.opencloud.android.next.core.network
+            .DavOperationClient(http)
+    val client = TransferClient(http)
+    var created = false
+    destinationCollectionPaths("${path.trimEnd('/')}/placeholder").forEach { collection ->
+        val url = root.mutationChildUrl(collection)
+        checkActive()
+        var metadata = dav.stat(url, authorization)
+        if (metadata == null) {
+            checkActive()
+            client.createCollection(url, authorization)
+            created = true
+            checkActive()
+            metadata = dav.stat(url, authorization)
+        }
+        require(metadata?.folder == true) { "The backup destination is not a folder." }
+    }
+    return created
+}
+
 private fun networkConstraints() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
-private fun String.childUrl(path: String): String =
+internal fun String.mutationChildUrl(path: String): String =
     toHttpUrl()
         .newBuilder()
         .apply {
@@ -426,21 +661,32 @@ private fun String.childUrl(path: String): String =
         }.build()
         .toString()
 
-internal fun backupConstraints(debug: Boolean): Constraints =
+internal fun backupConstraints(
+    @Suppress("UNUSED_PARAMETER") debug: Boolean,
+): Constraints =
     Constraints
         .Builder()
-        .setRequiredNetworkType(if (debug) NetworkType.CONNECTED else NetworkType.UNMETERED)
-        .setRequiresCharging(!debug)
+        .setRequiredNetworkType(NetworkType.CONNECTED)
         .build()
 
-private fun conflictCopyPath(path: String): String {
+internal fun conflictCopyPath(path: String): String {
     val name = path.substringAfterLast('/')
     val parent = path.substringBeforeLast('/', "")
     val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
-    return "$parent/${name.substring(0, dot)} (conflict copy)${name.substring(dot)}"
+    val extension = name.substring(dot)
+    val stem = name.substring(0, dot)
+    val numberedCopy = Regex("^(.*) \\((\\d+)\\)$").matchEntire(stem)
+    val originalStem = numberedCopy?.groupValues?.get(1) ?: stem
+    val nextNumber =
+        (numberedCopy?.groupValues?.get(2)?.toBigIntegerOrNull() ?: java.math.BigInteger.ZERO) +
+            java.math.BigInteger.ONE
+    val separator = if (parent.isEmpty()) "/" else "$parent/"
+    return "$separator$originalStem ($nextNumber)$extension"
 }
 
-private fun String.requireValidSegment(): String {
-    require(isNotBlank() && '/' !in this && this != "." && this != "..") { "The selected file has an invalid name." }
+internal fun String.requireValidSegment(): String {
+    require(isNotBlank() && none { it == '/' || it == '\\' || it.isISOControl() } && this != "." && this != "..") {
+        "The selected file has an invalid name."
+    }
     return this
 }

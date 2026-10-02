@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="spaces_load_failed">Spaces could not be loaded.</string>
+    <string name="spaces_none_available">No Spaces are available for this account.</string>
+    <!-- %1$s is the displayed Space name in the accessibility description. -->
+    <string name="spaces_open_space">Open Space %1$s</string>
+    <!-- %1$s is the name of the Space owner. -->
+    <string name="spaces_owner">Owner: %1$s</string>
+    <!-- %1$s is used storage and %2$s is available storage. -->
+    <string name="spaces_quota_summary">%1$s used • %2$s available</string>
+</resources>

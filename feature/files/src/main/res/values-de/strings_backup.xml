@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="backup_settings_title">Ordner- und Kamerasicherung</string>
+    <string name="backup_settings_add_accessibility">Sicherung hinzufügen</string>
+    <string name="backup_settings_scan_accessibility">Sicherungen jetzt überprüfen</string>
+    <string name="backup_settings_back">Zurück</string>
+    <string name="backup_settings_ok">OK</string>
+    <string name="backup_settings_active_configurations">Aktive Sicherungen</string>
+    <string name="backup_settings_empty_description">Es sind keine Sicherungsordner eingerichtet. Verwenden Sie +, um einen Quellordner und das OpenCloud-Ziel auszuwählen.</string>
+    <string name="backup_settings_manage">Verwalten</string>
+    <string name="backup_settings_add">Sicherung hinzufügen</string>
+    <string name="backup_settings_source">Quelle: %1$s</string>
+    <string name="backup_settings_last_checked_through">Zuletzt geprüft bis %1$s</string>
+    <string name="backup_settings_not_scanned">Noch nicht überprüft</string>
+    <string name="backup_settings_last_completed_upload">Letzter abgeschlossener Upload %1$s</string>
+    <plurals name="backup_settings_uploads_pending">
+        <item quantity="one">%1$d Upload ausstehend</item>
+        <item quantity="other">%1$d Uploads ausstehend</item>
+    </plurals>
+    <plurals name="backup_settings_uploads_need_attention">
+        <item quantity="one">%1$d Upload erfordert Aufmerksamkeit unter „Uploads“</item>
+        <item quantity="other">%1$d Uploads erfordern Aufmerksamkeit unter „Uploads“</item>
+    </plurals>
+    <string name="backup_settings_watching">Suche nach Änderungen</string>
+    <string name="backup_settings_paused">Sicherung pausiert</string>
+</resources>

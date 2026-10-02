@@ -1,0 +1,4 @@
+<resources>
+    <string name="document_not_utf8">This file is not UTF-8 text. Use Open with to choose another editor.</string>
+    <string name="document_text_too_large">The editor supports UTF-8 text up to 256 KB.</string>
+</resources>

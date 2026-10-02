@@ -8,8 +8,8 @@ import org.junit.Test
 
 class BackupExecutionPolicyTest {
     @Test
-    fun `debug backup bypasses persisted charging and unmetered requirements`() {
-        assertTrue(
+    fun `debug backup also honors persisted charging and unmetered requirements`() {
+        assertFalse(
             BackupExecutionPolicy.canRun(
                 debug = true,
                 wifiOnly = true,
@@ -41,9 +41,15 @@ class BackupExecutionPolicyTest {
     }
 
     @Test
-    fun `release work request retains strict backup constraints`() {
+    fun `release scanner does not impose charging or wifi on unrestricted pairs`() {
         val constraints = backupConstraints(debug = false)
-        assertEquals(NetworkType.UNMETERED, constraints.requiredNetworkType)
-        assertTrue(constraints.requiresCharging())
+        assertEquals(NetworkType.CONNECTED, constraints.requiredNetworkType)
+        assertFalse(constraints.requiresCharging())
+    }
+
+    @Test fun `unrestricted release pair runs without charging or unmetered connection`() {
+        assertTrue(BackupExecutionPolicy.canRun(false, false, false, false, false))
+        assertTrue(BackupExecutionPolicy.canRun(false, true, false, true, false))
+        assertFalse(BackupExecutionPolicy.canRun(false, false, true, true, false))
     }
 }

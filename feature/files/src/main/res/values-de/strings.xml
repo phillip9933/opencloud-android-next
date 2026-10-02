@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="favorites_sync_running">Favoriten werden geprüft. Falls nötig, wird auf eine Verbindung gewartet.</string>
+    <string name="favorites_sync_more">Möglicherweise müssen noch weitere Favoriten geprüft werden.</string>
+    <string name="favorites_sync_failed">Favoriten konnten nicht vollständig aktualisiert werden. Versuchen Sie es erneut.</string>
+    <string name="favorites_sync_unavailable">Die Favoritensuche ist für dieses Konto nicht verfügbar. Zwischengespeicherte Favoriten werden angezeigt.</string>
+    <string name="favorites_sync_continue">Prüfung fortsetzen</string>
+    <string name="favorites_sync_refresh">Favoriten aktualisieren</string>
+
+</resources>

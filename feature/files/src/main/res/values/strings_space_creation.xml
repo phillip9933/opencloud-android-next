@@ -1,0 +1,6 @@
+<resources>
+    <string name="space_created_refresh_pending">The space was created on the server, but its details are not available yet. Refresh Spaces to check again. Submitting the same name again checks this space instead of creating another.</string>
+    <string name="browser_backup_configured">Folder backup configured.</string>
+    <string name="browser_preview_navigation_unavailable">This global navigation action is not available in the file browser preview yet.</string>
+    <string name="space_created_recovery_not_saved">The space was created on the server, but recovery could not be saved on this device. Refresh Spaces before creating another space.</string>
+</resources>
