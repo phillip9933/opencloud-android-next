@@ -42,4 +42,4 @@ The project is provided without warranties; test your server and workflow before
 
 ## Source licensing
 
-The maintainer is selecting the source license before binary publication. Until a root license is added, no additional license to the original application code is granted. Third-party components retain their own licenses and notices.
+Licensed under the [GNU Affero General Public License version 3 (AGPL-3.0-only)](LICENSE), matching the license text used by Kura. See [NOTICE](NOTICE). Third-party components retain their own licenses and notices. The license does not grant rights to third-party trademarks.

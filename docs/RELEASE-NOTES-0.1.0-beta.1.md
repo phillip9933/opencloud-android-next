@@ -24,3 +24,7 @@ See the repository README, privacy statement, third-party notices and release pr
 ## Validation
 
 764 local unit/UI tests pass with zero failures/errors/skips. Formatting, static analysis and screenshot verification pass. Secret scans of Git history and publication candidates found no findings. Device/server acceptance remains limited as described above. Remote CI status is recorded against the tagged revision on GitHub.
+
+## License
+
+Application code: AGPL-3.0-only (matching Kura's actual license file). Full license and notices are included in the source and APK. Third-party components retain their own licenses.

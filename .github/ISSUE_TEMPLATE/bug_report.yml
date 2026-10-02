@@ -1,0 +1,26 @@
+name: Bug report
+description: Report a reproducible problem in the Android client.
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include passwords, tokens or private files. Use private vulnerability reporting for security issues."
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Android/device and OpenCloud server versions
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps, expected behavior and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted screenshots or additional context
