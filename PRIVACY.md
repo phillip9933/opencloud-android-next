@@ -1,6 +1,8 @@
-# Privacy
+# Raiun privacy
 
-OpenCloud Android Next connects to the server and identity provider you configure. File contents, names and account information are sent to those services when needed for your requested operations. The app does not operate its own analytics service or advertising backend.
+Raiun is a personal project maintained for the maintainer's own use and shared on a best-effort basis. It is not an official OpenCloud GmbH product or service.
+
+Raiun connects to the server and identity provider you configure. File contents, names and account information are sent to those services when needed for your requested operations. The app does not operate its own analytics service or advertising backend.
 
 Files and upload staging are kept in private app storage. Temporary copies can be removed through Settings; files deliberately pinned offline are handled separately. Uninstalling deletes private local data. Device backup/transfer exclusions are declared. App locking is an optional access control, not separate encryption of each file.
 

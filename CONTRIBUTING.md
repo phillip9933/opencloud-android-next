@@ -1,6 +1,6 @@
-# Contributing
+# Contributing to Raiun
 
-This independent client is in beta hardening. Please report reproducible bugs first; discuss major feature or dependency changes in an issue before implementing them.
+Raiun is a personal project maintained for the maintainer's own use and shared on a best-effort basis. It is not an official OpenCloud GmbH product or supported client. Please report reproducible bugs first; discuss major feature or dependency changes in an issue before implementing them.
 
 Include the app version, Android version, server version if known, steps, and expected versus actual behavior. Remove tokens, passwords, private URLs and personal files from reports. Security vulnerabilities belong in the private reporting channel described in SECURITY.md.
 

@@ -84,7 +84,7 @@ fun openUploadSource(
     uri: Uri,
 ): InputStream {
     val original =
-        if (requestsOriginalMedia(context, uri)) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requestsOriginalMedia(context, uri)) {
             MediaStore.setRequireOriginal(uri)
         } else {
             uri

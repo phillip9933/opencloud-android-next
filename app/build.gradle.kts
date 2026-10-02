@@ -30,7 +30,7 @@ android {
             .toInt()
 
     defaultConfig {
-        applicationId = "eu.opencloud.android.next"
+        applicationId = "app.raiun.cloud"
         minSdk =
             libs.versions.minSdk
                 .get()
@@ -41,8 +41,8 @@ android {
                 .toInt()
         // The scanner SDK ships native processing for 64-bit Android only.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
-        versionCode = 4
-        versionName = "0.1.0-beta.2"
+        versionCode = 5
+        versionName = "0.1.0-beta.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEV_SERVER_URL", "\"\"")

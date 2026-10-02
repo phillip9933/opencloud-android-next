@@ -68,6 +68,32 @@ class ClientRegistrationResolverTest {
         assertEquals(1, server.requestCount)
     }
 
+    @Test fun `corrected static client replaces cached rejected client and reaches authorization request`() {
+        val config = configuration().copy(registrationEndpoint = null)
+        ClientRegistrationResolver(api, credentials).resolve("https://cloud.example", config, "wrong-client")
+        val corrected =
+            ClientRegistrationResolver(
+                api,
+                credentials,
+            ).resolve("https://cloud.example", config, "OpenCloudAndroid")
+        assertEquals("OpenCloudAndroid", corrected.clientId)
+        assertTrue(
+            AuthRepository(
+                api,
+                credentials,
+            ).beginPkce(corrected).authorizationUrl.contains("client_id=OpenCloudAndroid"),
+        )
+        assertEquals(
+            "OpenCloudAndroid",
+            ClientRegistrationResolver(api, credentials).resolve("https://cloud.example", config).clientId,
+        )
+        assertEquals(
+            "OpenCloudAndroid",
+            ClientRegistrationResolver(api, credentials).bindingForSession("https://cloud.example", corrected).clientId,
+        )
+        assertEquals(0, server.requestCount)
+    }
+
     private fun configuration() =
         OidcConfiguration(
             "https://issuer.example",

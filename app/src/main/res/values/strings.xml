@@ -1,7 +1,9 @@
 <resources>
-    <string name="app_lock_title">OpenCloud is locked</string>
-    <string name="app_lock_setup_required">Set a device screen lock in Android settings to unlock OpenCloud.</string>
-    <string name="app_lock_unlock_biometric">Unlock OpenCloud</string>
+    <string name="app_name" translatable="false">Raiun</string>
+    <string name="app_description">An independent Android client for OpenCloud</string>
+    <string name="app_lock_title">Raiun is locked</string>
+    <string name="app_lock_setup_required">Set a device screen lock in Android settings to unlock Raiun.</string>
+    <string name="app_lock_unlock_biometric">Unlock Raiun</string>
     <string name="app_lock_unlock_credentials">Unlock with device credentials</string>
     <string name="app_lock_biometric_subtitle">Use biometrics or your device screen lock</string>
     <string name="app_lock_use_device_credentials">Use device PIN or password</string>

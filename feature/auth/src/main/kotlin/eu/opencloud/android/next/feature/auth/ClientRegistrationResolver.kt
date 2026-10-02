@@ -22,10 +22,17 @@ class ClientRegistrationResolver(
     ): OidcConfiguration {
         val key = key(serverUrl, configuration)
         val advertisedClientId = configuration.clientId
+        val requestedStaticClientId =
+            staticClientId?.takeIf {
+                it.isNotBlank() &&
+                    advertisedClientId.isNullOrBlank() &&
+                    configuration.registrationEndpoint == null
+            }
         val cached =
             credentials.readClientRegistration(key)?.takeIf {
                 matches(it, serverUrl, configuration) &&
-                    (configuration.clientId.isNullOrBlank() || configuration.clientId == it.clientId)
+                    (configuration.clientId.isNullOrBlank() || configuration.clientId == it.clientId) &&
+                    (requestedStaticClientId == null || requestedStaticClientId == it.clientId)
             }
         val registration =
             cached ?: when {

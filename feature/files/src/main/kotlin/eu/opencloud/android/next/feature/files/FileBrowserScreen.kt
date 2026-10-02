@@ -1357,7 +1357,7 @@ private fun BrowserNavigationDrawer(
         ),
 ) {
     val context = LocalContext.current
-    eu.opencloud.android.next.core.designsystem.OpenCloudWordmark(
+    eu.opencloud.android.next.core.designsystem.RaiunWordmark(
         Modifier.padding(OpenCloudDimensions.SpacingXl),
     )
     HorizontalDivider()

@@ -35,6 +35,8 @@ android {
 dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(project(":core:database"))
+    implementation(project(":core:network"))
+    implementation(project(":core:security"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:sync"))
     implementation(platform(libs.androidx.compose.bom))

@@ -80,7 +80,7 @@ class OidcRegistrationClient(
 
 @Serializable
 private data class RegistrationRequest(
-    @SerialName("client_name") val name: String = "OpenCloud Android Next",
+    @SerialName("client_name") val name: String = "Raiun",
     @SerialName("application_type") val applicationType: String = "native",
     @SerialName("redirect_uris") val redirectUris: List<String> = listOf(NEXT_OIDC_REDIRECT_URI),
     @SerialName("grant_types") val grantTypes: List<String> = listOf("authorization_code", "refresh_token"),

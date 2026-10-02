@@ -11,6 +11,7 @@ import eu.opencloud.android.next.core.datastore.SettingsRepository
 import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.AuthenticationType
+import eu.opencloud.android.next.core.model.auth.NEXT_OIDC_REDIRECT_URI
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
 import eu.opencloud.android.next.core.network.OpenCloudApi
 import eu.opencloud.android.next.core.network.safeMessage
@@ -144,7 +145,10 @@ class AuthViewModel(
     fun completeOidcCallback(callback: String) =
         launchAuth {
             val callbackUri = android.net.Uri.parse(callback)
-            require(callbackUri.scheme == "eu.opencloud.android.next" && callbackUri.authority == "oauth")
+            require(
+                callbackUri.scheme == NEXT_OIDC_REDIRECT_URI.substringBefore("://") &&
+                    callbackUri.authority == "oauth",
+            )
             require(callbackUri.path.isNullOrEmpty() && callbackUri.fragment == null)
             val states = callbackUri.getQueryParameters("state")
             require(states.size == 1 && states.single().isNotBlank())

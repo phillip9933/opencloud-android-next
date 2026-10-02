@@ -144,6 +144,7 @@ class FeatureGoldenTest {
         capture("deleted_files") {
             DeletedFilesScreen(
                 DeletedFilesUiState(
+                    activeSpaceId = "space",
                     resources =
                         listOf(
                             RemoteTrashResource(
@@ -173,14 +174,14 @@ class FeatureGoldenTest {
         val resources =
             listOf(
                 RemoteTrashResource("same", "one", "First.pdf", "/First.pdf", false, 0, 1024),
-                RemoteTrashResource("same", "two", "Second.pdf", "/Second.pdf", false, 0, 2048),
+                RemoteTrashResource("second", "one", "Second.pdf", "/Second.pdf", false, 0, 2048),
             )
         var restored = emptyList<RemoteTrashResource>()
         var deleted = emptyList<RemoteTrashResource>()
         composeRule.activity.setContent {
             OpenCloudTheme {
                 DeletedFilesScreen(
-                    DeletedFilesUiState(resources = resources),
+                    DeletedFilesUiState(resources = resources, activeSpaceId = "one"),
                     {},
                     {},
                     {},

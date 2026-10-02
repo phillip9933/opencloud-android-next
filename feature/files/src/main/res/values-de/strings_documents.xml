@@ -22,10 +22,10 @@
     <string name="document_in_app">In der App</string>
     <string name="document_session_warning">Speichere deine Änderungen, bevor du die App verlässt. Beim Verlassen wird diese Sitzung geschlossen.</string>
     <string name="document_no_web_apps">Auf diesem Server sind keine kompatiblen Web-Apps verfügbar.</string>
-    <string name="document_upload_title">Auf OpenCloud hochladen</string>
+    <string name="document_upload_title">Mit Raiun hochladen</string>
     <string name="document_preparing_uploads">Uploads werden vorbereitet.</string>
     <string name="document_saving_shared">Freigegebene Dateien werden gespeichert.</string>
-    <string name="document_sign_in_to_share">Öffne OpenCloud und melde dich an. Teile diese Dateien anschließend erneut.</string>
+    <string name="document_sign_in_to_share">Öffne Raiun und melde dich an. Teile diese Dateien anschließend erneut.</string>
     <string name="document_retry_uploads">Uploads erneut versuchen</string>
     <string name="document_upload_here">Hier hochladen</string>
     <string name="document_account">Konto</string>

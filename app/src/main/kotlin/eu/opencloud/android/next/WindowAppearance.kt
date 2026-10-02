@@ -36,7 +36,7 @@ internal fun Activity.updateTaskBackground(
             ActivityManager.TaskDescription
                 .Builder()
                 .setLabel(
-                    "OpenCloud",
+                    "Raiun",
                 ).setIcon(R.mipmap.ic_launcher)
                 .setPrimaryColor(color)
                 .setBackgroundColor(color)

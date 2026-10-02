@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_lock_title">OpenCloud ist gesperrt</string>
-    <string name="app_lock_setup_required">Richte in den Android-Einstellungen eine Bildschirmsperre ein, um OpenCloud zu entsperren.</string>
-    <string name="app_lock_unlock_biometric">OpenCloud entsperren</string>
+    <string name="app_description">Ein unabhängiger Android-Client für OpenCloud</string>
+    <string name="app_lock_title">Raiun ist gesperrt</string>
+    <string name="app_lock_setup_required">Richte in den Android-Einstellungen eine Bildschirmsperre ein, um Raiun zu entsperren.</string>
+    <string name="app_lock_unlock_biometric">Raiun entsperren</string>
     <string name="app_lock_unlock_credentials">Mit den Anmeldedaten des Geräts entsperren</string>
     <string name="app_lock_biometric_subtitle">Biometrie oder Bildschirmsperre des Geräts verwenden</string>
     <string name="app_lock_use_device_credentials">PIN oder Passwort des Geräts verwenden</string>

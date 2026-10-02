@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -41,6 +44,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.network.RemoteTrashResource
 import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.network.toOpenCloudError
@@ -57,8 +61,29 @@ data class DeletedFilesUiState(
     val loading: Boolean = false,
     val mutating: Boolean = false,
     val resources: List<RemoteTrashResource> = emptyList(),
+    val bins: List<DeletedFilesBin> = emptyList(),
+    val activeSpaceId: String? = null,
     val error: String? = null,
 )
+
+data class DeletedFilesBin(
+    val spaceId: String,
+    val name: String,
+    val isPersonal: Boolean,
+    val count: Int,
+    val supported: Boolean,
+    val error: String? = null,
+)
+
+internal fun resourcesForDeletedSpace(
+    resources: List<RemoteTrashResource>,
+    spaceId: String,
+): List<RemoteTrashResource> = resources.filter { it.spaceId == spaceId }
+
+internal fun pruneDeletedSelection(
+    selected: Set<String>,
+    resources: List<RemoteTrashResource>,
+): Set<String> = selected.intersect(resources.map { it.selectionKey }.toSet())
 
 class DeletedFilesViewModel(
     application: Application,
@@ -67,31 +92,116 @@ class DeletedFilesViewModel(
     private val mutableState = MutableStateFlow(DeletedFilesUiState())
     val state = mutableState.asStateFlow()
     private var accountId: String? = null
+    private var loadGeneration = 0
 
-    fun load(accountId: String) {
+    fun load(
+        accountId: String,
+        initialSpaceId: String? = null,
+    ) {
         this.accountId = accountId
-        refresh()
+        mutableState.value = DeletedFilesUiState(loading = true, activeSpaceId = initialSpaceId)
+        if (initialSpaceId == null) loadBins() else loadBin(initialSpaceId)
+    }
+
+    fun openBin(spaceId: String) {
+        if (state.value.mutating) return
+        loadBin(spaceId)
+    }
+
+    fun showOverview() {
+        if (state.value.mutating) return
+        mutableState.value = mutableState.value.copy(activeSpaceId = null, resources = emptyList(), error = null)
+        loadBins()
     }
 
     fun refresh() {
         if (state.value.loading || state.value.mutating) return
-        val accountId = accountId ?: return
+        val selected = state.value.activeSpaceId
+        if (selected == null) loadBins() else loadBin(selected)
+    }
+
+    private fun loadBins() {
+        val account = accountId ?: return
+        val generation = ++loadGeneration
         viewModelScope.launch {
-            mutableState.value = mutableState.value.copy(loading = true, error = null)
+            mutableState.value = mutableState.value.copy(loading = true, error = null, resources = emptyList())
             runCatching {
-                withContext(Dispatchers.IO) {
-                    manager.load(accountId)
-                }
-            }.onSuccess { resources ->
-                mutableState.value = DeletedFilesUiState(supported = resources != null, resources = resources.orEmpty())
+                withContext(Dispatchers.IO) { manager.loadBySpace(account) }
+            }.onSuccess { results ->
+                if (generation != loadGeneration) return@onSuccess
+                val bins =
+                    results
+                        .map { result ->
+                            DeletedFilesBin(
+                                result.spaceId,
+                                result.name,
+                                result.isPersonal,
+                                result.resources.size,
+                                result.supported,
+                                result.error?.toOpenCloudError()?.safeMessage(getApplication()),
+                            )
+                        }.sortedWith(
+                            compareByDescending<DeletedFilesBin> { it.isPersonal }.thenBy { it.name.lowercase() },
+                        )
+                mutableState.value =
+                    DeletedFilesUiState(loading = false, bins = bins, supported = bins.any { it.supported })
             }.onFailure {
                 if (it is CancellationException) throw it
-                mutableState.value =
-                    mutableState.value.copy(
-                        loading = false,
-                        error = it.toOpenCloudError().safeMessage(getApplication()),
-                    )
+                if (generation == loadGeneration) {
+                    mutableState.value =
+                        mutableState.value.copy(
+                            loading = false,
+                            error = it.toOpenCloudError().safeMessage(getApplication()),
+                        )
+                }
             }
+        }
+    }
+
+    private fun loadBin(spaceId: String) {
+        val account = accountId ?: return
+        val generation = ++loadGeneration
+        val bins = state.value.bins
+        mutableState.value = DeletedFilesUiState(loading = true, bins = bins, activeSpaceId = spaceId)
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { manager.loadSpace(account, spaceId) } }
+                .onSuccess { result ->
+                    if (generation == loadGeneration) {
+                        val bin =
+                            DeletedFilesBin(
+                                result.spaceId,
+                                result.name,
+                                result.isPersonal,
+                                result.resources.size,
+                                result.supported,
+                                result.error?.toOpenCloudError()?.safeMessage(getApplication()),
+                            )
+                        mutableState.value =
+                            DeletedFilesUiState(
+                                supported = result.supported,
+                                resources = resourcesForDeletedSpace(result.resources, spaceId),
+                                bins =
+                                    (bins.filterNot { it.spaceId == bin.spaceId } + bin)
+                                        .sortedWith(
+                                            compareByDescending<DeletedFilesBin> { it.isPersonal }.thenBy {
+                                                it.name
+                                                    .lowercase()
+                                            },
+                                        ),
+                                activeSpaceId = spaceId,
+                                error = bin.error,
+                            )
+                    }
+                }.onFailure {
+                    if (it is CancellationException) throw it
+                    if (generation == loadGeneration) {
+                        mutableState.value =
+                            mutableState.value.copy(
+                                loading = false,
+                                error = it.toOpenCloudError().safeMessage(getApplication()),
+                            )
+                    }
+                }
         }
     }
 
@@ -114,9 +224,18 @@ class DeletedFilesViewModel(
         resources: List<RemoteTrashResource>,
         action: suspend (String, RemoteTrashResource) -> Unit,
     ) {
-        val account = accountId ?: return
-        if (state.value.loading || state.value.mutating) return
-        mutableState.value = state.value.copy(mutating = true, error = null)
+        val current = state.value
+        val account = accountId
+        val selectedSpaceId = current.activeSpaceId
+        val invalidScope =
+            selectedSpaceId == null || resources.any { it.spaceId != selectedSpaceId }
+        if (account == null || current.loading || current.mutating) {
+            return
+        }
+        if (invalidScope) {
+            return
+        }
+        mutableState.value = current.copy(mutating = true, error = null)
         viewModelScope.launch {
             var failed = 0
             var reason: String? = null
@@ -169,10 +288,11 @@ fun DeletedFilesRoute(
     accountId: String,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
+    initialSpaceId: String? = null,
     viewModel: DeletedFilesViewModel = viewModel(key = "deleted-files-$accountId"),
 ) {
     val state by viewModel.state.collectAsState()
-    LaunchedEffect(accountId) { viewModel.load(accountId) }
+    LaunchedEffect(accountId, initialSpaceId) { viewModel.load(accountId, initialSpaceId) }
     DeletedFilesScreen(
         state,
         onNavigateBack,
@@ -183,6 +303,8 @@ fun DeletedFilesRoute(
         modifier,
         viewModel::restoreMany,
         viewModel::deleteMany,
+        viewModel::openBin,
+        viewModel::showOverview,
     )
 }
 
@@ -199,36 +321,45 @@ fun DeletedFilesScreen(
     modifier: Modifier = Modifier,
     onRestoreMany: (List<RemoteTrashResource>) -> Unit = { it.forEach(onRestore) },
     onDeleteMany: (List<RemoteTrashResource>) -> Unit = { it.forEach(onDelete) },
+    onOpenBin: (String) -> Unit = {},
+    onShowOverview: () -> Unit = {},
 ) {
     var selected by remember { mutableStateOf(emptySet<String>()) }
     var confirmDelete by remember { mutableStateOf<List<RemoteTrashResource>?>(null) }
     val busy = state.loading || state.mutating
     val selection = state.resources.filter { it.selectionKey in selected }
-    LaunchedEffect(state.resources) { selected = selected.intersect(state.resources.map { it.selectionKey }.toSet()) }
-    BackHandler(selected.isNotEmpty()) { selected = emptySet() }
+    LaunchedEffect(state.resources) { selected = pruneDeletedSelection(selected, state.resources) }
+    BackHandler(selected.isNotEmpty() || state.activeSpaceId != null || state.mutating) {
+        if (!state.mutating) {
+            if (selected.isNotEmpty()) selected = emptySet() else onShowOverview()
+        }
+    }
+    LaunchedEffect(state.activeSpaceId) {
+        selected = emptySet()
+        confirmDelete = null
+    }
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (selection.isEmpty()) {
-                            stringResource(R.string.deleted_files_title)
-                        } else {
-                            pluralStringResource(R.plurals.deleted_selection_count, selection.size, selection.size)
-                        },
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { if (selected.isEmpty()) onNavigateBack() else selected = emptySet() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.deleted_back))
-                    }
-                },
+            DeletedFilesTopBar(
+                state = state,
+                selectionCount = selection.size,
+                onClearSelection = { selected = emptySet() },
+                onShowOverview = onShowOverview,
+                onNavigateBack = onNavigateBack,
             )
         },
     ) { outerPadding ->
         Column(Modifier.fillMaxSize().padding(outerPadding)) {
-            if (state.supported) {
+            if (state.activeSpaceId == null) {
+                DeletedFilesOverview(
+                    state = state,
+                    busy = busy,
+                    onRefresh = onRefresh,
+                    onOpenBin = onOpenBin,
+                    modifier = Modifier.weight(1f),
+                )
+            } else if (state.supported) {
                 StorageSummary(
                     title = stringResource(R.string.deleted_recycle_bin_title),
                     explanation = stringResource(R.string.deleted_recycle_bin_explanation),
@@ -248,58 +379,176 @@ fun DeletedFilesScreen(
                 )
             }
             if (state.mutating) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
-            TrashList(
-                state,
-                selected,
-                busy,
-                onRefresh,
-                onRestore,
-                onDelete = { confirmDelete = listOf(it) },
-                onToggle = { resource ->
-                    selected =
-                        if (resource.selectionKey in
-                            selected
-                        ) {
-                            selected - resource.selectionKey
-                        } else {
-                            selected + resource.selectionKey
-                        }
-                },
-                modifier = Modifier.weight(1f),
-            )
+            if (state.activeSpaceId != null) {
+                TrashList(
+                    state,
+                    selected,
+                    busy,
+                    onRefresh,
+                    onRestore,
+                    onDelete = { confirmDelete = listOf(it) },
+                    onToggle = { resource ->
+                        selected =
+                            if (resource.selectionKey in
+                                selected
+                            ) {
+                                selected - resource.selectionKey
+                            } else {
+                                selected + resource.selectionKey
+                            }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
     confirmDelete?.let { resources ->
-        AlertDialog(
-            onDismissRequest = { confirmDelete = null },
-            title = {
-                Text(pluralStringResource(R.plurals.deleted_confirm_title, resources.size, resources.size))
-            },
-            text = {
-                Text(pluralStringResource(R.plurals.deleted_confirm_message, resources.size, resources.size))
-            },
-            confirmButton = {
-                TextButton(enabled = !busy, onClick = {
-                    confirmDelete = null
-                    onDeleteMany(resources)
-                }) { Text(stringResource(R.string.deleted_delete_permanently)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = null }) { Text(stringResource(R.string.deleted_cancel)) }
+        DeletedFilesConfirmationDialog(
+            resources = resources,
+            busy = busy,
+            onDismiss = { confirmDelete = null },
+            onConfirm = {
+                confirmDelete = null
+                onDeleteMany(resources)
             },
         )
     }
-    state.error?.let {
+    DeletedFilesErrorDialog(state.error, onDismissError)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DeletedFilesTopBar(
+    state: DeletedFilesUiState,
+    selectionCount: Int,
+    onClearSelection: () -> Unit,
+    onShowOverview: () -> Unit,
+    onNavigateBack: () -> Unit,
+) {
+    val title =
+        if (selectionCount == 0) {
+            state.bins.firstOrNull { it.spaceId == state.activeSpaceId }?.let { bin ->
+                if (bin.isPersonal) stringResource(R.string.deleted_personal_space) else bin.name
+            } ?: stringResource(R.string.deleted_files_title)
+        } else {
+            pluralStringResource(R.plurals.deleted_selection_count, selectionCount, selectionCount)
+        }
+    TopAppBar(
+        title = { Text(title) },
+        navigationIcon = {
+            IconButton(
+                enabled = !state.mutating,
+                onClick = {
+                    when {
+                        selectionCount > 0 -> onClearSelection()
+                        state.activeSpaceId != null -> onShowOverview()
+                        else -> onNavigateBack()
+                    }
+                },
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.deleted_back))
+            }
+        },
+    )
+}
+
+@Composable
+private fun DeletedFilesConfirmationDialog(
+    resources: List<RemoteTrashResource>,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(pluralStringResource(R.plurals.deleted_confirm_title, resources.size, resources.size)) },
+        text = { Text(pluralStringResource(R.plurals.deleted_confirm_message, resources.size, resources.size)) },
+        confirmButton = {
+            TextButton(
+                enabled = !busy,
+                onClick = onConfirm,
+            ) { Text(stringResource(R.string.deleted_delete_permanently)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.deleted_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun DeletedFilesErrorDialog(
+    error: String?,
+    onDismiss: () -> Unit,
+) {
+    if (error != null) {
         AlertDialog(
-            onDismissRequest = onDismissError,
+            onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.deleted_files_title)) },
-            text = { Text(it) },
-            confirmButton = { TextButton(onClick = onDismissError) { Text(stringResource(R.string.deleted_ok)) } },
+            text = { Text(error) },
+            confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.deleted_ok)) } },
         )
     }
 }
 
-private val RemoteTrashResource.selectionKey: String get() = "$spaceId\u0000$id"
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DeletedFilesOverview(
+    state: DeletedFilesUiState,
+    busy: Boolean,
+    onRefresh: () -> Unit,
+    onOpenBin: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    PullToRefreshBox(
+        isRefreshing = state.loading,
+        onRefresh = { if (!busy) onRefresh() },
+        modifier = modifier,
+    ) {
+        if (state.bins.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    when {
+                        state.loading -> stringResource(R.string.deleted_loading)
+                        state.supported -> stringResource(R.string.deleted_empty)
+                        else -> stringResource(R.string.deleted_unsupported)
+                    },
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(OpenCloudDimensions.SpacingMd),
+            ) {
+                items(state.bins, key = { it.spaceId }) { bin ->
+                    ListItem(
+                        headlineContent = {
+                            Text(if (bin.isPersonal) stringResource(R.string.deleted_personal_space) else bin.name)
+                        },
+                        supportingContent = {
+                            Text(
+                                bin.error
+                                    ?: when {
+                                        bin.supported ->
+                                            pluralStringResource(R.plurals.deleted_bin_item_count, bin.count, bin.count)
+                                        else -> stringResource(R.string.deleted_unsupported)
+                                    },
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
+                        trailingContent = { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null) },
+                        modifier =
+                            Modifier.combinedClickable(
+                                enabled = !busy,
+                                onClick = { onOpenBin(bin.spaceId) },
+                            ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+internal val RemoteTrashResource.selectionKey: String get() = "$spaceId\u0000$id"
 
 @Composable
 @Suppress("LongParameterList")

@@ -43,7 +43,7 @@
     <string name="settings_clear_temporary_copies_confirmation">Möchtest du fortfahren? Dadurch werden temporäre Kopien aller Konten von diesem Smartphone entfernt. Offline gespeicherte Dateien, laufende Downloads und Originale in der Cloud bleiben erhalten.</string>
     <string name="settings_clear_temporary_copies">Temporäre Kopien löschen</string>
     <string name="settings_cancel">Abbrechen</string>
-    <string name="settings_lock_opencloud">OpenCloud sperren</string>
+    <string name="settings_lock_opencloud">Raiun sperren</string>
     <string name="settings_lock_description_secure">Verwende die PIN, das Muster oder das Passwort deines Geräts. Vorschauen und Screenshots der App werden währenddessen ausgeblendet.</string>
     <string name="settings_lock_description_insecure">Richte zuerst in den Android-Einstellungen eine Bildschirmsperre für dein Gerät ein.</string>
     <string name="settings_biometric_unlock">Biometrisch entsperren</string>
@@ -78,9 +78,9 @@
     <string name="settings_photo_video_metadata_not_needed">Für diese Android-Version ist keine Berechtigung für Fotostandorte erforderlich.</string>
     <string name="settings_photo_video_metadata_allowed">Der Zugriff auf Fotostandorte ist erlaubt.</string>
     <string name="settings_photo_video_metadata_not_allowed">Der Zugriff auf Fotostandorte ist nicht erlaubt. Android kann Standortdaten beim Hochladen auslassen.</string>
-    <string name="settings_photo_video_metadata_description">Der Zugriff auf Fotostandorte kann OpenCloud das Lesen von Standortinformationen aus Fotos ermöglichen. Android und der Dateianbieter bestimmen, welche Metadaten enthalten sind. Diese Berechtigung steuert nicht alle Metadaten.</string>
+    <string name="settings_photo_video_metadata_description">Der Zugriff auf Fotostandorte kann Raiun das Lesen von Standortinformationen aus Fotos ermöglichen. Android und der Dateianbieter bestimmen, welche Metadaten enthalten sind. Diese Berechtigung steuert nicht alle Metadaten.</string>
     <string name="settings_request_photo_video_metadata">Fotostandorte erlauben</string>
     <string name="settings_manage_app_permissions">Berechtigungen verwalten</string>
     <string name="settings_ask_for_photo_location">Nach Zugriff auf Fotostandorte fragen</string>
-    <string name="settings_ask_for_photo_location_description">Legt fest, ob OpenCloud nach Zugriff auf Fotostandorte fragt. Das Ausschalten widerruft keine erteilten Berechtigungen und steuert keine anderen Metadaten.</string>
+    <string name="settings_ask_for_photo_location_description">Legt fest, ob Raiun nach Zugriff auf Fotostandorte fragt. Das Ausschalten widerruft keine erteilten Berechtigungen und steuert keine anderen Metadaten.</string>
 </resources>
