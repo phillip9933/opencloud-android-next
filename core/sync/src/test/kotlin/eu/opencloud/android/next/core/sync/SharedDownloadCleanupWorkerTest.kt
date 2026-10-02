@@ -1,8 +1,8 @@
 package eu.opencloud.android.next.core.sync
 
 import android.content.Context
+import androidx.concurrent.futures.CallbackToFutureAdapter
 import androidx.work.Configuration
-import androidx.work.CoroutineWorker
 import androidx.work.ListenableWorker
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -11,7 +11,6 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -25,6 +24,8 @@ import java.io.IOException
 class SharedDownloadCleanupWorkerTest {
     @Test fun refreshDuringCleanupQueuesFollowUp() {
         val context = RuntimeEnvironment.getApplication()
+        // Keep cleanup pending explicitly: this test exercises queue chaining, not coroutine dispatch.
+        val pending = mutableListOf<CallbackToFutureAdapter.Completer<ListenableWorker.Result>>()
         val factory =
             object : WorkerFactory() {
                 override fun createWorker(
@@ -32,8 +33,12 @@ class SharedDownloadCleanupWorkerTest {
                     workerClassName: String,
                     workerParameters: WorkerParameters,
                 ): ListenableWorker =
-                    object : CoroutineWorker(appContext, workerParameters) {
-                        override suspend fun doWork(): Result = awaitCancellation()
+                    object : ListenableWorker(appContext, workerParameters) {
+                        override fun startWork() =
+                            CallbackToFutureAdapter.getFuture<Result> { completer ->
+                                pending.add(completer)
+                                "Pending cleanup for queue chaining test"
+                            }
                     }
             }
         WorkManagerTestInitHelper.initializeTestWorkManager(
@@ -59,6 +64,7 @@ class SharedDownloadCleanupWorkerTest {
             assertEquals(1, excluded.count { it.state == WorkInfo.State.BLOCKED })
         } finally {
             manager.cancelAllWork().result.get()
+            pending.forEach { it.setCancelled() }
             WorkManagerTestInitHelper.closeWorkDatabase()
         }
     }
