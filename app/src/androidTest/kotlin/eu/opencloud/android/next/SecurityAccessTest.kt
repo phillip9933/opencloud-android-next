@@ -81,6 +81,6 @@ class SecurityAccessTest {
 
 private fun hasLockText(node: android.view.accessibility.AccessibilityNodeInfo?): Boolean {
     if (node == null) return false
-    if (node.text?.toString() == "OpenCloud is locked") return true
+    if (node.text?.toString() == "Raiun is locked") return true
     return (0 until node.childCount).any { hasLockText(node.getChild(it)) }
 }
