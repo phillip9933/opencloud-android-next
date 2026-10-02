@@ -57,8 +57,13 @@ jobs:
       - name: Lint release
         run: ./gradlew :app:lintRelease --no-daemon --stacktrace
 
-      - name: Build APKs
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon --stacktrace
+      # APK compression needs more heap for the scanner's native libraries.
+      # Package variants in separate Gradle processes to bound peak memory.
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+
+      - name: Build release APK
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
 
       - name: Report runner disk capacity on failure
         if: failure()
