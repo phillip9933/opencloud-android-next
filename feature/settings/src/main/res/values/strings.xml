@@ -86,4 +86,10 @@
         <item quantity="other">Removed %1$d temporary copies. Files kept offline are preserved.</item>
     </plurals>
     <string name="settings_temporary_copies_remove_failed">Some temporary copies could not be removed. Please try again.</string>
+    <string name="settings_appearance_summary">Theme, language and file list</string>
+    <string name="settings_theme_language">Theme and language</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_change_language">Change language</string>
+    <string name="settings_language_system">System default</string>
+    <string name="settings_file_list">File list display</string>
 </resources>

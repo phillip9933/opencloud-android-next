@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="auth_connect_title">Mit OpenCloud verbinden</string>
-    <string name="auth_server_discovery_description">Geben Sie die Adresse Ihres OpenCloud-Servers ein, um die Anmeldemethode zu ermitteln.</string>
+    <string name="auth_server_discovery_description">Gib die Adresse deines OpenCloud-Servers ein, um die Anmeldemethode zu ermitteln.</string>
     <string name="auth_server_address">Serveradresse</string>
     <string name="auth_use_browser_sign_in">Im Browser anmelden</string>
     <string name="auth_use_app_password">App-Passwort oder Token verwenden</string>
     <string name="auth_client_id">Von der Administration bereitgestellte Client-ID (optional)</string>
     <string name="auth_continue">Weiter</string>
     <string name="auth_dev_login">Entwickleranmeldung</string>
-    <string name="auth_dev_login_configuration">Konfigurieren Sie dev.server.url, dev.server.username und dev.server.password in local.properties.</string>
+    <string name="auth_dev_login_configuration">Konfiguriere dev.server.url, dev.server.username und dev.server.password in local.properties.</string>
     <string name="auth_server_label">Server: %1$s</string>
     <string name="auth_username">Benutzername</string>
     <string name="auth_password">Passwort</string>
     <string name="auth_sign_in">Anmelden</string>
     <string name="auth_sign_in_browser">Im Browser anmelden</string>
-    <string name="auth_app_token_description">Verwenden Sie ein von Ihrem Server ausgestelltes App-Passwort oder Token. Die Anmeldung im Browser ist weiterhin möglich.</string>
+    <string name="auth_app_token_description">Verwende ein von deinem Server ausgestelltes App-Passwort oder Token. Die Anmeldung im Browser ist weiterhin möglich.</string>
     <string name="auth_app_password_or_token">App-Passwort oder Token</string>
     <string name="auth_signed_in_as">Angemeldet als %1$s</string>
     <string name="auth_server_version">Serverversion: %1$s</string>
     <string name="auth_unknown">Unbekannt</string>
     <string name="auth_sharing_available">Freigaben: verfügbar</string>
     <string name="auth_sharing_unavailable">Freigaben: nicht verfügbar</string>
-    <string name="auth_required_fields">Geben Sie die Serveradresse, den Benutzernamen und das App-Passwort oder Token ein.</string>
-    <string name="auth_oidc_session_expired">Die Anmeldesitzung ist abgelaufen oder konnte nicht überprüft werden. Bitte melden Sie sich erneut an.</string>
+    <string name="auth_required_fields">Gib die Serveradresse, den Benutzernamen und das App-Passwort oder Token ein.</string>
+    <string name="auth_oidc_session_expired">Die Anmeldesitzung ist abgelaufen oder konnte nicht überprüft werden. Bitte melde dich erneut an.</string>
     <string name="auth_sign_in_cancelled">Die Anmeldung wurde abgebrochen oder abgelehnt.</string>
-    <string name="auth_certificate_untrusted">Das Serverzertifikat ist nicht vertrauenswürdig. Überprüfen Sie den Zertifikat-Fingerabdruck, bevor Sie eine feste Zertifikatsbindung bestätigen.</string>
+    <string name="auth_certificate_untrusted">Das Serverzertifikat ist nicht vertrauenswürdig. Überprüfe den Zertifikat-Fingerabdruck, bevor du eine feste Zertifikatsbindung bestätigst.</string>
 </resources>

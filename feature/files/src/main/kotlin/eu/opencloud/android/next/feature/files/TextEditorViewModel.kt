@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.ResourceEntity
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.core.model.resourceCacheDirectory
 import eu.opencloud.android.next.core.model.validatedCachedFile
@@ -78,7 +79,10 @@ class TextEditorViewModel(
         if (state.value.busy || draft.queuedId != null) return
         if (text.toByteArray().size > TextDraftStore.MAX_TEXT_BYTES) {
             mutableState.value =
-                state.value.copy(error = getApplication<Application>().getString(R.string.document_text_too_large))
+                state.value.copy(
+                    error =
+                        getApplication<Application>().localizedString(R.string.document_text_too_large),
+                )
         } else {
             mutableState.value = state.value.copy(draft = draft.copy(text = text), savingDraft = true, error = null)
             saveJob?.cancel()
@@ -158,7 +162,7 @@ class TextEditorViewModel(
     private fun failure(error: Throwable) {
         val message =
             if (error is java.nio.charset.CharacterCodingException) {
-                getApplication<Application>().getString(R.string.document_not_utf8)
+                getApplication<Application>().localizedString(R.string.document_not_utf8)
             } else {
                 error.toOpenCloudError().safeMessage(getApplication())
             }

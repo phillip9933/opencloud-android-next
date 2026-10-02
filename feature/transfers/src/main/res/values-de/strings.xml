@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="document_edits_title">Änderungen wiederherstellen</string>
-    <string name="document_edits_warning">Nicht abgeschlossene Änderungen sind möglicherweise unvollständig. Exportieren Sie eine Kopie und prüfen Sie sie, bevor Sie sie hochladen.</string>
+    <string name="document_edits_warning">Nicht abgeschlossene Änderungen sind möglicherweise unvollständig. Exportiere eine Kopie und prüfe sie, bevor du sie hochlädst.</string>
     <string name="document_edits_empty">Keine gespeicherten Änderungen zur Wiederherstellung.</string>
     <string name="document_edits_refresh">Aktualisieren</string>
     <string name="document_edits_close">Schließen</string>
@@ -16,7 +16,7 @@
     <string name="document_edits_export_copy">Kopie exportieren</string>
     <string name="document_edits_discard">Verwerfen</string>
     <string name="document_edits_recovery_copy_exported">Wiederherstellungskopie exportiert. Die Datei in der Cloud bleibt unverändert.</string>
-    <string name="document_edits_action_failed">Diese Aktion konnte nicht abgeschlossen werden. Entsperren Sie die App und versuchen Sie es erneut.</string>
+    <string name="document_edits_action_failed">Diese Aktion konnte nicht abgeschlossen werden. Entsperre die App und versuche es erneut.</string>
     <plurals name="document_edits_unreadable_records">
         <item quantity="one">%1$d Entwurfseintrag konnte nicht gelesen werden. Die zugehörigen Dateien wurden beibehalten.</item>
         <item quantity="other">%1$d Entwurfseinträge konnten nicht gelesen werden. Die zugehörigen Dateien wurden beibehalten.</item>

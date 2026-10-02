@@ -6,15 +6,15 @@ import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import eu.opencloud.android.next.core.security.AppLock
 
 /** Only a successful system authentication can issue an in-memory unlock grant. */
-class DeviceUnlockActivity : FragmentActivity() {
+class DeviceUnlockActivity : AppCompatActivity() {
     private val credentials =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             if (it.resultCode == Activity.RESULT_OK) authenticated() else finish()

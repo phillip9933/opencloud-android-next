@@ -15,10 +15,10 @@
     <string name="account_refresh_accessibility">Konto aktualisieren</string>
     <string name="account_profile_picture">Profilbild</string>
     <string name="account_profile_picture_formats">JPG oder PNG, bis zu 10 MB</string>
-    <string name="account_invalid_picture">Bitte wählen Sie ein gültiges JPG- oder PNG-Bild mit höchstens 10 MB aus.</string>
+    <string name="account_invalid_picture">Bitte wähle ein gültiges JPG- oder PNG-Bild mit höchstens 10 MB aus.</string>
     <string name="account_upload_picture">Bild hochladen</string>
     <string name="account_remove_picture_title">Profilbild entfernen?</string>
-    <string name="account_remove_picture_confirmation">Dadurch wird Ihr Profilbild vom Server und aus allen OpenCloud-Apps entfernt.</string>
+    <string name="account_remove_picture_confirmation">Dadurch wird dein Profilbild vom Server und aus allen OpenCloud-Apps entfernt.</string>
     <string name="account_username">Benutzername</string>
     <string name="account_first_last_name">Vor- und Nachname</string>
     <string name="account_email">E-Mail</string>

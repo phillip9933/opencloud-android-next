@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.ResourceEntity
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.core.sync.SearchRepository
@@ -114,7 +115,9 @@ class SearchViewModel(
     fun dismissActions() = showActions(null)
 
     fun downloadForOffline(resource: ResourceEntity) {
-        runAction(getApplication<Application>().getString(R.string.search_offline_queued)) {
+        runAction(
+            getApplication<Application>().localizedString(R.string.search_offline_queued),
+        ) {
             transfers.makeAvailableOffline(resource)
         }
     }
@@ -123,7 +126,8 @@ class SearchViewModel(
         mutableState.value =
             mutableState.value.copy(
                 actionResource = null,
-                message = getApplication<Application>().getString(R.string.search_open_in_files),
+                message =
+                    getApplication<Application>().localizedString(R.string.search_open_in_files),
             )
     }
 
@@ -142,7 +146,8 @@ class SearchViewModel(
                     mutableState.value =
                         mutableState.value.copy(
                             message =
-                                it.message ?: getApplication<Application>().getString(R.string.search_action_failed),
+                                it.message
+                                    ?: getApplication<Application>().localizedString(R.string.search_action_failed),
                         )
                 }
         }

@@ -54,6 +54,8 @@ import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.TransferDirection
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
+import eu.opencloud.android.next.core.designsystem.localizedQuantityString
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.sync.TransferManager
 import kotlinx.coroutines.Dispatchers
@@ -141,7 +143,7 @@ class TransfersViewModel(
         runAction {
             val failures = failed.mapNotNull { transfer -> runCatching { manager.retry(transfer) }.exceptionOrNull() }
             check(failures.isEmpty()) {
-                getApplication<Application>().resources.getQuantityString(
+                getApplication<Application>().localizedQuantityString(
                     R.plurals.transfers_retry_failures,
                     failed.size,
                     failures.size,
@@ -169,7 +171,7 @@ class TransfersViewModel(
                         mutableState.value.copy(
                             error =
                                 it.message
-                                    ?: getApplication<Application>().getString(R.string.transfers_action_failed),
+                                    ?: getApplication<Application>().localizedString(R.string.transfers_action_failed),
                         )
                 }
         }

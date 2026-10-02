@@ -26,6 +26,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.appcompat)
     implementation(project(":core:security"))
     implementation(project(":core:sync"))
     implementation(project(":core:datastore"))

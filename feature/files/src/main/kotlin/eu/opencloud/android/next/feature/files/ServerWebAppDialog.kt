@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.opencloud.android.next.core.database.ResourceEntity
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.network.EmbeddedWebAppMode
 import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.network.toOpenCloudError
@@ -89,7 +90,8 @@ internal fun ServerWebAppDialog(
                                 )
                                 onDismiss()
                             } catch (_: ActivityNotFoundException) {
-                                error = context.getString(R.string.document_browser_required)
+                                error =
+                                    context.localizedString(R.string.document_browser_required)
                             } catch (failure: Exception) {
                                 error = failure.toOpenCloudError().safeMessage(context)
                             } finally {

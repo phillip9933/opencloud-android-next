@@ -186,7 +186,10 @@ fun OpenCloudNextApp(
     BackHandler(
         enabled =
             state.value.activeAccountId != null &&
-                (shareResource != null || destination != AppDestination.Files),
+                (
+                    shareResource != null ||
+                        (destination != AppDestination.Files && destination != AppDestination.Settings)
+                ),
     ) {
         if (shareResource != null) {
             shareResource = null

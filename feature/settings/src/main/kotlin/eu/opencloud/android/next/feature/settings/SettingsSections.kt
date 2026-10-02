@@ -46,14 +46,12 @@ import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 internal fun SettingsSections(
     state: UserSettings,
     onRetention: (Int) -> Unit,
-    onAppearance: (Appearance) -> Unit,
+    onOpenAppearance: () -> Unit,
     onBackup: () -> Unit,
     diagnostics: SettingsDiagnostics,
     onSecurity: () -> Unit,
-    onFileDisplay: (eu.opencloud.android.next.core.datastore.FileDisplayOptions) -> Unit,
     onClearTemporary: () -> Unit,
 ) {
-    val appearanceOptions = Appearance.entries.map { it to stringResource(it.resourceId()) }
     val retentionOptions =
         listOf(
             0 to stringResource(R.string.settings_retention_never),
@@ -66,23 +64,14 @@ internal fun SettingsSections(
         Modifier.padding(OpenCloudDimensions.SpacingMd),
         verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingMd),
     ) {
-        Text(stringResource(R.string.settings_appearance), style = MaterialTheme.typography.titleSmall)
-        Card {
+        Card(onClick = onOpenAppearance, modifier = Modifier.fillMaxWidth()) {
             ListItem(
-                headlineContent = { Text(stringResource(R.string.settings_theme)) },
+                headlineContent = { Text(stringResource(R.string.settings_appearance)) },
+                supportingContent = { Text(stringResource(R.string.settings_appearance_summary)) },
                 leadingContent = { Icon(Icons.Default.Palette, null) },
+                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
-                trailingContent = {
-                    SettingsChoice(
-                        stringResource(R.string.settings_change_appearance),
-                        appearanceOptions.first { it.first == state.appearance }.second,
-                        appearanceOptions.map { it.second },
-                    ) { label ->
-                        onAppearance(appearanceOptions.first { it.second == label }.first)
-                    }
-                },
             )
-            FileDisplaySettings(state.fileDisplay, onFileDisplay)
         }
         Text(stringResource(R.string.settings_local_storage), style = MaterialTheme.typography.titleSmall)
         Card {
@@ -206,7 +195,7 @@ private fun DiagnosticsCard(
     }
 }
 
-private fun Appearance.resourceId() =
+internal fun Appearance.resourceId() =
     when (this) {
         Appearance.LIGHT -> R.string.settings_appearance_light
         Appearance.DARK -> R.string.settings_appearance_dark

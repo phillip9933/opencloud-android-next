@@ -40,6 +40,28 @@ foreach ($resources in $resourceDirectories) {
     $defaults = Join-Path $resources 'values'
     if (-not (Test-Path -LiteralPath $defaults)) { continue }
     $source = Read-TextResources $defaults
+    # The app localizes the pinned scanner AAR without copying its implementation or English defaults.
+    $scannerOverlay = Join-Path $resources "values-$Locale/strings_scanner_sdk.xml"
+    if ((Test-Path -LiteralPath $scannerOverlay) -and
+        $resources -eq (Join-Path $Repository 'app/src/main/res')) {
+        $lock = Get-Content -LiteralPath (Join-Path $Repository 'scripts/offline-scanner-sdk.lock.json') -Raw | ConvertFrom-Json
+        $version = $lock.version
+        $aar = Join-Path $Repository ".gradle/open-android-doc-scanner-$version/maven/dev/offlinescan/scanner-ui-compose/$version/scanner-ui-compose-$version.aar"
+        if (-not (Test-Path -LiteralPath $aar)) { throw 'Install the pinned scanner SDK before validating its translations.' }
+        $archive = [IO.Compression.ZipFile]::OpenRead($aar)
+        try {
+            foreach ($entry in $archive.Entries | Where-Object FullName -match '^res/values/[^/]+\.xml$') {
+                $reader = [IO.StreamReader]::new($entry.Open())
+                try { $document = [xml]$reader.ReadToEnd() } finally { $reader.Dispose() }
+                foreach ($node in $document.resources.ChildNodes) {
+                    if ($node.LocalName -notin @('string', 'plurals') -or $node.translatable -eq 'false') { continue }
+                    $key = "$($node.LocalName)/$($node.name)"
+                    if ($source.ContainsKey($key)) { throw "Scanner resource collision: $key" }
+                    $source[$key] = $node
+                }
+            }
+        } finally { $archive.Dispose() }
+    }
     if ($source.Count -eq 0) { continue }
     $translated = Join-Path $resources "values-$Locale"
     if (-not (Test-Path -LiteralPath $translated)) {

@@ -8,6 +8,7 @@ import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.datastore.SettingsRepository
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.AuthenticationType
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
@@ -96,7 +97,7 @@ class AuthViewModel(
         password: String,
     ) = launchAuth {
         require(serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()) {
-            getApplication<Application>().getString(R.string.auth_required_fields)
+            getApplication<Application>().localizedString(R.string.auth_required_fields)
         }
         val normalized =
             eu.opencloud.android.next.core.network
@@ -152,7 +153,8 @@ class AuthViewModel(
                 mutableState.value =
                     mutableState.value.copy(
                         isLoading = false,
-                        error = getApplication<Application>().getString(R.string.auth_oidc_session_expired),
+                        error =
+                            getApplication<Application>().localizedString(R.string.auth_oidc_session_expired),
                     )
                 return@launchAuth
             }
@@ -161,7 +163,8 @@ class AuthViewModel(
                 mutableState.value =
                     mutableState.value.copy(
                         isLoading = false,
-                        error = getApplication<Application>().getString(R.string.auth_sign_in_cancelled),
+                        error =
+                            getApplication<Application>().localizedString(R.string.auth_sign_in_cancelled),
                     )
                 return@launchAuth
             }
@@ -235,7 +238,8 @@ class AuthViewModel(
         }
     }
 
-    private fun certificateErrorMessage() = getApplication<Application>().getString(R.string.auth_certificate_untrusted)
+    private fun certificateErrorMessage() =
+        getApplication<Application>().localizedString(R.string.auth_certificate_untrusted)
 }
 
 data class AuthUiState(

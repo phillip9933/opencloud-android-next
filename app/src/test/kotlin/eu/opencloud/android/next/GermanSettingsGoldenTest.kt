@@ -6,8 +6,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -50,5 +52,9 @@ class GermanSettingsGoldenTest {
         compose.onNodeWithText("Darstellung").assertIsDisplayed()
         compose.onRoot().captureRoboImage("src/test/snapshots/images/$name.png")
         compose.onNodeWithText("Temporäre lokale Kopien löschen").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Darstellung").performScrollTo().performClick()
+        compose.onNodeWithText("Design und Sprache").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Sprache ändern").assertIsDisplayed()
+        compose.onRoot().captureRoboImage("src/test/snapshots/images/${name}_appearance.png")
     }
 }

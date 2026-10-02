@@ -9,6 +9,7 @@ An independent Android client for OpenCloud, rebuilt with Kotlin and Jetpack Com
 - Personal files and project Spaces, search, favorites, recents and offline access.
 - Uploads, downloads, copy/move, sharing links and Android file-picker integration.
 - Folder/camera backup, local cache controls and optional biometric/device locking.
+- English and German, with an independent app-language choice and grouped Appearance settings.
 - PDF/JPEG scanning through a pinned, separately versioned [offline scanner SDK](https://github.com/phillip9933/open-android-doc-scanner).
 
 ## Install

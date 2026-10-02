@@ -17,7 +17,11 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="OpenCloud Next"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:localeConfig="@xml/locales_config"
+        android:theme="@style/OpenCloudWindowLight">
+        <service android:name="androidx.appcompat.app.AppLocalesMetadataHolderService" android:enabled="false" android:exported="false">
+            <meta-data android:name="autoStoreLocales" android:value="true" />
+        </service>
         <activity android:name=".DeviceUnlockActivity" android:exported="false" android:excludeFromRecents="true" />
         <activity android:name=".IncomingShareActivity" android:exported="true">
             <intent-filter>

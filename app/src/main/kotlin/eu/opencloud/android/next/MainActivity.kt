@@ -4,10 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -24,7 +24,7 @@ import eu.opencloud.android.next.core.designsystem.theme.OpenCloudColor
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudTheme
 import eu.opencloud.android.next.ui.OpenCloudNextApp
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private var oauthCallback by mutableStateOf<String?>(null)
 
     override fun onResume() {

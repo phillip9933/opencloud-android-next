@@ -40,14 +40,14 @@
     <string name="settings_hidden_files">Versteckte Dateien</string>
     <string name="settings_clear_temporary_copies_now">Temporäre Kopien jetzt löschen</string>
     <string name="settings_clear_temporary_copies_title">Temporäre Kopien löschen?</string>
-    <string name="settings_clear_temporary_copies_confirmation">Möchten Sie fortfahren? Dadurch werden temporäre Kopien aller Konten von diesem Smartphone entfernt. Offline gespeicherte Dateien, laufende Downloads und Originale in der Cloud bleiben erhalten.</string>
+    <string name="settings_clear_temporary_copies_confirmation">Möchtest du fortfahren? Dadurch werden temporäre Kopien aller Konten von diesem Smartphone entfernt. Offline gespeicherte Dateien, laufende Downloads und Originale in der Cloud bleiben erhalten.</string>
     <string name="settings_clear_temporary_copies">Temporäre Kopien löschen</string>
     <string name="settings_cancel">Abbrechen</string>
     <string name="settings_lock_opencloud">OpenCloud sperren</string>
-    <string name="settings_lock_description_secure">Verwenden Sie die PIN, das Muster oder das Passwort Ihres Geräts. Vorschauen und Screenshots der App werden währenddessen ausgeblendet.</string>
-    <string name="settings_lock_description_insecure">Richten Sie zuerst in den Android-Einstellungen eine Bildschirmsperre für Ihr Gerät ein.</string>
+    <string name="settings_lock_description_secure">Verwende die PIN, das Muster oder das Passwort deines Geräts. Vorschauen und Screenshots der App werden währenddessen ausgeblendet.</string>
+    <string name="settings_lock_description_insecure">Richte zuerst in den Android-Einstellungen eine Bildschirmsperre für dein Gerät ein.</string>
     <string name="settings_biometric_unlock">Biometrisch entsperren</string>
-    <string name="settings_biometric_description_available">Verwenden Sie den Fingerabdruck oder die unterstützte Gesichtserkennung. Als Ersatz dient die Bildschirmsperre des Geräts.</string>
+    <string name="settings_biometric_description_available">Verwende den Fingerabdruck oder die unterstützte Gesichtserkennung. Als Ersatz dient die Bildschirmsperre des Geräts.</string>
     <string name="settings_biometric_description_unavailable">Richte zuerst in den Android-Einstellungen einen unterstützten Fingerabdruck oder die Gesichtserkennung ein. Die Bildschirmsperre des Geräts bleibt verfügbar.</string>
     <string name="settings_lock_after_leaving">App beim Verlassen sperren</string>
     <string name="settings_lock_after_leaving_description">Die App wird immer gesperrt, wenn sich der Bildschirm deines Geräts ausschaltet.</string>
@@ -68,4 +68,19 @@
         <item quantity="other">%1$d temporäre Kopien entfernt. Offline gespeicherte Dateien bleiben erhalten.</item>
     </plurals>
     <string name="settings_temporary_copies_remove_failed">Einige temporäre Kopien konnten nicht entfernt werden. Bitte versuche es erneut.</string>
+    <string name="settings_appearance_summary">Design, Sprache und Dateiliste</string>
+    <string name="settings_theme_language">Design und Sprache</string>
+    <string name="settings_language">Sprache</string>
+    <string name="settings_change_language">Sprache ändern</string>
+    <string name="settings_language_system">Systemstandard</string>
+    <string name="settings_file_list">Darstellung der Dateiliste</string>
+    <string name="settings_photo_video_metadata">Foto- und Videometadaten</string>
+    <string name="settings_photo_video_metadata_not_needed">Für diese Android-Version ist keine Berechtigung für Fotostandorte erforderlich.</string>
+    <string name="settings_photo_video_metadata_allowed">Der Zugriff auf Fotostandorte ist erlaubt.</string>
+    <string name="settings_photo_video_metadata_not_allowed">Der Zugriff auf Fotostandorte ist nicht erlaubt. Android kann Standortdaten beim Hochladen auslassen.</string>
+    <string name="settings_photo_video_metadata_description">Der Zugriff auf Fotostandorte kann OpenCloud das Lesen von Standortinformationen aus Fotos ermöglichen. Android und der Dateianbieter bestimmen, welche Metadaten enthalten sind. Diese Berechtigung steuert nicht alle Metadaten.</string>
+    <string name="settings_request_photo_video_metadata">Fotostandorte erlauben</string>
+    <string name="settings_manage_app_permissions">Berechtigungen verwalten</string>
+    <string name="settings_ask_for_photo_location">Nach Zugriff auf Fotostandorte fragen</string>
+    <string name="settings_ask_for_photo_location_description">Legt fest, ob OpenCloud nach Zugriff auf Fotostandorte fragt. Das Ausschalten widerruft keine erteilten Berechtigungen und steuert keine anderen Metadaten.</string>
 </resources>

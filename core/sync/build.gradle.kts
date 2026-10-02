@@ -37,6 +37,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.core)
     implementation(project(":core:database"))
     implementation(project(":core:model"))
     implementation(project(":core:network"))

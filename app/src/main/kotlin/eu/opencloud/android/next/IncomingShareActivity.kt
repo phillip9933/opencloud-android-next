@@ -3,15 +3,15 @@ package eu.opencloud.android.next
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.IntentCompat
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudTheme
 import eu.opencloud.android.next.feature.files.IncomingUploadRoute
 import java.util.UUID
 
 /** Dedicated task preserves the sender's grants without interrupting an existing browser session. */
-class IncomingShareActivity : ComponentActivity() {
+class IncomingShareActivity : AppCompatActivity() {
     private var batchId = UUID.randomUUID().toString()
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dev.offlinescan.core.ScanOutput
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.sync.ScanUploadLocation
 import eu.opencloud.android.next.core.sync.ScanUploadStore
 import kotlinx.coroutines.CancellationException
@@ -78,7 +79,7 @@ class ScannerViewModel(
             if (space?.type ==
                 "personal"
             ) {
-                getApplication<Application>().getString(R.string.browser_personal)
+                getApplication<Application>().localizedString(R.string.browser_personal)
             } else {
                 space?.name.orEmpty()
             }

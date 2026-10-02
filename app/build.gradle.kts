@@ -41,8 +41,8 @@ android {
                 .toInt()
         // The scanner SDK ships native processing for 64-bit Android only.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
-        versionCode = 2
-        versionName = "0.1.0-beta.1"
+        versionCode = 4
+        versionName = "0.1.0-beta.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEV_SERVER_URL", "\"\"")
@@ -90,6 +90,7 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.fragment)
     implementation(project(":core:designsystem"))

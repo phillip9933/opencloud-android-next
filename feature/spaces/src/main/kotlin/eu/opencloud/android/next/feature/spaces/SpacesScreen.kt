@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.SpaceEntity
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.sync.SpaceRepository
 import kotlinx.coroutines.Dispatchers
@@ -86,7 +87,9 @@ class SpacesViewModel(
                 mutableState.value =
                     SpacesUiState(
                         loading = false,
-                        error = error.message ?: getApplication<Application>().getString(R.string.spaces_load_failed),
+                        error =
+                            error.message
+                                ?: getApplication<Application>().localizedString(R.string.spaces_load_failed),
                     )
             }
         }

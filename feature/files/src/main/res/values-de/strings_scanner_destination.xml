@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scanner_destination_title">Speicherort für den Scan auswählen</string>
+    <string name="scanner_destination_cancel">Abbrechen</string>
+    <string name="scanner_destination_spaces">Spaces</string>
+    <string name="scanner_destination_select_space">Persönlichen Bereich oder Projektraum auswählen</string>
+    <string name="scanner_destination_choose">In diesem Ordner speichern</string>
+    <string name="scanner_destination_retry">Erneut versuchen</string>
+    <string name="scanner_destination_all_spaces">Alle Spaces</string>
+    <string name="scanner_destination_up">Übergeordneten Ordner öffnen</string>
+    <string name="scanner_destination_root">Stammverzeichnis</string>
+    <string name="scanner_destination_locations">Persönlicher Bereich und Spaces</string>
+    <string name="scanner_destination_change">Ändern</string>
+    <string name="scanner_destination_root_folder">Oberster Ordner</string>
+    <string name="scanner_destination_personal">Deine persönlichen Dateien</string>
+    <string name="scanner_destination_project">Projektraum</string>
+    <string name="scanner_destination_empty">Keine Unterordner. Du kannst den Scan hier speichern.</string>
+</resources>

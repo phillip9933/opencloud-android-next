@@ -33,6 +33,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.core)
     implementation(project(":core:model"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

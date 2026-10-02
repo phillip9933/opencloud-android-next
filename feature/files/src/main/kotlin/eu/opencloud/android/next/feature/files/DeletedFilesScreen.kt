@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -144,12 +145,16 @@ class DeletedFilesViewModel(
                     mutableState.value =
                         state.value.copy(
                             error =
-                                getApplication<Application>().resources.getQuantityString(
-                                    R.plurals.deleted_batch_failure,
-                                    failed,
-                                    failed,
-                                    reason.orEmpty(),
-                                ),
+                                ContextCompat
+                                    .getContextForLanguage(
+                                        getApplication<Application>(),
+                                    ).resources
+                                    .getQuantityString(
+                                        R.plurals.deleted_batch_failure,
+                                        failed,
+                                        failed,
+                                        reason.orEmpty(),
+                                    ),
                         )
                 }
             } finally {

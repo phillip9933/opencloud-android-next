@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import eu.opencloud.android.next.core.database.ResourceEntity
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.model.ResourceKind
 
@@ -72,7 +73,7 @@ internal fun FileMetadataText(
         if (resource.kind ==
             ResourceKind.FOLDER
         ) {
-            context.getString(R.string.file_details_folder)
+            context.localizedString(R.string.file_details_folder)
         } else {
             android.text.format.Formatter
                 .formatShortFileSize(context, resource.sizeBytes)

@@ -6,7 +6,7 @@
     <string name="backup_settings_back">Zurück</string>
     <string name="backup_settings_ok">OK</string>
     <string name="backup_settings_active_configurations">Aktive Sicherungen</string>
-    <string name="backup_settings_empty_description">Es sind keine Sicherungsordner eingerichtet. Verwenden Sie +, um einen Quellordner und das OpenCloud-Ziel auszuwählen.</string>
+    <string name="backup_settings_empty_description">Es sind keine Sicherungsordner eingerichtet. Verwende +, um einen Quellordner und das OpenCloud-Ziel auszuwählen.</string>
     <string name="backup_settings_manage">Verwalten</string>
     <string name="backup_settings_add">Sicherung hinzufügen</string>
     <string name="backup_settings_source">Quelle: %1$s</string>
