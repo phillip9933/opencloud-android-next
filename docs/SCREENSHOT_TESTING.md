@@ -13,7 +13,7 @@ October 1 feedback adds `file_browser_project_space.png` and `file_browser_add_m
 
 ## Commands
 
-From `C:\src\OpenCloud-Workspace\opencloud-android-next`:
+From the repository root (PowerShell):
 
 ```powershell
 # Create or deliberately update baselines.

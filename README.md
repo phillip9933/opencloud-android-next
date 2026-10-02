@@ -10,6 +10,12 @@ AI tools assisted with development. A human maintainer reviews changes and runs 
 
 **Initial beta:** Android 8.0/API 26 or later, on arm64-v8a or x86_64 devices. Expect bugs; keep backups of important files.
 
+## About this project
+
+I build projects to solve problems I run into in my own life. I share them because I believe in open source and hope others can learn from them, adapt them or find them useful.
+
+Making it public does not mean it is a polished production product or suitable for every setup. Please read the documented limitations and decide whether it fits your needs. I'm happy to help where I can, but I can't promise a support schedule.
+
 ## Features
 
 - Personal files and project Spaces, search, favorites, recents and offline access.
@@ -44,6 +50,18 @@ Translations use Android resource files. Missing translations fall back to Engli
 - Metadata comes from Android's supplied file representation; Raiun does not guarantee removal or preservation of GPS or other metadata.
 
 The project is provided without warranties; test your server and workflow before relying on it.
+
+## Contribute
+
+Start with [Contributing](CONTRIBUTING.md) for setup, change boundaries and reporting. The [documentation index](docs/README.md) links to the current layout, tests and release procedure.
+
+## AI usage
+
+I use AI tools to help with development, including analysis, code, tests and documentation. I care about security, privacy and protecting people's data, and I try to reflect that in how I build these projects.
+
+I document validation and known limitations so you can assess the evidence for yourself. Contributions should disclose material AI assistance and distinguish checks actually run from checks still needed.
+
+See [beta limitations](#known-beta-limitations), [testing guidance](docs/TESTING.md) and [contribution guidance](CONTRIBUTING.md#ai-usage).
 
 ## Source licensing
 
