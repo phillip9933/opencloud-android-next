@@ -40,6 +40,7 @@ class SettingsInteractionTest {
                 })
             }
         }
+        compose.onNodeWithText("Appearance").performClick()
         compose.onNodeWithContentDescription("Change appearance").performClick()
         compose.onNode(hasText("System") and hasAnyAncestor(isPopup())).assertIsSelected()
         compose.onNodeWithText("Dark").performClick()
@@ -63,8 +64,10 @@ class SettingsInteractionTest {
                 }, onClearTemporary = { cleared++ })
             }
         }
+        compose.onNodeWithText("Appearance").performClick()
         compose.onNodeWithContentDescription("Hidden files").performScrollTo().performClick()
         assertEquals(true, state.value.fileDisplay.showHidden)
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Clear temporary copies now").performScrollTo().performClick()
         assertEquals(0, cleared)
         compose.onNodeWithText("Cancel").performClick()
@@ -97,6 +100,36 @@ class SettingsInteractionTest {
         assertEquals(1, reads)
         compose.onNodeWithContentDescription("Local diagnostics").performScrollTo().performClick()
         compose.onAllNodesWithText("View local diagnostics").assertCountEquals(0)
+    }
+
+    @Test fun languageMenuOffersSystemEnglishAndGerman() {
+        val language = mutableStateOf("")
+        compose.setContent {
+            OpenCloudTheme {
+                SettingsScreen(
+                    UserSettings(),
+                    {},
+                    {},
+                    {},
+                    languageTag = language.value,
+                    onLanguage = { language.value = it },
+                )
+            }
+        }
+        compose.onNodeWithText("Appearance").performClick()
+        compose.onNodeWithContentDescription("Change language").performClick()
+        compose.onNode(hasText("System default") and hasAnyAncestor(isPopup())).assertIsSelected()
+        compose.onNodeWithText("Deutsch").performClick()
+        assertEquals("de", language.value)
+        compose.onNodeWithContentDescription("Change language").performClick()
+        compose.onNode(hasText("Deutsch") and hasAnyAncestor(isPopup())).assertIsSelected()
+        compose.onNodeWithText("English").performClick()
+        assertEquals("en", language.value)
+        compose.onNodeWithContentDescription("Change language").performClick()
+        compose.onNodeWithText("System default").performClick()
+        assertEquals("", language.value)
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("Clear temporary copies now").performScrollTo()
     }
 
     @Test fun cacheRetentionMenuMarksCurrentChoiceAndUpdatesValue() {

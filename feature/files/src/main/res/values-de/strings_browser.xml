@@ -15,7 +15,7 @@
     <string name="browser_open_navigation_drawer">Navigationsmenü öffnen</string>
     <string name="browser_open_account_information">Kontoinformationen öffnen</string>
     <string name="browser_no_favorites_yet">Noch keine Favoriten</string>
-    <string name="browser_favorites_offline">Favorisierte Dateien bleiben hier aufgeführt, wenn Sie offline sind.</string>
+    <string name="browser_favorites_offline">Favorisierte Dateien bleiben hier aufgeführt, wenn du offline bist.</string>
     <string name="browser_navigate_up">Nach oben navigieren</string>
     <string name="browser_sort_name">Name</string>
     <string name="browser_sort_date_modified">Änderungsdatum</string>
@@ -51,7 +51,7 @@
     <string name="browser_folder">Ordner</string>
     <string name="browser_file">Datei</string>
     <string name="browser_upload_conflict">Upload-Konflikt</string>
-    <string name="browser_conflict_message">%1$s ist bereits vorhanden. Wählen Sie aus, welche Version behalten werden soll.</string>
+    <string name="browser_conflict_message">%1$s ist bereits vorhanden. Wähle aus, welche Version behalten werden soll.</string>
     <string name="browser_replace_remote">Remote-Datei ersetzen</string>
     <string name="browser_keep_both">Beide behalten</string>
     <string name="browser_cancel_upload">Upload abbrechen</string>

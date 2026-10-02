@@ -49,6 +49,7 @@ fun OpenCloudNextApp(
     var destination by rememberSaveable(state.value.activeAccountId) { mutableStateOf(AppDestination.Files) }
     var nextBrowserAddRequest by remember(state.value.activeAccountId) { mutableIntStateOf(0) }
     var pendingBrowserAddRequest by remember(state.value.activeAccountId) { mutableIntStateOf(0) }
+    var trashSpaceId by rememberSaveable(state.value.activeAccountId) { mutableStateOf<String?>(null) }
     var shareResource by remember(state.value.activeAccountId) { mutableStateOf<ResourceEntity?>(null) }
 
     LaunchedEffect(oauthCallback) {
@@ -74,7 +75,10 @@ fun OpenCloudNextApp(
                                 destinations =
                                     FileBrowserDestinations(
                                         onOpenTransfers = { destination = AppDestination.Transfers },
-                                        onOpenDeletedFiles = { destination = AppDestination.DeletedFiles },
+                                        onOpenDeletedFiles = {
+                                            trashSpaceId = null
+                                            destination = AppDestination.DeletedFiles
+                                        },
                                         onOpenSettings = { destination = AppDestination.Settings },
                                         onOpenAccount = { destination = AppDestination.Account },
                                         onShareResource = { shareResource = it },
@@ -90,6 +94,10 @@ fun OpenCloudNextApp(
                                     SpacesRoute(
                                         accountId = accountId,
                                         onOpenSpace = onOpenSpace,
+                                        onOpenTrash = {
+                                            trashSpaceId = it
+                                            destination = AppDestination.DeletedFiles
+                                        },
                                         modifier = Modifier.padding(padding),
                                     )
                                 },
@@ -115,6 +123,7 @@ fun OpenCloudNextApp(
                     AppDestination.DeletedFiles ->
                         DeletedFilesRoute(
                             accountId = accountId,
+                            initialSpaceId = trashSpaceId,
                             onNavigateBack = { destination = AppDestination.Files },
                         )
                     AppDestination.Settings ->
@@ -186,7 +195,10 @@ fun OpenCloudNextApp(
     BackHandler(
         enabled =
             state.value.activeAccountId != null &&
-                (shareResource != null || destination != AppDestination.Files),
+                (
+                    shareResource != null ||
+                        (destination != AppDestination.Files && destination != AppDestination.Settings)
+                ),
     ) {
         if (shareResource != null) {
             shareResource = null

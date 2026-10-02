@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source_inventory": "docs/release-audit/runtime-dependencies.json",
-  "dependency_count": 165,
+  "dependency_count": 167,
   "cache_root": "Gradle module cache at ~/.gradle/caches/modules-2/files-2.1",
   "scanner_reference": "https://github.com/phillip9933/open-android-doc-scanner/blob/v0.1.0-rc11/THIRD-PARTY-NOTICES.md",
   "missing_full_license_texts": [],
@@ -204,12 +204,12 @@
     },
     {
       "coordinate": "androidx.appcompat:appcompat",
-      "version": "1.2.0",
-      "pom_source": "official repository: https://dl.google.com/dl/android/maven2/androidx/appcompat/appcompat/1.2.0/appcompat-1.2.0.pom",
+      "version": "1.7.1",
+      "pom_source": "Gradle module cache / androidx.appcompat/appcompat/1.7.1/b03a9adbcce3c54f15e0d0be60c7afe4d0060870/appcompat-1.7.1.pom",
       "pom_chain": [
-        "official repository: https://dl.google.com/dl/android/maven2/androidx/appcompat/appcompat/1.2.0/appcompat-1.2.0.pom"
+        "Gradle module cache / androidx.appcompat/appcompat/1.7.1/b03a9adbcce3c54f15e0d0be60c7afe4d0060870/appcompat-1.7.1.pom"
       ],
-      "pom_sha256": null,
+      "pom_sha256": "1f79910cc20de198acf3867b1e93f9ed59ddb643585b2e9c28ee55518af1bc00",
       "license_status": "declared",
       "licenses": [
         {
@@ -217,8 +217,8 @@
           "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
         }
       ],
-      "artifact": "Gradle module cache / androidx.appcompat/appcompat/1.2.0/6487c8711252a8680baaa854247141cc1d2098f4/appcompat-1.2.0.aar",
-      "artifact_sha256": "3d2131a55a61a777322e2126e0018011efa6339e53b44153eb651b16020cca70",
+      "artifact": "Gradle module cache / androidx.appcompat/appcompat/1.7.1/6c5b56046c7b08e7bf94b6dd14cb616453e6be11/appcompat-1.7.1.aar",
+      "artifact_sha256": "2ad334a323b28046e89b738c77d184cb3dcca32a551ab048851b2fda23a3ba26",
       "embedded_notice_files": [],
       "license_texts": [
         {
@@ -232,12 +232,12 @@
     },
     {
       "coordinate": "androidx.appcompat:appcompat-resources",
-      "version": "1.2.0",
-      "pom_source": "official repository: https://dl.google.com/dl/android/maven2/androidx/appcompat/appcompat-resources/1.2.0/appcompat-resources-1.2.0.pom",
+      "version": "1.7.1",
+      "pom_source": "Gradle module cache / androidx.appcompat/appcompat-resources/1.7.1/31130db4e028b10fed8dd2c38eb0a3785348b730/appcompat-resources-1.7.1.pom",
       "pom_chain": [
-        "official repository: https://dl.google.com/dl/android/maven2/androidx/appcompat/appcompat-resources/1.2.0/appcompat-resources-1.2.0.pom"
+        "Gradle module cache / androidx.appcompat/appcompat-resources/1.7.1/31130db4e028b10fed8dd2c38eb0a3785348b730/appcompat-resources-1.7.1.pom"
       ],
-      "pom_sha256": null,
+      "pom_sha256": "2faf922e8c3d706f29d862b3fbb3aa1347705c21c6eae18586d2bb1f7366ea01",
       "license_status": "declared",
       "licenses": [
         {
@@ -245,8 +245,8 @@
           "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
         }
       ],
-      "artifact": "Gradle module cache / androidx.appcompat/appcompat-resources/1.2.0/ad67e51b92364585bb335177664959001644327a/appcompat-resources-1.2.0.aar",
-      "artifact_sha256": "c470297c03ff3de1c3d15dacf0be0cae63abc10b52f021dd07ae28daa3100fe5",
+      "artifact": "Gradle module cache / androidx.appcompat/appcompat-resources/1.7.1/a0696fa573503263c7d5570ecd5e6032d397a287/appcompat-resources-1.7.1.aar",
+      "artifact_sha256": "8e2db31224ca53b108c784da2b361959062716d416b210cfef3d5a3828306df0",
       "embedded_notice_files": [],
       "license_texts": [
         {
@@ -2419,6 +2419,34 @@
       ]
     },
     {
+      "coordinate": "androidx.emoji2:emoji2-views-helper",
+      "version": "1.4.0",
+      "pom_source": "Gradle module cache / androidx.emoji2/emoji2-views-helper/1.4.0/ecb5c61a14ce933f91cf5288888f5bb5fa71fd/emoji2-views-helper-1.4.0.pom",
+      "pom_chain": [
+        "Gradle module cache / androidx.emoji2/emoji2-views-helper/1.4.0/ecb5c61a14ce933f91cf5288888f5bb5fa71fd/emoji2-views-helper-1.4.0.pom"
+      ],
+      "pom_sha256": "e9b7f90b4d7c4a94bb56f76ee7e2bbe78dbaa3b18deb46858b8693fcee2d714b",
+      "license_status": "declared",
+      "licenses": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        }
+      ],
+      "artifact": "Gradle module cache / androidx.emoji2/emoji2-views-helper/1.4.0/63a447404800465b7713c3359f64562b99d1a9f1/emoji2-views-helper-1.4.0.aar",
+      "artifact_sha256": "ed5d3ed772a5fbf0d570f7526f585cd61a180e60f9372584c328a68e2cff3375",
+      "embedded_notice_files": [],
+      "license_texts": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+          "path": "license-texts/The_Apache_Software_License_Version_2.0.txt",
+          "source": "scanner-library-reference / LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
       "coordinate": "androidx.exifinterface:exifinterface",
       "version": "1.4.1",
       "pom_source": "Gradle module cache / androidx.exifinterface/exifinterface/1.4.1/9874b61bf0ab9e87d4ecac7404b1901777b65de5/exifinterface-1.4.1.pom",
@@ -3374,6 +3402,34 @@
           "size_bytes": 10175
         }
       ],
+      "license_texts": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt",
+          "path": "license-texts/The_Apache_Software_License_Version_2.0.txt",
+          "source": "scanner-library-reference / LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "coordinate": "androidx.resourceinspection:resourceinspection-annotation",
+      "version": "1.0.1",
+      "pom_source": "official repository: https://dl.google.com/dl/android/maven2/androidx/resourceinspection/resourceinspection-annotation/1.0.1/resourceinspection-annotation-1.0.1.pom",
+      "pom_chain": [
+        "official repository: https://dl.google.com/dl/android/maven2/androidx/resourceinspection/resourceinspection-annotation/1.0.1/resourceinspection-annotation-1.0.1.pom"
+      ],
+      "pom_sha256": null,
+      "license_status": "declared",
+      "licenses": [
+        {
+          "name": "The Apache Software License, Version 2.0",
+          "url": "http://www.apache.org/licenses/LICENSE-2.0.txt"
+        }
+      ],
+      "artifact": "Gradle module cache / androidx.resourceinspection/resourceinspection-annotation/1.0.1/a1c91a3cf63fd51a8e755747186d97585f955ae3/resourceinspection-annotation-1.0.1-sources.jar",
+      "artifact_sha256": "cdca7861ae17115f8d74f9f197d1a4f8b0217ca035a3990da2e2c1ca1fa7f822",
+      "embedded_notice_files": [],
       "license_texts": [
         {
           "name": "The Apache Software License, Version 2.0",

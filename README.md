@@ -1,6 +1,12 @@
-# OpenCloud Android Next
+# Raiun
 
-An independent Android client for OpenCloud, rebuilt with Kotlin and Jetpack Compose. This is a community project and is not an official OpenCloud GmbH release.
+An independent Android client for OpenCloud.
+
+Raiun is a personal project maintained for the maintainer's own use and shared on a best-effort basis. It is not an official OpenCloud GmbH product, release, or supported client.
+
+## AI-assisted development
+
+AI tools assisted with development. A human maintainer reviews changes and runs tests, but review and testing have limits and do not guarantee that every issue is found.
 
 **Initial beta:** Android 8.0/API 26 or later, on arm64-v8a or x86_64 devices. Expect bugs; keep backups of important files.
 
@@ -15,11 +21,12 @@ Making it public does not mean it is a polished production product or suitable f
 - Personal files and project Spaces, search, favorites, recents and offline access.
 - Uploads, downloads, copy/move, sharing links and Android file-picker integration.
 - Folder/camera backup, local cache controls and optional biometric/device locking.
+- English and German, with an independent app-language choice and grouped Appearance settings.
 - PDF/JPEG scanning through a pinned, separately versioned [offline scanner SDK](https://github.com/phillip9933/open-android-doc-scanner).
 
 ## Install
 
-Use the APK attached to [GitHub Releases](https://github.com/phillip9933/opencloud-android-next/releases). Check its SHA-256 against the attached SHA256SUMS file.
+Download the signed APK from [GitHub Releases](https://github.com/phillip9933/raiun/releases) and verify it against the attached SHA256SUMS file. The previous OpenCloud Android Next release downloads have been retired.
 
 ## Build and test
 
@@ -40,7 +47,7 @@ Translations use Android resource files. Missing translations fall back to Engli
 - External editor, Office/server integrations and broader device/provider combinations have incomplete acceptance coverage.
 - Scanner pages not yet exported may be lost if Android kills the capture process.
 - Folder backup queues uploads; it is not a bidirectional mirror and does not delete source files. Changed destination names can require conflict resolution.
-- Metadata comes from Android's supplied file representation; OpenCloud does not guarantee removal or preservation of GPS or other metadata.
+- Metadata comes from Android's supplied file representation; Raiun does not guarantee removal or preservation of GPS or other metadata.
 
 The project is provided without warranties; test your server and workflow before relying on it.
 

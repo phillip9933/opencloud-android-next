@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="browser_scan">Scannen</string>
+    <string name="scanner_preparing">Scan wird vorbereitet …</string>
+    <string name="scanner_uploading">Gescannte Dateien werden für den Upload vorbereitet …</string>
+    <string name="scanner_retry">Erneut versuchen</string>
+    <string name="scanner_discard">Scan verwerfen</string>
+    <string name="scanner_discard_title">Diese gescannten Dateien verwerfen?</string>
+    <string name="scanner_discard_body">Scans, deren Upload noch nicht vorgemerkt wurde, werden von diesem Gerät entfernt.</string>
+    <string name="scanner_keep">Scan behalten</string>
+    <string name="scanner_failed">Der Scan konnte nicht abgeschlossen werden. Du kannst es erneut versuchen oder den Scan verwerfen.</string>
+    <string name="scanner_location_title">Speicherort in OpenCloud</string>
+    <string name="scanner_location_failed">Der Speicherort für den Scan konnte nicht geändert werden. Das bisherige Ziel bleibt erhalten.</string>
+    <string name="scanner_location_ok">OK</string>
+</resources>

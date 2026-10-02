@@ -23,10 +23,10 @@
     <string name="document_in_app">In app</string>
     <string name="document_session_warning">Finish saving before leaving the app. Leaving closes this session.</string>
     <string name="document_no_web_apps">No compatible web apps are available on this server.</string>
-    <string name="document_upload_title">Upload to OpenCloud</string>
+    <string name="document_upload_title">Upload with Raiun</string>
     <string name="document_preparing_uploads">Preparing uploads…</string>
     <string name="document_saving_shared">Saving shared files…</string>
-    <string name="document_sign_in_to_share">Open OpenCloud and sign in, then share these files again.</string>
+    <string name="document_sign_in_to_share">Open Raiun and sign in, then share these files again.</string>
     <string name="document_retry_uploads">Retry uploads</string>
     <string name="document_upload_here">Upload here</string>
     <string name="document_account">Account</string>

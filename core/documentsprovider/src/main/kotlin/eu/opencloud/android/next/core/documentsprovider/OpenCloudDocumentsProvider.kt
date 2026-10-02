@@ -59,7 +59,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
                     newRow()
                         .add(Root.COLUMN_ROOT_ID, "locked")
                         .add(Root.COLUMN_DOCUMENT_ID, "locked")
-                        .add(Root.COLUMN_TITLE, "OpenCloud")
+                        .add(Root.COLUMN_TITLE, "Raiun")
                         .add(Root.COLUMN_SUMMARY, "Unlock to browse files")
                         .add(Root.COLUMN_ICON, requireNotNull(context).applicationInfo.icon)
                         .add(Root.COLUMN_FLAGS, 0)
@@ -78,7 +78,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
                 "locked"
             ) {
                 return@databaseCall MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION).apply {
-                    addDirectory("locked", "OpenCloud")
+                    addDirectory("locked", "Raiun")
                 }
             }
             if (SharedCollectionId.recognizes(documentId)) {
@@ -515,7 +515,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
         newRow()
             .add(Root.COLUMN_ROOT_ID, DocumentId.Account(account.id).encode())
             .add(Root.COLUMN_DOCUMENT_ID, DocumentId.Account(account.id).encode())
-            .add(Root.COLUMN_TITLE, "OpenCloud")
+            .add(Root.COLUMN_TITLE, "Raiun")
             .add(Root.COLUMN_ICON, requireNotNull(context).applicationInfo.icon)
             .add(Root.COLUMN_SUMMARY, "${account.displayName} · ${android.net.Uri.parse(account.serverUrl).host}")
             .add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_SEARCH)
@@ -600,7 +600,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
                     android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
                 )
             throw android.app.AuthenticationRequiredException(
-                SecurityException("Unlock OpenCloud to access files."),
+                SecurityException("Unlock Raiun to access files."),
                 action,
             )
         }

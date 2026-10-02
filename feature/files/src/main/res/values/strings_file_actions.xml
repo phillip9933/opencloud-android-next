@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="deleted_files_title">Deleted files</string>
+    <string name="deleted_personal_space">Personal</string>
+    <!-- %1$d is the number of deleted items in a space bin. -->
+    <plurals name="deleted_bin_item_count">
+        <item quantity="one">%1$d deleted item</item>
+        <item quantity="other">%1$d deleted items</item>
+    </plurals>
     <string name="deleted_back">Back</string>
     <string name="deleted_recycle_bin_title">Recycle bin</string>
     <string name="deleted_recycle_bin_explanation">Permanently deletes items from the server.</string>

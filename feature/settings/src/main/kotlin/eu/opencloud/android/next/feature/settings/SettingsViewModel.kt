@@ -1,6 +1,8 @@
 package eu.opencloud.android.next.feature.settings
 
 import android.app.Application
+import androidx.activity.compose.BackHandler
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,8 +21,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -28,6 +34,8 @@ import eu.opencloud.android.next.core.datastore.Appearance
 import eu.opencloud.android.next.core.datastore.LocalDiagnostics
 import eu.opencloud.android.next.core.datastore.SettingsRepository
 import eu.opencloud.android.next.core.datastore.UserSettings
+import eu.opencloud.android.next.core.designsystem.localizedQuantityString
+import eu.opencloud.android.next.core.designsystem.localizedString
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,7 +58,7 @@ class SettingsViewModel(
                 mutableDiagnostics.value = null
             } catch (_: IOException) {
                 mutableDiagnostics.value =
-                    getApplication<Application>().getString(R.string.settings_diagnostics_update_failed)
+                    getApplication<Application>().localizedString(R.string.settings_diagnostics_update_failed)
             }
         }
     }
@@ -60,10 +68,10 @@ class SettingsViewModel(
             mutableDiagnostics.value =
                 try {
                     LocalDiagnostics.read(getApplication()).ifEmpty {
-                        getApplication<Application>().getString(R.string.settings_no_transfer_outcomes)
+                        getApplication<Application>().localizedString(R.string.settings_no_transfer_outcomes)
                     }
                 } catch (_: IOException) {
-                    getApplication<Application>().getString(R.string.settings_diagnostics_read_failed)
+                    getApplication<Application>().localizedString(R.string.settings_diagnostics_read_failed)
                 }
         }
     }
@@ -87,14 +95,14 @@ class SettingsViewModel(
                     eu.opencloud.android.next.core.sync
                         .clearTemporaryCopies(getApplication())
                 mutableDiagnostics.value =
-                    getApplication<Application>().resources.getQuantityString(
+                    getApplication<Application>().localizedQuantityString(
                         R.plurals.settings_temporary_copies_removed,
                         count,
                         count,
                     )
             } catch (_: IOException) {
                 mutableDiagnostics.value =
-                    getApplication<Application>().getString(R.string.settings_temporary_copies_remove_failed)
+                    getApplication<Application>().localizedString(R.string.settings_temporary_copies_remove_failed)
             }
         }
     }
@@ -131,6 +139,8 @@ fun SettingsRoute(
         onOpenSecurity = onOpenSecurity,
         onFileDisplay = viewModel::setFileDisplay,
         onClearTemporary = viewModel::clearTemporaryCopies,
+        languageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags(),
+        onLanguage = { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(it)) },
     )
 }
 
@@ -155,7 +165,23 @@ fun SettingsScreen(
     onOpenSecurity: () -> Unit = {},
     onFileDisplay: (eu.opencloud.android.next.core.datastore.FileDisplayOptions) -> Unit = {},
     onClearTemporary: () -> Unit = {},
+    languageTag: String = "",
+    onLanguage: (String) -> Unit = {},
 ) {
+    var appearanceOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler {
+        if (appearanceOpen) appearanceOpen = false else onNavigateBack()
+    }
+    if (appearanceOpen) {
+        AppearanceSettingsScreen(
+            state,
+            { appearanceOpen = false },
+            onSetAppearance,
+            onFileDisplay,
+            SettingsLanguage(languageTag, onLanguage),
+        )
+        return
+    }
     diagnostics.text?.let { text ->
         AlertDialog(
             onDismissRequest = diagnostics.onDismiss,
@@ -188,11 +214,10 @@ fun SettingsScreen(
             SettingsSections(
                 state,
                 onSetRetention,
-                onSetAppearance,
+                { appearanceOpen = true },
                 onOpenBackupSettings,
                 diagnostics,
                 onOpenSecurity,
-                onFileDisplay,
                 onClearTemporary,
             )
         }

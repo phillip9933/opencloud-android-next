@@ -17,6 +17,7 @@ import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.datastore.FileDisplayOptions
 import eu.opencloud.android.next.core.datastore.SettingsBrowserLayout
 import eu.opencloud.android.next.core.datastore.SettingsRepository
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.network.toOpenCloudError
@@ -500,7 +501,8 @@ class FileBrowserViewModel(
                 .onSuccess {
                     reduce {
                         copy(
-                            message = getApplication<Application>().getString(R.string.browser_backup_configured),
+                            message =
+                                getApplication<Application>().localizedString(R.string.browser_backup_configured),
                         )
                     }
                 }.onFailure { reduce { copy(error = it.toOpenCloudError().safeMessage(getApplication())) } }
@@ -604,7 +606,8 @@ class FileBrowserViewModel(
     fun showGlobalActionUnavailable() =
         reduce {
             copy(
-                message = getApplication<Application>().getString(R.string.browser_preview_navigation_unavailable),
+                message =
+                    getApplication<Application>().localizedString(R.string.browser_preview_navigation_unavailable),
             )
         }
 

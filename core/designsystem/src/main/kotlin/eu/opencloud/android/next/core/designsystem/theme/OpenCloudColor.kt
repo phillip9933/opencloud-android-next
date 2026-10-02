@@ -5,8 +5,8 @@ import androidx.compose.ui.graphics.Color
 object OpenCloudColor {
     val Background = Color(0xFFFFFFFF)
     val Chrome = Color(0xFF20434F)
-    val BrandMark = Color(0xFFE2BAFF)
-    val BrandWordmark = Color(0xFF20434F)
+    val BrandMark = Color(0xFFA9B8E8)
+    val BrandWordmark = Color(0xFF405080)
     val Error = Color(0xFFBA1A1A)
     val ErrorContainer = Color(0xFFFFDAD6)
     val OnBackground = Color(0xFF191C1D)

@@ -66,7 +66,7 @@ class AppLock(
 
     /** An explicit Open/Open with action in the unlocked app authorizes the receiving viewer. */
     fun allowDocumentOpenFromApp() {
-        if (!canOpenApp()) throw SecurityException("Unlock OpenCloud before opening a file.")
+        if (!canOpenApp()) throw SecurityException("Unlock Raiun before opening a file.")
         if (protectDocuments) session.allowDocuments(SystemClock.elapsedRealtime())
     }
 

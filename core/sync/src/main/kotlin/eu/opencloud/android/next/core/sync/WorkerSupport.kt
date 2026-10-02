@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.work.ForegroundInfo
 import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
@@ -66,9 +67,14 @@ internal object TransferNotifications {
         bytes: Long,
         total: Long,
     ): ForegroundInfo {
+        val localized = ContextCompat.getContextForLanguage(context)
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "File transfers", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(
+                CHANNEL_ID,
+                localized.getString(R.string.transfer_notification_channel),
+                NotificationManager.IMPORTANCE_LOW,
+            ),
         )
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         val pendingIntent =
@@ -86,8 +92,15 @@ internal object TransferNotifications {
                 .Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_upload)
                 .setContentTitle(title)
-                .setContentText(if (total > 0) "$progress%" else "In progress")
-                .setProgress(100, progress, total <= 0)
+                .setContentText(
+                    if (total >
+                        0
+                    ) {
+                        "$progress%"
+                    } else {
+                        localized.getString(R.string.transfer_notification_progress)
+                    },
+                ).setProgress(100, progress, total <= 0)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .apply { pendingIntent?.let(::setContentIntent) }

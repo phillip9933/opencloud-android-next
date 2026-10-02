@@ -21,7 +21,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "opencloud-android-next"
+rootProject.name = "raiun"
 
 include(":app")
 include(":core:model")

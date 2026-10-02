@@ -53,7 +53,7 @@ class DeviceLockGateTest {
                     .commit()
             }
             compose.onNodeWithText("Private screen 1").assertDoesNotExist()
-            compose.onNodeWithText("OpenCloud is locked").assertIsDisplayed()
+            compose.onNodeWithText("Raiun is locked").assertIsDisplayed()
             val prompt = Shadows.shadowOf(compose.activity).nextStartedActivityForResult
             org.junit.Assert.assertEquals(DeviceUnlockActivity::class.java.name, prompt.intent.component?.className)
             compose.runOnIdle {
@@ -65,7 +65,7 @@ class DeviceLockGateTest {
             }
             compose.waitForIdle()
             org.junit.Assert.assertNull(Shadows.shadowOf(compose.activity).nextStartedActivityForResult)
-            compose.onNodeWithText("OpenCloud is locked").assertIsDisplayed()
+            compose.onNodeWithText("Raiun is locked").assertIsDisplayed()
             compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
             compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
             compose.waitForIdle()

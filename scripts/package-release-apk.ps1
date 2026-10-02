@@ -12,7 +12,7 @@ $version = $Matches[1]
 if ($config -notmatch 'DEBUG = false') { throw 'Release must not be debuggable.' }
 $outDir = Join-Path $repo 'app/build/outputs/apk/published'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$outputApk = Join-Path $outDir "opencloud-next-$version.apk"
+$outputApk = Join-Path $outDir "raiun-$version.apk"
 $tools = Join-Path $SdkPath 'build-tools/36.0.0'
 $credential = Import-Clixml -LiteralPath (Join-Path $SigningDirectory 'password.clixml')
 try {

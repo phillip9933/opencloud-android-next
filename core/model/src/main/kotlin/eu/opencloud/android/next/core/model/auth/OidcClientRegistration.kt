@@ -1,6 +1,6 @@
 package eu.opencloud.android.next.core.model.auth
 
-const val NEXT_OIDC_REDIRECT_URI = "eu.opencloud.android.next://oauth"
+const val NEXT_OIDC_REDIRECT_URI = "app.raiun.cloud://oauth"
 
 enum class ClientRegistrationSource { ADVERTISED, DYNAMIC, STATIC }
 

@@ -1,5 +1,6 @@
 package eu.opencloud.android.next.core.network
 
+import eu.opencloud.android.next.core.model.auth.NEXT_OIDC_REDIRECT_URI
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -196,7 +197,7 @@ class OpenCloudApiTest {
                 scopes = listOf("openid"),
             )
 
-        val exchanged = api.exchangeCode(configuration, "code", "eu.opencloud.android.next://oauth", "verifier")
+        val exchanged = api.exchangeCode(configuration, "code", NEXT_OIDC_REDIRECT_URI, "verifier")
         val refreshed = api.refresh(configuration, "refresh-1")
 
         assertEquals("access-1", exchanged.accessToken)

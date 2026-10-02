@@ -1,6 +1,6 @@
 # Screenshot Golden Testing
 
-OpenCloud Android Next uses [Roborazzi](https://github.com/takahirom/roborazzi) with Robolectric for host-side Compose visual regression tests. This is the required visual-parity gate for every screen and reusable design-system component.
+Raiun uses [Roborazzi](https://github.com/takahirom/roborazzi) with Robolectric for host-side Compose visual regression tests. This is the required visual-parity gate for every screen and reusable design-system component.
 
 ## Golden ownership
 

@@ -7,7 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.opencloud.android.next.core.database.AccountEntity
-import eu.opencloud.android.next.core.designsystem.OpenCloudWordmark
+import eu.opencloud.android.next.core.designsystem.RaiunWordmark
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudTheme
 import eu.opencloud.android.next.core.network.ServerAccountProfile
 import eu.opencloud.android.next.feature.account.AccountDetailsScreen
@@ -29,14 +29,14 @@ class ProfileGoldenTest {
 
     @Test fun accountInformationDark() = capture(true)
 
-    @Test fun officialBrandingBothThemes() {
+    @Test fun raiunBrandingBothThemes() {
         compose.setContent {
             Column {
-                OpenCloudTheme(darkTheme = false) { Surface { OpenCloudWordmark() } }
-                OpenCloudTheme(darkTheme = true) { Surface { OpenCloudWordmark() } }
+                OpenCloudTheme(darkTheme = false) { Surface { RaiunWordmark() } }
+                OpenCloudTheme(darkTheme = true) { Surface { RaiunWordmark() } }
             }
         }
-        compose.onRoot().captureRoboImage("src/test/snapshots/rendered/official_branding.png")
+        compose.onRoot().captureRoboImage("src/test/snapshots/rendered/raiun_branding.png")
     }
 
     private fun capture(dark: Boolean) {

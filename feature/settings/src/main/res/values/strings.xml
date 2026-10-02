@@ -49,7 +49,7 @@
     <string name="settings_cancel">Cancel</string>
 
     <!-- Security preferences. -->
-    <string name="settings_lock_opencloud">Lock OpenCloud</string>
+    <string name="settings_lock_opencloud">Lock Raiun</string>
     <string name="settings_lock_description_secure">Use your device PIN, pattern or password. App previews and screenshots are hidden while enabled.</string>
     <string name="settings_lock_description_insecure">Set a device screen lock in Android settings first.</string>
     <string name="settings_biometric_unlock">Biometric unlock</string>
@@ -71,11 +71,11 @@
     <string name="settings_photo_video_metadata_not_needed">Photo location permission is not needed on this Android version.</string>
     <string name="settings_photo_video_metadata_allowed">Photo location access is allowed.</string>
     <string name="settings_photo_video_metadata_not_allowed">Photo location access is not allowed. Selected files can still upload without GPS location.</string>
-    <string name="settings_photo_video_metadata_description">Photo location access may allow OpenCloud to read location information from photos. Android and the file provider determine what metadata is included; this permission does not control all metadata.</string>
+    <string name="settings_photo_video_metadata_description">Photo location access may allow Raiun to read location information from photos. Android and the file provider determine what metadata is included; this permission does not control all metadata.</string>
     <string name="settings_request_photo_video_metadata">Allow photo location</string>
     <string name="settings_manage_app_permissions">Manage permissions</string>
     <string name="settings_ask_for_photo_location">Ask to preserve photo location</string>
-    <string name="settings_ask_for_photo_location_description">Controls whether OpenCloud asks for photo location access. Turning this off does not revoke permission already granted or control other metadata.</string>
+    <string name="settings_ask_for_photo_location_description">Controls whether Raiun asks for photo location access. Turning this off does not revoke permission already granted or control other metadata.</string>
 
     <!-- Settings diagnostics results. %1$d is the number of temporary copies removed. -->
     <string name="settings_diagnostics_update_failed">Diagnostics settings could not be updated.</string>
@@ -86,4 +86,10 @@
         <item quantity="other">Removed %1$d temporary copies. Files kept offline are preserved.</item>
     </plurals>
     <string name="settings_temporary_copies_remove_failed">Some temporary copies could not be removed. Please try again.</string>
+    <string name="settings_appearance_summary">Theme, language and file list</string>
+    <string name="settings_theme_language">Theme and language</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_change_language">Change language</string>
+    <string name="settings_language_system">System default</string>
+    <string name="settings_file_list">File list display</string>
 </resources>

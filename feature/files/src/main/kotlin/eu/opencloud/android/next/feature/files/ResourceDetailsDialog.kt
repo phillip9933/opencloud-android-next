@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import eu.opencloud.android.next.core.database.ResourceEntity
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.model.resourceCacheDirectory
 import eu.opencloud.android.next.core.model.validatedCachedFile
@@ -48,7 +49,7 @@ internal fun ResourceDetailsDialog(
     var current by remember(resource) { mutableStateOf(resource) }
     var metadata by remember(resource) { mutableStateOf<List<String>>(emptyList()) }
     var localStatus by remember(resource) {
-        mutableStateOf(context.getString(R.string.file_details_checking_copy))
+        mutableStateOf(context.localizedString(R.string.file_details_checking_copy))
     }
     var locallyAvailable by remember(resource) { mutableStateOf(false) }
     var loading by remember(resource) { mutableStateOf(false) }
@@ -110,7 +111,8 @@ internal fun ResourceDetailsDialog(
                                         } catch (cancelled: CancellationException) {
                                             throw cancelled
                                         } catch (_: Exception) {
-                                            error = context.getString(R.string.file_details_download_error)
+                                            error =
+                                                context.localizedString(R.string.file_details_download_error)
                                         } finally {
                                             loading = false
                                         }
@@ -155,9 +157,9 @@ private fun localizedFileDetail(
     args: Array<out Any>,
 ): String =
     when (args.size) {
-        0 -> context.getString(id)
-        1 -> context.getString(id, args[0])
-        2 -> context.getString(id, args[0], args[1])
+        0 -> context.localizedString(id)
+        1 -> context.localizedString(id, args[0])
+        2 -> context.localizedString(id, args[0], args[1])
         else -> error("Unsupported file-details argument count")
     }
 

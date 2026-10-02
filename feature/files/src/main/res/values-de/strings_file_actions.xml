@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="deleted_files_title">Gelöschte Dateien</string>
+    <string name="deleted_personal_space">Persönlich</string>
+    <plurals name="deleted_bin_item_count">
+        <item quantity="one">%1$d gelöschtes Element</item>
+        <item quantity="other">%1$d gelöschte Elemente</item>
+    </plurals>
     <string name="deleted_back">Zurück</string>
     <string name="deleted_recycle_bin_title">Papierkorb</string>
     <string name="deleted_recycle_bin_explanation">Löscht Elemente dauerhaft vom Server.</string>

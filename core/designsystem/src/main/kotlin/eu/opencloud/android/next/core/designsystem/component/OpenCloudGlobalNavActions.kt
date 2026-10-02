@@ -260,8 +260,8 @@ fun OpenCloudFileBrowserFab(
 @Composable
 private fun OpenCloudBrand(modifier: Modifier = Modifier) {
     Image(
-        painter = painterResource(R.drawable.opencloud_logo),
-        contentDescription = "OpenCloud",
+        painter = painterResource(R.drawable.raiun_crest),
+        contentDescription = "Raiun",
         modifier =
             modifier.size(
                 width = OpenCloudDimensions.BrandMarkWidth,

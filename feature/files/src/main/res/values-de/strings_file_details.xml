@@ -8,14 +8,14 @@
     <string name="file_details_folder">Ordner</string>
     <string name="file_details_checking_copy">Lokale Kopie wird geprüft…</string>
     <string name="file_details_kept_pending">Offline verfügbar: Download ausstehend</string>
-    <string name="file_details_kept_retained">Offline verfügbar: bleibt erhalten, bis Sie sie entfernen</string>
+    <string name="file_details_kept_retained">Offline verfügbar: bleibt erhalten, bis du sie entfernst</string>
     <string name="file_details_temporary_never">Temporäre lokale Kopie: automatische Bereinigung ist auf „Nie“ eingestellt</string>
     <string name="file_details_now">jetzt</string>
     <string name="file_details_after_date">nach %1$s</string>
     <string name="file_details_temporary_cleanup">Temporäre lokale Kopie: kann %1$s bereinigt werden. Durch Öffnen wird der Timer zurückgesetzt. Android führt die Bereinigung möglicherweise später aus.</string>
     <string name="file_details_photo_metadata">Fotometadaten (EXIF)</string>
     <string name="file_details_no_photo_metadata">Dieses Bild enthält keine lesbaren EXIF-Metadaten.</string>
-    <string name="file_details_download_error">Fotometadaten konnten nicht heruntergeladen werden. Prüfen Sie die Übertragung und versuchen Sie es erneut.</string>
+    <string name="file_details_download_error">Fotometadaten konnten nicht heruntergeladen werden. Prüfe die Übertragung und versuche es erneut.</string>
     <string name="file_details_downloading_photo">Foto wird heruntergeladen…</string>
     <string name="file_details_download_photo">Foto herunterladen, um Metadaten anzuzeigen</string>
     <string name="file_details_close">Schließen</string>

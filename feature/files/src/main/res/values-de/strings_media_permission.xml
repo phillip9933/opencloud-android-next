@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="media_metadata_title">Standortmetadaten von Fotos behalten?</string>
-    <string name="media_metadata_explanation">Android kann Standortmetadaten aus Fotos entfernen. Erlauben Sie den Zugriff, damit sie in Uploads und Sicherungen erhalten bleiben. Ohne Berechtigung entfernt Android sie möglicherweise.</string>
-    <string name="media_metadata_allow">Zugriff auf Metadaten erlauben</string>
-    <string name="media_metadata_continue">Ohne fortfahren</string>
+    <string name="media_metadata_title">Standortdaten der Fotos beibehalten?</string>
+    <string name="media_metadata_explanation">Der Zugriff auf den Fotostandort ist deaktiviert. Android entfernt möglicherweise die GPS-Standortdaten aus hochgeladenen Fotos. Erteile die Berechtigung, damit diese Daten erhalten bleiben. Wenn du trotzdem hochlädst, wird die Datei verwendet, die Android bereitstellt; Standortdaten und andere Metadaten können enthalten sein oder fehlen. Raiun entfernt keine Metadaten.</string>
+    <string name="media_metadata_allow">Berechtigung erteilen</string>
+    <string name="media_metadata_continue">Trotzdem hochladen (jedes Mal fragen)</string>
+    <string name="media_metadata_settings">App-Berechtigungen öffnen</string>
+    <string name="media_metadata_never_ask">Trotzdem hochladen (nicht mehr fragen)</string>
+    <string name="media_metadata_settings_note">Du kannst diese Einstellung später unter „Sicherheit“ in den Einstellungen ändern.</string>
 </resources>

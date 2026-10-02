@@ -16,7 +16,7 @@ suspend fun exportCachedFile(
     destination: Uri,
 ) {
     require(destination.scheme == "content" && destination.authority != "${context.packageName}.documents") {
-        "Choose a destination outside OpenCloud."
+        "Choose a destination outside Raiun."
     }
     val source =
         requireNotNull(

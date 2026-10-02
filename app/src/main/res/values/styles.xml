@@ -1,9 +1,9 @@
 <resources>
-    <style name="OpenCloudWindowLight" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="OpenCloudWindowLight" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:colorBackground">#FFFFFF</item>
         <item name="android:windowBackground">#FFFFFF</item>
     </style>
-    <style name="OpenCloudWindowDark" parent="android:style/Theme.Material.NoActionBar">
+    <style name="OpenCloudWindowDark" parent="Theme.AppCompat.NoActionBar">
         <item name="android:colorBackground">#101416</item>
         <item name="android:windowBackground">#101416</item>
     </style>

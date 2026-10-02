@@ -3,8 +3,11 @@ package eu.opencloud.android.next.core.sync
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.network.LibreGraphSpacesClient
+import eu.opencloud.android.next.core.network.OpenCloudError
+import eu.opencloud.android.next.core.network.OpenCloudException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,11 +32,12 @@ class SpaceRepository(
         accountId: String,
         serverUrl: String,
         authorization: String,
+        includeAllSpaces: Boolean = false,
     ): List<SpaceEntity> {
         val token = store.beginSnapshot(accountId)
         val discovery =
             requireNotNull(remote) { "The Libre Graph Spaces client is unavailable." }
-                .snapshot(serverUrl, authorization)
+                .snapshot(serverUrl, authorization, includeAllSpaces)
         return discovery.spaces
             .map { space ->
                 SpaceEntity(
@@ -64,6 +68,31 @@ class SpaceRepository(
                     )
                 }
             }
+    }
+
+    /** Refreshes only one management target while preserving the rest of the ordinary account snapshot. */
+    internal suspend fun synchronizeManagedSpace(request: ManagedSpaceRefresh): SpaceEntity? {
+        val token = store.beginSnapshot(request.accountId)
+        val discovery =
+            requireNotNull(remote) { "The Libre Graph Spaces client is unavailable." }
+                .snapshot(request.serverUrl, request.authorization, includeAllSpaces = true)
+        val target = discovery.spaces.firstOrNull { it.id == request.driveId }
+        val confirmedTarget = target?.toEntity(request.accountId)
+        if ((target == null && !request.allowMissing) || !request.validate(confirmedTarget)) {
+            throw OpenCloudException(OpenCloudError.PreconditionFailed)
+        }
+        val wasStored = store.space(request.accountId, request.driveId) != null
+        val retained = observe(request.accountId).first().filterNot { it.driveId == request.driveId }
+        val merged = retained + listOfNotNull(confirmedTarget?.takeIf { wasStored })
+        if (!store.replaceRemoteSpaces(
+                request.accountId,
+                merged,
+                token,
+            )
+        ) {
+            throw OpenCloudException(OpenCloudError.PreconditionFailed)
+        }
+        return confirmedTarget
     }
 
     suspend fun createProjectSpace(
@@ -121,6 +150,38 @@ class SpaceRepository(
         const val PROJECT_DRIVE_TYPE = "project"
     }
 }
+
+internal data class ManagedSpaceRefresh(
+    val accountId: String,
+    val serverUrl: String,
+    val authorization: String,
+    val driveId: String,
+    val allowMissing: Boolean = false,
+    val validate: (SpaceEntity?) -> Boolean = { true },
+)
+
+internal fun eu.opencloud.android.next.core.network.RemoteSpace.toEntity(accountId: String) =
+    SpaceEntity(
+        accountId = accountId,
+        driveId = id,
+        name = name,
+        type = type,
+        description = description,
+        ownerName = ownerName,
+        rootId = rootId,
+        rootWebDavUrl = rootWebDavUrl,
+        rootETag = rootETag,
+        quotaBytes = quotaTotalBytes,
+        isDisabled = disabled,
+        isDeleted = deleted,
+        driveAlias = driveAlias,
+        webUrl = webUrl,
+        ownerId = ownerId,
+        lastModifiedDateTime = lastModifiedDateTime,
+        quotaUsedBytes = quotaUsedBytes,
+        quotaRemainingBytes = quotaRemainingBytes,
+        quotaState = quotaState,
+    )
 
 private object SpaceCreationLocks {
     private val mutexes = Array(64) { Mutex() }

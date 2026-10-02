@@ -1,4 +1,4 @@
-# OpenCloud Android Next — Phase 0 Architecture Proposal
+# Raiun — Phase 0 Architecture Proposal
 
 **Historical proposal:** This document records Phase 0 design intent from 2026-09-06. It is not a current implementation or acceptance checklist. See the [current repository layout](README.md#repository-layout) and [testing guide](TESTING.md) before using its proposed paths or phases.
 
@@ -13,7 +13,9 @@
 
 ## 1. Purpose and principles
 
-OpenCloud Android Next is a ground-up native Android application, not a fork or database migration of the legacy client. It will use Kotlin and Jetpack Compose exclusively, reproduce the current OpenCloud mobile-web UX as a native experience, and preserve the legacy application's protocol, offline, transfer, and system-integration behavior.
+Raiun is a native Android application built with Kotlin and Jetpack Compose. It aims to provide an OpenCloud mobile experience and preserve relevant protocol, offline, transfer, and system-integration behavior.
+
+> **Provenance review:** Earlier wording described this project as “ground-up” and “not a fork.” That clean-room claim has not been independently verified and should be reviewed before it is relied on. This document does not assert any external attribution.
 
 ### Non-negotiable rules
 

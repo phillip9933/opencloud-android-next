@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="spaces_actions">Actions for %1$s</string>
+    <string name="spaces_open">Open</string>
+    <string name="spaces_trash">Open recycle bin</string>
+    <string name="spaces_details">Details</string>
+    <string name="spaces_rename">Rename</string>
+    <string name="spaces_subtitle">Edit subtitle</string>
+    <string name="spaces_quota">Edit quota</string>
+    <string name="spaces_disable">Disable space</string>
+    <string name="spaces_enable">Enable space</string>
+    <string name="spaces_delete">Delete space permanently</string>
+    <string name="spaces_web">Manage in web app</string>
+    <string name="spaces_web_summary">Members, space image, description, duplicate and download</string>
+    <string name="spaces_name">Space name</string>
+    <string name="spaces_subtitle_label">Subtitle</string>
+    <string name="spaces_quota_label">Storage limit (GiB)</string>
+    <string name="spaces_quota_hint">1 GiB = 1,073,741,824 bytes. Enter a positive number.</string>
+    <string name="spaces_save">Save</string>
+    <string name="spaces_cancel">Cancel</string>
+    <string name="spaces_close">Close</string>
+    <string name="spaces_disabled">Disabled</string>
+    <string name="spaces_enabled">Enabled</string>
+    <string name="spaces_disable_message">Disable %1$s? Its files will remain on the server, but members will lose access until the space is enabled again.</string>
+    <string name="spaces_enable_message">Enable %1$s and restore access for its members?</string>
+    <string name="spaces_delete_message">Permanently delete %1$s and all its files? This cannot be undone. Type the space name to confirm.</string>
+    <string name="spaces_operation_failed">Space could not be updated.</string>
+    <string name="spaces_last_activity">Last activity: %1$s</string>
+    <string name="spaces_working">Updating space…</string>
+    <string name="spaces_web_unavailable">The server did not provide a trusted web address for this space.</string>
+</resources>

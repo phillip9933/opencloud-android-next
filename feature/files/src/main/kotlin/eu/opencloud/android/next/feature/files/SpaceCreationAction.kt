@@ -2,6 +2,7 @@ package eu.opencloud.android.next.feature.files
 
 import android.content.Context
 import eu.opencloud.android.next.core.database.FileBrowserStore
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.network.LibreGraphSpacesClient
 import eu.opencloud.android.next.core.security.TlsPolicy
 import eu.opencloud.android.next.core.sync.PendingSpaceCreations
@@ -27,6 +28,6 @@ internal suspend fun createProjectSpace(
     }
 
 internal fun SpaceCreationResult.AwaitingDiscovery.message(context: Context): String =
-    context.getString(
+    context.localizedString(
         if (retrySafe) R.string.space_created_refresh_pending else R.string.space_created_recovery_not_saved,
     )

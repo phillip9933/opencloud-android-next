@@ -68,14 +68,149 @@ class LibreGraphSpacesClient(
         }
     }
 
+    fun updateProjectSpace(
+        serverUrl: String,
+        authorization: String,
+        driveId: String,
+        update: ProjectSpaceUpdate,
+    ): RemoteSpace {
+        val name = update.name
+        val description = update.description
+        val quotaBytes = update.quotaBytes
+        require(driveId.isNotBlank())
+        require(name != null || description != null || quotaBytes != null)
+        require(name == null || name.isNotBlank())
+        require(quotaBytes == null || quotaBytes >= 0)
+        val requestBody =
+            buildJsonObject {
+                name?.let { put("name", it.trim()) }
+                description?.let { put("description", it) }
+                quotaBytes?.let { put("quota", buildJsonObject { put("total", it) }) }
+            }.toString()
+        val responseBody =
+            managementRequest(
+                serverUrl,
+                authorization,
+                DriveManagementRequest(
+                    driveId = driveId,
+                    method = "PATCH",
+                    body = requestBody,
+                    contentType = "application/json",
+                    expectedCode = 200,
+                ),
+            )
+        return parseDriveResponse(responseBody)
+    }
+
+    /** Disables a space while preserving its content, as defined by OpenCloud's Spaces API. */
+    fun disableProjectSpace(
+        serverUrl: String,
+        authorization: String,
+        driveId: String,
+    ) = managementRequest(serverUrl, authorization, DriveManagementRequest(driveId, "DELETE", expectedCode = 204))
+
+    fun enableProjectSpace(
+        serverUrl: String,
+        authorization: String,
+        driveId: String,
+    ) = managementRequest(
+        serverUrl,
+        authorization,
+        DriveManagementRequest(
+            driveId,
+            method = "PATCH",
+            body = "{}",
+            contentType = "text/plain",
+            headers = mapOf("Restore" to "T"),
+            expectedCode = 200,
+        ),
+    )
+
+    /** Permanently deletes a previously disabled space. */
+    fun permanentlyDeleteProjectSpace(
+        serverUrl: String,
+        authorization: String,
+        driveId: String,
+    ) = managementRequest(
+        serverUrl,
+        authorization,
+        DriveManagementRequest(
+            driveId,
+            method = "DELETE",
+            headers = mapOf("Purge" to "T"),
+            expectedCode = 204,
+        ),
+    )
+
+    private fun managementRequest(
+        serverUrl: String,
+        authorization: String,
+        management: DriveManagementRequest,
+    ): String {
+        require(management.driveId.isNotBlank())
+        val url =
+            serverUrl
+                .toHttpUrl()
+                .newBuilder()
+                .addPathSegments("graph/v1.0/drives")
+                .addPathSegment(management.driveId)
+                .build()
+                .toString()
+                .let(endpoints::endpoint)
+        val request =
+            Request
+                .Builder()
+                .url(url)
+                .header("Authorization", authorization)
+                .header("Accept", "application/json")
+                .header("Initiator-ID", initiatorId)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .header("X-Request-ID", UUID.randomUUID().toString())
+                .apply {
+                    management.headers.forEach { (name, value) -> header(name, value) }
+                    this.method(
+                        management.method,
+                        management.body?.toRequestBody((management.contentType ?: "text/plain").toMediaType()),
+                    )
+                }.build()
+        return executeManagement(request, management.expectedCode)
+    }
+
+    // Network causes can include private host details; expose only the typed public failure category.
+    @Suppress("SwallowedException")
+    private fun executeManagement(
+        request: Request,
+        expectedCode: Int,
+    ): String =
+        try {
+            client.newCall(request).execute().use { response ->
+                if (response.code != expectedCode) throw TransferHttpException(response.code)
+                response.body?.string().orEmpty()
+            }
+        } catch (failure: java.io.IOException) {
+            throw OpenCloudException(failure.toOpenCloudError())
+        }
+
+    private fun parseDriveResponse(body: String): RemoteSpace {
+        val element =
+            try {
+                json.parseToJsonElement(body)
+            } catch (_: kotlinx.serialization.SerializationException) {
+                throw OpenCloudException(OpenCloudError.InvalidResponse)
+            }
+        return (element as? JsonObject)?.toRemoteSpace()
+            ?: throw OpenCloudException(OpenCloudError.InvalidResponse)
+    }
+
     /** Exclusions are authoritative only when the entire paginated response succeeds. */
     fun snapshot(
         serverUrl: String,
         authorization: String,
+        includeAllSpaces: Boolean = false,
     ): RemoteSpacesSnapshot {
         val spaces = mutableListOf<RemoteSpace>()
         val excluded = mutableSetOf<String>()
-        val initial = endpoints.endpoint(drivesUrl(serverUrl))
+        val initial = endpoints.endpoint(drivesUrl(serverUrl, includeMe = !includeAllSpaces))
         val visited = mutableSetOf<String>()
         val ids = mutableSetOf<String>()
         var nextUrl: String? = initial.toString()
@@ -163,6 +298,21 @@ data class RemoteSpacesSnapshot(
     val excludedVaultIds: Set<String>,
 )
 
+data class ProjectSpaceUpdate(
+    val name: String? = null,
+    val description: String? = null,
+    val quotaBytes: Long? = null,
+)
+
+private data class DriveManagementRequest(
+    val driveId: String,
+    val method: String,
+    val body: String? = null,
+    val contentType: String? = null,
+    val headers: Map<String, String> = emptyMap(),
+    val expectedCode: Int,
+)
+
 data class RemoteSpace(
     val id: String,
     val name: String,
@@ -192,6 +342,7 @@ private data class SpacesPage(
 
 private fun JsonObject.toRemoteSpace(): RemoteSpace {
     val root = requiredObject("root")
+    val deletedState = root["deleted"]?.jsonObject?.string("state")
     val owner = get("owner")?.jsonObject?.get("user")?.jsonObject
     val quota = get("quota")?.jsonObject
     val type = string("driveType") ?: "project"
@@ -212,8 +363,9 @@ private fun JsonObject.toRemoteSpace(): RemoteSpace {
         quotaUsedBytes = quota?.long("used"),
         quotaRemainingBytes = quota?.long("remaining"),
         quotaState = quota?.string("state"),
-        disabled = type == "virtual",
-        deleted = root["deleted"] != null,
+        disabled = deletedState == "trashed",
+        // Permanently deleted spaces are absent from Graph listings; a trashed root is a disabled space.
+        deleted = false,
     )
 }
 
@@ -229,10 +381,11 @@ private fun drivesUrl(
         }.build()
         .toString()
 
-private fun JsonObject.requiredString(name: String): String = string(name) ?: error("Missing required field: $name")
+private fun JsonObject.requiredString(name: String): String =
+    string(name) ?: throw OpenCloudException(OpenCloudError.InvalidResponse)
 
 private fun JsonObject.requiredObject(name: String): JsonObject =
-    get(name)?.jsonObject ?: error("Missing required object: $name")
+    get(name)?.jsonObject ?: throw OpenCloudException(OpenCloudError.InvalidResponse)
 
 private fun JsonObject.string(name: String): String? = get(name)?.jsonPrimitive?.content
 

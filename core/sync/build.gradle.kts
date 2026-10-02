@@ -37,6 +37,7 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.core)
     implementation(project(":core:database"))
     implementation(project(":core:model"))
     implementation(project(":core:network"))
@@ -49,6 +50,7 @@ dependencies {
     implementation(libs.okhttp)
     testImplementation(libs.junit)
     testImplementation(libs.androidx.work.testing)
+    testImplementation("androidx.concurrent:concurrent-futures:1.1.0")
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)

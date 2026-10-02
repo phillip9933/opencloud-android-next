@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.network.ServerAccountProfile
 import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.network.toOpenCloudError
@@ -61,7 +62,8 @@ class AccountDetailsViewModel(
             } catch (failure: IllegalArgumentException) {
                 mutable.value =
                     mutable.value.copy(
-                        error = getApplication<Application>().getString(R.string.account_invalid_picture),
+                        error =
+                            getApplication<Application>().localizedString(R.string.account_invalid_picture),
                     )
             } catch (failure: Exception) {
                 mutable.value =

@@ -1,7 +1,1 @@
-<?xml version="1.0" encoding="utf-8"?>
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/launcher_mark"
-    android:insetLeft="32%"
-    android:insetRight="32%"
-    android:insetTop="28%"
-    android:insetBottom="28%" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><group android:scaleX="0.7" android:scaleY="0.7" android:translateX="16.2" android:translateY="16.2"><path android:fillColor="#A9B8E8" android:fillType="evenOdd" android:pathData="M23 48C23 40 29 35 37 36C40 26 48 23 55 26C63 24 71 30 73 38C80 38 86 43 86 50V53H23ZM23 60H86C84 65 82 68 78 71H31C27 68 25 65 23 60ZM37 78H72C61 86 48 86 37 78Z" /></group></vector>

@@ -1,3 +1,5 @@
+> Provenance review: the earlier clean-room claim has not been verified. This is a historical architecture record, not a verified provenance statement.
+
 # OpenCloud Android Next: oCIS Architecture Re-engineering Whitepaper
 
 **Document status:** Phase 1–6 modernization wrap-up  
@@ -10,7 +12,7 @@
 
 ## 1. Executive Summary
 
-OpenCloud Android Next is a clean-room, native Android client designed around the actual service boundaries of oCIS rather than around historical Nextcloud server assumptions. The modernization did not attempt to incrementally retrofit the legacy Android application. It established a separate Kotlin/Jetpack Compose application, preserved proven Android platform behaviors where they remain valuable, and replaced legacy protocol assumptions with an explicit combination of Libre Graph, OCS, WebDAV, OIDC/WebFinger, TUS, Room, DataStore, and WorkManager.
+Raiun (formerly OpenCloud Android Next) is a native Android client designed around the actual service boundaries of oCIS rather than around historical Nextcloud server assumptions. The modernization did not attempt to incrementally retrofit the legacy Android application. It established a separate Kotlin/Jetpack Compose application, preserved proven Android platform behaviors where they remain valuable, and replaced legacy protocol assumptions with an explicit combination of Libre Graph, OCS, WebDAV, OIDC/WebFinger, TUS, Room, DataStore, and WorkManager.
 
 The central architectural result is a **space-aware, offline-first client**:
 

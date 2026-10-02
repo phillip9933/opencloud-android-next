@@ -35,6 +35,7 @@ class OidcRegistrationClientTest {
         assertNull(request.getHeader("Authorization"))
         val body = request.body.readUtf8()
         assertTrue(body.contains("\"token_endpoint_auth_method\":\"none\""))
+        assertTrue(body.contains("\"client_name\":\"Raiun\""))
         assertTrue(body.contains(NEXT_OIDC_REDIRECT_URI))
         assertTrue(body.contains("refresh_token"))
     }

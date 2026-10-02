@@ -1,6 +1,6 @@
-# Contributing to OpenCloud Android Next
+# Contributing to Raiun
 
-This independent client is in beta hardening. Start with [README](README.md), the [current layout](docs/README.md#repository-layout) and [Security](SECURITY.md). Please report reproducible bugs first; discuss major feature or dependency changes in an issue before implementing them.
+Raiun is a personal project maintained for the maintainer's own use and shared on a best-effort basis. It is not an official OpenCloud GmbH product or supported client. This independent client is in beta hardening. Start with [README](README.md), the [current layout](docs/README.md#repository-layout) and [Security](SECURITY.md). Please report reproducible bugs first; discuss major feature or dependency changes in an issue before implementing them.
 
 ## Development
 

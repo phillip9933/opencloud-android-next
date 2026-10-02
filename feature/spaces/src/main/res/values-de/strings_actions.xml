@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="spaces_actions">Aktionen für %1$s</string>
+    <string name="spaces_open">Öffnen</string>
+    <string name="spaces_trash">Papierkorb öffnen</string>
+    <string name="spaces_details">Details</string>
+    <string name="spaces_rename">Umbenennen</string>
+    <string name="spaces_subtitle">Untertitel bearbeiten</string>
+    <string name="spaces_quota">Speicherlimit bearbeiten</string>
+    <string name="spaces_disable">Space deaktivieren</string>
+    <string name="spaces_enable">Space aktivieren</string>
+    <string name="spaces_delete">Space endgültig löschen</string>
+    <string name="spaces_web">In der Web-App verwalten</string>
+    <string name="spaces_web_summary">Mitglieder, Space-Bild, Beschreibung, Duplizieren und Herunterladen</string>
+    <string name="spaces_name">Name des Spaces</string>
+    <string name="spaces_subtitle_label">Untertitel</string>
+    <string name="spaces_quota_label">Speicherlimit (GiB)</string>
+    <string name="spaces_quota_hint">1 GiB = 1.073.741.824 Bytes. Gib eine positive Zahl ein.</string>
+    <string name="spaces_save">Speichern</string>
+    <string name="spaces_cancel">Abbrechen</string>
+    <string name="spaces_close">Schließen</string>
+    <string name="spaces_disabled">Deaktiviert</string>
+    <string name="spaces_enabled">Aktiviert</string>
+    <string name="spaces_disable_message">%1$s deaktivieren? Die Dateien bleiben auf dem Server, aber Mitglieder haben erst nach der erneuten Aktivierung wieder Zugriff.</string>
+    <string name="spaces_enable_message">%1$s aktivieren und den Zugriff für Mitglieder wiederherstellen?</string>
+    <string name="spaces_delete_message">%1$s und alle enthaltenen Dateien endgültig löschen? Dies kann nicht rückgängig gemacht werden. Gib zur Bestätigung den Namen des Spaces ein.</string>
+    <string name="spaces_operation_failed">Der Space konnte nicht aktualisiert werden.</string>
+    <string name="spaces_last_activity">Letzte Aktivität: %1$s</string>
+    <string name="spaces_working">Space wird aktualisiert…</string>
+    <string name="spaces_web_unavailable">Der Server hat keine vertrauenswürdige Webadresse für diesen Space bereitgestellt.</string>
+</resources>

@@ -8,8 +8,10 @@ import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.FileBrowserDatabase
 import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.datastore.SettingsRepository
+import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.model.auth.AuthTokens
 import eu.opencloud.android.next.core.model.auth.AuthenticationType
+import eu.opencloud.android.next.core.model.auth.NEXT_OIDC_REDIRECT_URI
 import eu.opencloud.android.next.core.model.auth.OidcConfiguration
 import eu.opencloud.android.next.core.network.OpenCloudApi
 import eu.opencloud.android.next.core.network.safeMessage
@@ -96,7 +98,7 @@ class AuthViewModel(
         password: String,
     ) = launchAuth {
         require(serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()) {
-            getApplication<Application>().getString(R.string.auth_required_fields)
+            getApplication<Application>().localizedString(R.string.auth_required_fields)
         }
         val normalized =
             eu.opencloud.android.next.core.network
@@ -143,7 +145,10 @@ class AuthViewModel(
     fun completeOidcCallback(callback: String) =
         launchAuth {
             val callbackUri = android.net.Uri.parse(callback)
-            require(callbackUri.scheme == "eu.opencloud.android.next" && callbackUri.authority == "oauth")
+            require(
+                callbackUri.scheme == NEXT_OIDC_REDIRECT_URI.substringBefore("://") &&
+                    callbackUri.authority == "oauth",
+            )
             require(callbackUri.path.isNullOrEmpty() && callbackUri.fragment == null)
             val states = callbackUri.getQueryParameters("state")
             require(states.size == 1 && states.single().isNotBlank())
@@ -152,7 +157,8 @@ class AuthViewModel(
                 mutableState.value =
                     mutableState.value.copy(
                         isLoading = false,
-                        error = getApplication<Application>().getString(R.string.auth_oidc_session_expired),
+                        error =
+                            getApplication<Application>().localizedString(R.string.auth_oidc_session_expired),
                     )
                 return@launchAuth
             }
@@ -161,7 +167,8 @@ class AuthViewModel(
                 mutableState.value =
                     mutableState.value.copy(
                         isLoading = false,
-                        error = getApplication<Application>().getString(R.string.auth_sign_in_cancelled),
+                        error =
+                            getApplication<Application>().localizedString(R.string.auth_sign_in_cancelled),
                     )
                 return@launchAuth
             }
@@ -235,7 +242,8 @@ class AuthViewModel(
         }
     }
 
-    private fun certificateErrorMessage() = getApplication<Application>().getString(R.string.auth_certificate_untrusted)
+    private fun certificateErrorMessage() =
+        getApplication<Application>().localizedString(R.string.auth_certificate_untrusted)
 }
 
 data class AuthUiState(

@@ -1,4 +1,4 @@
-# GitHub release procedure
+# Raiun GitHub release procedure
 
 1. Freeze features; update versionName and strictly increase versionCode.
 2. Install the pinned scanner SDK; run CI quality and Android emulator jobs on the exact release commit. Review failures, do not silently waive checks.

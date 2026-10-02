@@ -3,16 +3,20 @@ package eu.opencloud.android.next.feature.settings
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.security.AppLock
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,10 +46,6 @@ fun SecuritySettingsScreen(
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { revision++ }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { revision++ }
     val enabled = remember(revision) { lock.enabled }
-    val lockDelayOptions = LockDelayOptions()
-    val currentLockDelay =
-        lockDelayOptions.firstOrNull { it.first == lock.timeoutMinutes }?.second
-            ?: pluralStringResource(R.plurals.settings_lock_delay_minutes, lock.timeoutMinutes, lock.timeoutMinutes)
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -61,93 +62,129 @@ fun SecuritySettingsScreen(
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).verticalScroll(rememberScrollState())) {
+        Column(
+            Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(OpenCloudDimensions.SpacingMd),
+            verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingMd),
+        ) {
             MetadataPermissionSettings()
+            AppLockSettingsCard(lock, enabled, onAuthenticate = { launcher.launch(it) }, onChange = { revision++ })
+        }
+    }
+}
+
+@Composable
+private fun AppLockSettingsCard(
+    lock: AppLock,
+    enabled: Boolean,
+    onAuthenticate: (Intent) -> Unit,
+    onChange: () -> Unit,
+) {
+    val context = LocalContext.current
+    val lockDelayOptions = LockDelayOptions()
+    val currentLockDelay =
+        lockDelayOptions.firstOrNull { it.first == lock.timeoutMinutes }?.second
+            ?: pluralStringResource(R.plurals.settings_lock_delay_minutes, lock.timeoutMinutes, lock.timeoutMinutes)
+    Card {
+        ListItem(
+            colors =
+                ListItemDefaults.colors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ),
+            headlineContent = { Text(stringResource(R.string.settings_lock_opencloud)) },
+            supportingContent = {
+                Text(
+                    if (lock.deviceSecure) {
+                        stringResource(R.string.settings_lock_description_secure)
+                    } else {
+                        stringResource(R.string.settings_lock_description_insecure)
+                    },
+                )
+            },
+            trailingContent = {
+                Switch(
+                    enabled,
+                    onCheckedChange = { value ->
+                        onAuthenticate(
+                            Intent()
+                                .setClassName(context.packageName, AppLock.AUTH_ACTIVITY)
+                                .setAction(if (value) "enable-lock" else "disable-lock"),
+                        )
+                    },
+                    enabled = lock.deviceSecure,
+                )
+            },
+        )
+        if (enabled) {
             ListItem(
-                headlineContent = { Text(stringResource(R.string.settings_lock_opencloud)) },
+                colors =
+                    ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ),
+                headlineContent = { Text(stringResource(R.string.settings_biometric_unlock)) },
                 supportingContent = {
                     Text(
-                        if (lock.deviceSecure) {
-                            stringResource(R.string.settings_lock_description_secure)
+                        if (lock.biometricAvailable) {
+                            stringResource(R.string.settings_biometric_description_available)
                         } else {
-                            stringResource(R.string.settings_lock_description_insecure)
+                            stringResource(R.string.settings_biometric_description_unavailable)
                         },
                     )
                 },
                 trailingContent = {
                     Switch(
-                        enabled,
-                        onCheckedChange = { value ->
-                            launcher.launch(
-                                Intent()
-                                    .setClassName(context.packageName, AppLock.AUTH_ACTIVITY)
-                                    .setAction(if (value) "enable-lock" else "disable-lock"),
-                            )
+                        lock.biometricEnabled,
+                        {
+                            lock.setBiometricEnabled(it)
+                            onChange()
                         },
-                        enabled = lock.deviceSecure,
+                        enabled = lock.biometricAvailable || lock.biometricEnabled,
                     )
                 },
             )
-            if (enabled) {
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.settings_biometric_unlock)) },
-                    supportingContent = {
-                        Text(
-                            if (lock.biometricAvailable) {
-                                stringResource(R.string.settings_biometric_description_available)
-                            } else {
-                                stringResource(R.string.settings_biometric_description_unavailable)
-                            },
-                        )
-                    },
-                    trailingContent = {
-                        Switch(
-                            lock.biometricEnabled,
-                            {
-                                lock.setBiometricEnabled(it)
-                                revision++
-                            },
-                            enabled = lock.biometricAvailable || lock.biometricEnabled,
-                        )
-                    },
-                )
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.settings_lock_after_leaving)) },
-                    supportingContent = {
-                        Text(stringResource(R.string.settings_lock_after_leaving_description))
-                    },
-                    trailingContent = {
-                        SettingsChoice(
-                            stringResource(R.string.settings_change_lock_delay),
-                            currentLockDelay,
-                            lockDelayOptions.map { it.second },
-                        ) { label ->
-                            lock.setTimeout(lockDelayOptions.first { it.second == label }.first)
-                            revision++
-                        }
-                    },
-                )
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.settings_protect_other_apps)) },
-                    supportingContent = {
-                        Text(stringResource(R.string.settings_protect_other_apps_description))
-                    },
-                    trailingContent = {
-                        Switch(
-                            lock.protectDocuments,
-                            {
-                                lock.setProtectDocuments(it)
-                                revision++
-                            },
-                        )
-                    },
-                )
-                TextButton(
-                    onClick = {
-                        launcher.launch(Intent().setClassName(context.packageName, AppLock.AUTH_ACTIVITY))
-                    },
-                ) { Text(stringResource(R.string.settings_unlock_file_picker)) }
-            }
+            ListItem(
+                colors =
+                    ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ),
+                headlineContent = { Text(stringResource(R.string.settings_lock_after_leaving)) },
+                supportingContent = {
+                    Text(stringResource(R.string.settings_lock_after_leaving_description))
+                },
+                trailingContent = {
+                    SettingsChoice(
+                        stringResource(R.string.settings_change_lock_delay),
+                        currentLockDelay,
+                        lockDelayOptions.map { it.second },
+                    ) { label ->
+                        lock.setTimeout(lockDelayOptions.first { it.second == label }.first)
+                        onChange()
+                    }
+                },
+            )
+            ListItem(
+                colors =
+                    ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ),
+                headlineContent = { Text(stringResource(R.string.settings_protect_other_apps)) },
+                supportingContent = {
+                    Text(stringResource(R.string.settings_protect_other_apps_description))
+                },
+                trailingContent = {
+                    Switch(
+                        lock.protectDocuments,
+                        {
+                            lock.setProtectDocuments(it)
+                            onChange()
+                        },
+                    )
+                },
+            )
+            TextButton(
+                onClick = {
+                    onAuthenticate(Intent().setClassName(context.packageName, AppLock.AUTH_ACTIVITY))
+                },
+            ) { Text(stringResource(R.string.settings_unlock_file_picker)) }
         }
     }
 }
