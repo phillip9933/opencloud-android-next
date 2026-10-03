@@ -33,6 +33,8 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w360dp-h800dp")
 class SharedFolderActionsTest {
+    @get:Rule val timeZoneRule = GoldenTimeZoneRule("Asia/Tokyo")
+
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val folder =
         IncomingBrowserItem.Folder(
