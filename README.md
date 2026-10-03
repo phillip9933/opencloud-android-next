@@ -1,8 +1,6 @@
 # Raiun
 
-An independent Android client for OpenCloud.
-
-Raiun is a personal project maintained for the maintainer's own use and shared on a best-effort basis. It is not an official OpenCloud GmbH product, release, or supported client.
+An independent Android client for OpenCloud. It is not an official OpenCloud GmbH product, release, or supported client.
 
 ## About this project
 
