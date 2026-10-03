@@ -60,4 +60,4 @@ See [beta limitations](#known-beta-limitations), [testing guidance](docs/TESTING
 
 ## Source licensing
 
-Licensed under the [GNU Affero General Public License version 3 (AGPL-3.0-only)](LICENSE), matching the license text used by Kura. See [NOTICE](NOTICE). Third-party components retain their own licenses and notices. The license does not grant rights to third-party trademarks.
+Licensed under the [GNU Affero General Public License version 3 (AGPL-3.0-only)](LICENSE). See [NOTICE](NOTICE). Third-party components retain their own licenses and notices. The license does not grant rights to third-party trademarks.
