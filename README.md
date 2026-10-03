@@ -1,14 +1,6 @@
 # Raiun
 
-An independent Android client for OpenCloud.
-
-Raiun is a personal project maintained for the maintainer's own use and shared on a best-effort basis. It is not an official OpenCloud GmbH product, release, or supported client.
-
-## AI-assisted development
-
-AI tools assisted with development. A human maintainer reviews changes and runs tests, but review and testing have limits and do not guarantee that every issue is found.
-
-**Initial beta:** Android 8.0/API 26 or later, on arm64-v8a or x86_64 devices. Expect bugs; keep backups of important files.
+An independent Android client for OpenCloud. It is not an official OpenCloud GmbH product, release, or supported client.
 
 ## About this project
 
@@ -47,9 +39,8 @@ Translations use Android resource files. Missing translations fall back to Engli
 ## Known beta limitations
 
 - End-to-end encrypted Spaces are not currently supported. Raiun does not implement their client-side encryption, decryption or key management.
-- Large transfers across mobile/Wi-Fi changes can restart or require retry; HTTP 502/timeouts have been observed on some server/network paths.
-- External editor, Office/server integrations and broader device/provider combinations have incomplete acceptance coverage.
-- Scanner pages not yet exported may be lost if Android kills the capture process.
+- HTTP 502/timeouts have been observed on some server/network paths on larger files paired with inconsistent network stability
+- External editor, Office/server integrations and broader device/provider combinations have not been fully tested.
 - Folder backup queues uploads; it is not a bidirectional mirror and does not delete source files. Changed destination names can require conflict resolution.
 - Metadata comes from Android's supplied file representation; Raiun does not guarantee removal or preservation of GPS or other metadata.
 
