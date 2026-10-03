@@ -1,4 +1,4 @@
-# Raiun 0.1.0-beta.4
+# Raiun 0.8.0-beta.1
 
 This update adds cloud folders for other apps, file viewers, version history and home screen folder shortcuts. It also brings shared folders closer to how Personal files and Spaces work.
 
