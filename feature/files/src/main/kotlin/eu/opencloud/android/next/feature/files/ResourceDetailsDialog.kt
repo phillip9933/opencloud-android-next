@@ -45,6 +45,24 @@ internal fun ResourceDetailsDialog(
     onDismiss: () -> Unit,
     prepareFile: (suspend (ResourceEntity) -> ResourceEntity)? = null,
 ) {
+    var showVersions by remember(resource) { mutableStateOf(false) }
+    if (showVersions) {
+        FileVersionHistoryDialog(resource, onDismiss = onDismiss)
+    } else {
+        ResourceDetailsContent(resource, keptOffline, retentionHours, onDismiss, prepareFile) { showVersions = true }
+    }
+}
+
+@Suppress("LongParameterList") // Existing details callbacks plus version-history navigation.
+@Composable
+private fun ResourceDetailsContent(
+    resource: ResourceEntity,
+    keptOffline: Boolean,
+    retentionHours: Int,
+    onDismiss: () -> Unit,
+    prepareFile: (suspend (ResourceEntity) -> ResourceEntity)?,
+    onVersions: () -> Unit,
+) {
     val context = LocalContext.current
     var current by remember(resource) { mutableStateOf(resource) }
     var metadata by remember(resource) { mutableStateOf<List<String>>(emptyList()) }
@@ -83,6 +101,9 @@ internal fun ResourceDetailsDialog(
                 verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
             ) {
                 BasicResourceDetails(resource)
+                if (resource.kind == eu.opencloud.android.next.core.model.ResourceKind.FILE) {
+                    TextButton(onClick = onVersions) { Text(stringResource(R.string.file_versions_title)) }
+                }
                 Text(localStatus)
                 if (resource.isImagePreview()) {
                     HorizontalDivider()

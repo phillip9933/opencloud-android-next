@@ -44,7 +44,13 @@ class RemoteDiscoveryClient(
         rootWebDavUrl: String,
         path: String,
         authorization: String,
-    ): RemoteFolderSnapshot = readFolder(rootWebDavUrl, path, authorization, "1", reportEncryptedCollection = true)
+    ): RemoteFolderSnapshot =
+        try {
+            readFolder(rootWebDavUrl, path, authorization, "1", reportEncryptedCollection = true)
+        } catch (failure: OpenCloudException) {
+            if (failure.error != OpenCloudError.InvalidResponse) throw failure
+            throw SharedMetadataException(SharedMetadataStage.DAV_LISTING)
+        }
 
     internal fun requireCollection(
         url: String,
@@ -55,13 +61,24 @@ class RemoteDiscoveryClient(
         }
     }
 
-    @Suppress("TooGenericExceptionCaught", "ThrowsCount") // Fail closed on unsafe XML; preserve cancellation.
+    /** A discovery address may be stale after a rename or replacement; verify its current identity. */
+    internal fun requireCollectionIdentity(
+        url: String,
+        authorization: String,
+        expectedId: String,
+    ) {
+        readFolder(url, "", authorization, "0", expectedCollectionId = expectedId)
+    }
+
+    // Explicit read constraints; fail closed and preserve cancellation.
+    @Suppress("TooGenericExceptionCaught", "ThrowsCount", "LongParameterList")
     private fun readFolder(
         rootWebDavUrl: String,
         path: String,
         authorization: String,
         depth: String,
         reportEncryptedCollection: Boolean = false,
+        expectedCollectionId: String? = null,
     ): RemoteFolderSnapshot {
         val url = rootWebDavUrl.childUrl(path)
         if (isVaultPath(url.toHttpUrl().pathSegments.joinToString("/"))) {
@@ -99,6 +116,7 @@ class RemoteDiscoveryClient(
                 .firstOrNull { response ->
                     response.text(DAV_NAMESPACE, "href")?.let { response.matchesRequestedCollection(url, it) } == true
                 } ?: throw OpenCloudException(OpenCloudError.InvalidResponse)
+        requestedCollection.requireIdentity(expectedCollectionId)
         if (requestedCollection.isEncryptedVault()) {
             if (!reportEncryptedCollection) throw OpenCloudException(OpenCloudError.Unsupported)
             return RemoteFolderSnapshot(emptyList(), setOf(path))
@@ -112,6 +130,12 @@ class RemoteDiscoveryClient(
                 response.resource(path, href, excluded, identities)
             }
         return RemoteFolderSnapshot(resources, excluded.toSet(), plainCollectionConfirmed)
+    }
+
+    private fun Element.requireIdentity(expectedId: String?) {
+        if (expectedId == null) return
+        val actualId = text(OC_NAMESPACE, "fileid") ?: text(OC_NAMESPACE, "id")
+        if (actualId != expectedId) throw SharedMetadataException(SharedMetadataStage.ITEM_IDENTITY)
     }
 
     private fun Element.resource(
@@ -160,10 +184,6 @@ class RemoteDiscoveryClient(
     private fun execute(request: Request): String =
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                Log.e(
-                    LOG_TAG,
-                    "${request.method} failed with HTTP ${response.code}",
-                )
                 throw TransferHttpException(response.code)
             }
             val source = response.body?.source() ?: throw OpenCloudException(OpenCloudError.Unsupported)
@@ -246,7 +266,8 @@ private fun sameCollection(
     val request = requestUrl.toHttpUrl()
     val response = request.resolve(href) ?: return false
     val sameOrigin = response.scheme == request.scheme && response.host == request.host && response.port == request.port
-    val samePath = request.encodedPath.trimEnd('/') == response.encodedPath.trimEnd('/')
+    val samePath =
+        request.pathSegments.dropLastWhile(String::isEmpty) == response.pathSegments.dropLastWhile(String::isEmpty)
     return sameOrigin && samePath
 }
 

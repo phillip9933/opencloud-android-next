@@ -77,6 +77,7 @@ internal class AndroidIncomingBrowserBackend(
                         IncomingBrowserItem.Folder(
                             it.name,
                             SharedFolderRequest(account, it.shareId, it.scopeId, it.rootItemId, "/"),
+                            hidden = it.hidden,
                         )
                     }.sortedBy { it.name.lowercase() }
             IncomingBrowserPage(items, catalog.unavailable.size) { discovery.isCurrent(catalog) && permit() }
@@ -108,6 +109,7 @@ internal class AndroidIncomingBrowserBackend(
                 items,
                 copies = database.sharedLocalFileDao().observe(account),
                 uploadDestination = uploadDestination(folder),
+                folderName = if (page.path == "/") page.location.name else page.path.substringAfterLast('/'),
             ) {
                 browser.isCurrent(page) && permit()
             }

@@ -1,0 +1,10 @@
+<resources>
+    <string name="preview_back">Back</string>
+    <string name="preview_open_with">Open with</string>
+    <string name="preview_edit">Edit</string>
+    <string name="preview_failed">Cannot preview this file. Try again or use Open with. Text previews support UTF-8 files up to 1 MB; other previews support files up to 100 MB.</string>
+    <string name="preview_retry">Retry</string>
+    <string name="preview_previous">Previous</string>
+    <string name="preview_next">Next</string>
+    <string name="preview_page">%1$d / %2$d</string>
+</resources>

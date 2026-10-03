@@ -1,0 +1,8 @@
+<resources>
+    <string name="editor_saved">Draft saved on this device</string>
+    <string name="editor_saving">Saving draft…</string>
+    <string name="editor_upload_queued">Upload queued</string>
+    <string name="editor_changed_title">File changed</string>
+    <string name="editor_changed_message">The server file has changed. Keep working on your draft or view the current file.</string>
+    <string name="editor_older_draft">Editing an older draft. Saving may require resolving a conflict.</string>
+</resources>

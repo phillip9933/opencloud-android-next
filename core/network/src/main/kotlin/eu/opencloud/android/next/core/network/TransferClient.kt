@@ -272,6 +272,7 @@ class TransferClient(
     fun createCollection(
         url: String,
         authorization: String,
+        acceptExisting: Boolean = true,
     ) {
         val request =
             Request
@@ -282,7 +283,7 @@ class TransferClient(
                 .build()
         val alreadyExists =
             execute(request).use { response ->
-                requireSuccessful(response, setOf(201, 405))
+                requireSuccessful(response, if (acceptExisting) setOf(201, 405) else setOf(201))
                 response.code == 405
             }
         if (alreadyExists) {

@@ -29,6 +29,7 @@ data class UserSettings(
     val appearance: Appearance = Appearance.SYSTEM,
     val temporaryCopyRetentionHours: Int = 0,
     val fileDisplay: FileDisplayOptions = FileDisplayOptions(),
+    val fileOpening: FileOpening = FileOpening(),
 )
 
 class SettingsRepository private constructor(
@@ -79,6 +80,16 @@ class SettingsRepository private constructor(
 
     suspend fun setLocalDiagnosticsEnabled(enabled: Boolean) =
         update { it.toBuilder().setLocalDiagnosticsEnabled(enabled).build() }
+
+    suspend fun setFileOpening(options: FileOpening) =
+        update {
+            it
+                .toBuilder()
+                .setExternalText(options.externalText)
+                .setExternalPdf(options.externalPdf)
+                .setExternalImages(options.externalImages)
+                .build()
+        }
 
     suspend fun setAppearance(appearance: Appearance) {
         update { it.toBuilder().setAppearance(AppSettings.Appearance.valueOf(appearance.name)).build() }
@@ -135,6 +146,7 @@ private fun AppSettings.validated() =
         activeAccountId = activeAccountId.trim().takeIf(String::isNotBlank),
         localDiagnosticsEnabled = localDiagnosticsEnabled,
         fileDisplay = FileDisplayOptions(!hideFileSize, !hideModifiedDate, !hideFileExtensions, showHiddenFiles),
+        fileOpening = FileOpening(externalText, externalPdf, externalImages),
         temporaryCopyRetentionHours = temporaryCopyRetentionHours.takeIf { it in listOf(0, 1, 12, 24, 720) } ?: 0,
         appearance = Appearance.entries.firstOrNull { it.name == appearance.name } ?: Appearance.SYSTEM,
         cacheRetentionDays =

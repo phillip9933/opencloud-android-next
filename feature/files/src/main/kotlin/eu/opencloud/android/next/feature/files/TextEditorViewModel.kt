@@ -8,14 +8,11 @@ import eu.opencloud.android.next.core.database.FileBrowserStore
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.designsystem.localizedString
 import eu.opencloud.android.next.core.model.ResourceKind
-import eu.opencloud.android.next.core.model.resourceCacheDirectory
-import eu.opencloud.android.next.core.model.validatedCachedFile
 import eu.opencloud.android.next.core.network.DownloadExpectation
 import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.network.toOpenCloudError
 import eu.opencloud.android.next.core.sync.TextDraft
 import eu.opencloud.android.next.core.sync.TextDraftStore
-import eu.opencloud.android.next.core.sync.prepareLocalResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -45,30 +42,13 @@ class TextEditorViewModel(
     ) {
         if (opened) return
         opened = true
+        mutableState.value = TextEditorState()
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
                     requireNotNull(store.account(account))
                     val item = requireNotNull(store.resource(account, space, resource))
-                    require(canEditText(item))
-                    val saved = drafts.read(account, space, resource)
-                    val draft =
-                        if (saved != null) {
-                            drafts.resume(saved)
-                        } else {
-                            val ready = prepareLocalResource(getApplication(), item)
-                            val file =
-                                requireNotNull(
-                                    validatedCachedFile(
-                                        resourceCacheDirectory(getApplication<Application>().filesDir, account, space),
-                                        ready.localPath,
-                                        ready.sizeBytes,
-                                    ),
-                                )
-                            eu.opencloud.android.next.core.sync.LocalCopyLease
-                                .read(file) { drafts.create(ready, file) }
-                        }
-                    mutableState.value = TextEditorState(draft = draft, busy = false)
+                    mutableState.value = loadTextEditorState(getApplication(), item, drafts)
                 }
             }.onFailure { failure(it) }
         }
@@ -76,7 +56,7 @@ class TextEditorViewModel(
 
     fun edit(text: String) {
         val draft = state.value.draft ?: return
-        if (state.value.busy || draft.queuedId != null) return
+        if (state.value.busy || state.value.chooseDraft || draft.queuedId != null) return
         if (text.toByteArray().size > TextDraftStore.MAX_TEXT_BYTES) {
             mutableState.value =
                 state.value.copy(
@@ -103,7 +83,7 @@ class TextEditorViewModel(
 
     fun save() {
         val draft = state.value.draft ?: return
-        if (state.value.busy || draft.queuedId != null) return
+        if (state.value.busy || state.value.chooseDraft || draft.queuedId != null) return
         mutableState.value = state.value.copy(busy = true, error = null)
         viewModelScope.launch {
             saveJob?.cancelAndJoin()
@@ -144,6 +124,10 @@ class TextEditorViewModel(
         }
     }
 
+    fun resumeDraft() {
+        mutableState.value = state.value.copy(chooseDraft = false)
+    }
+
     fun discard(onClose: () -> Unit) {
         val draft = state.value.draft ?: return
         if (state.value.busy || draft.queuedId != null) return
@@ -175,6 +159,8 @@ data class TextEditorState(
     val busy: Boolean = true,
     val savingDraft: Boolean = false,
     val error: String? = null,
+    val serverChanged: Boolean = false,
+    val chooseDraft: Boolean = false,
 )
 
 internal fun canEditText(resource: ResourceEntity): Boolean {

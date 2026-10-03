@@ -114,7 +114,7 @@ class IncomingSharesClient(
         second: HttpUrl,
     ): Boolean = first.scheme == second.scheme && first.host == second.host && first.port == second.port
 
-    private fun invalid(): Nothing = throw OpenCloudException(OpenCloudError.InvalidResponse)
+    private fun invalid(): Nothing = throw SharedMetadataException(SharedMetadataStage.INVENTORY)
 
     private companion object {
         const val MAX_PAGE_BYTES = 4 * 1024 * 1024L

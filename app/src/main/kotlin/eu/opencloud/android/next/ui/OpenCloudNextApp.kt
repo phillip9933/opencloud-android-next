@@ -42,6 +42,8 @@ import eu.opencloud.android.next.feature.transfers.TransfersRoute
 fun OpenCloudNextApp(
     oauthCallback: String?,
     modifier: Modifier = Modifier,
+    folderShortcut: String? = null,
+    onConsumeFolderShortcut: () -> Unit = {},
     viewModel: AuthViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -51,6 +53,27 @@ fun OpenCloudNextApp(
     var pendingBrowserAddRequest by remember(state.value.activeAccountId) { mutableIntStateOf(0) }
     var trashSpaceId by rememberSaveable(state.value.activeAccountId) { mutableStateOf<String?>(null) }
     var shareResource by remember(state.value.activeAccountId) { mutableStateOf<ResourceEntity?>(null) }
+    var shortcutFolder by remember(state.value.activeAccountId) { mutableStateOf<ResourceEntity?>(null) }
+
+    var sharedShortcut by remember(state.value.activeAccountId) {
+        mutableStateOf<eu.opencloud.android.next.core.sync.SharedFolderRequest?>(null)
+    }
+
+    FolderShortcutEntry(
+        folderShortcut,
+        state.value.activeAccountId,
+        state.value.isRestoringSession,
+        viewModel::switchAccount,
+        {
+            shortcutFolder = it
+            destination = AppDestination.Files
+        },
+        onConsumeFolderShortcut,
+        openShared = {
+            sharedShortcut = it
+            destination = AppDestination.Files
+        },
+    )
 
     LaunchedEffect(oauthCallback) {
         oauthCallback?.let(viewModel::completeOidcCallback)
@@ -69,6 +92,9 @@ fun OpenCloudNextApp(
                         Box(modifier = Modifier.fillMaxSize()) {
                             FileBrowserRoute(
                                 accountId = accountId,
+                                shortcutFolder = shortcutFolder,
+                                sharedShortcut = sharedShortcut,
+                                onConsumeShortcutFolder = { shortcutFolder = null },
                                 releaseVersion = BuildConfig.VERSION_NAME,
                                 openAddMenuRequest = pendingBrowserAddRequest,
                                 onConsumeAddMenuRequest = { pendingBrowserAddRequest = 0 },
@@ -88,6 +114,8 @@ fun OpenCloudNextApp(
                                         accountId = accountId,
                                         modifier = Modifier.padding(padding),
                                         onBrowseResource = onBrowseResource,
+                                        initialFolder = sharedShortcut,
+                                        onConsumeInitialFolder = { sharedShortcut = null },
                                     )
                                 },
                                 spacesContent = { padding, onOpenSpace ->

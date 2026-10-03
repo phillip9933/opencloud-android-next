@@ -314,7 +314,21 @@ class SharedDownloadExecutorTest {
             val context = RuntimeEnvironment.getApplication()
             WorkManagerTestInitHelper.initializeTestWorkManager(
                 context,
-                Configuration.Builder().setExecutor(SynchronousExecutor()).build(),
+                Configuration
+                    .Builder()
+                    .setExecutor(SynchronousExecutor())
+                    .setWorkerFactory(
+                        object : WorkerFactory() {
+                            override fun createWorker(
+                                appContext: Context,
+                                workerClassName: String,
+                                workerParameters: WorkerParameters,
+                            ): ListenableWorker =
+                                object : androidx.work.Worker(appContext, workerParameters) {
+                                    override fun doWork(): Result = Result.retry()
+                                }
+                        },
+                    ).build(),
             )
             val workManager = WorkManager.getInstance(context)
             try {

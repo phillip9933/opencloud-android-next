@@ -26,6 +26,7 @@ import eu.opencloud.android.next.ui.OpenCloudNextApp
 
 class MainActivity : AppCompatActivity() {
     private var oauthCallback by mutableStateOf<String?>(null)
+    private var folderShortcut by mutableStateOf<String?>(null)
 
     override fun onResume() {
         super.onResume()
@@ -41,7 +42,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
         }
-        oauthCallback = intent?.dataString
+        acceptLaunchIntent(intent)
 
         setContent {
             val repository = SettingsRepository.create(this)
@@ -79,7 +80,13 @@ class MainActivity : AppCompatActivity() {
                     androidx.compose.material3.MaterialTheme.colorScheme.background
                         .toArgb()
                 SideEffect { updateTaskBackground(dark, background) }
-                DeviceLockGate(this) { OpenCloudNextApp(oauthCallback = oauthCallback) }
+                DeviceLockGate(this) {
+                    OpenCloudNextApp(
+                        oauthCallback = oauthCallback,
+                        folderShortcut = folderShortcut,
+                        onConsumeFolderShortcut = { folderShortcut = null },
+                    )
+                }
             }
         }
     }
@@ -87,7 +94,13 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        oauthCallback = intent.dataString
+        acceptLaunchIntent(intent)
+    }
+
+    private fun acceptLaunchIntent(intent: android.content.Intent?) {
+        val folder = intent?.data?.scheme == eu.opencloud.android.next.core.sync.FolderShortcutTarget.SCHEME
+        folderShortcut = intent?.dataString?.takeIf { folder }
+        oauthCallback = intent?.dataString?.takeUnless { folder }
     }
 
     private companion object {

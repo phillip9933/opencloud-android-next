@@ -71,7 +71,7 @@ class SharedProviderRoutingTest {
             assertEquals(1, it.count)
             assertTrue(it.moveToFirst())
             assertEquals(collection, it.getString(it.getColumnIndexOrThrow(Document.COLUMN_DOCUMENT_ID)))
-            assertEquals("Shared folders", it.getString(it.getColumnIndexOrThrow(Document.COLUMN_DISPLAY_NAME)))
+            assertEquals("Shared with me", it.getString(it.getColumnIndexOrThrow(Document.COLUMN_DISPLAY_NAME)))
             assertEquals(
                 Document.FLAG_DIR_BLOCKS_OPEN_DOCUMENT_TREE,
                 it.getInt(it.getColumnIndexOrThrow(Document.COLUMN_FLAGS)),
@@ -79,7 +79,7 @@ class SharedProviderRoutingTest {
         }
         provider.queryDocument(collection, arrayOf(Document.COLUMN_DISPLAY_NAME, "unknown")).use {
             assertTrue(it.moveToFirst())
-            assertEquals("Shared folders", it.getString(0))
+            assertEquals("Shared with me", it.getString(0))
             assertTrue(it.isNull(1))
         }
         assertEquals(Document.MIME_TYPE_DIR, provider.getDocumentType(collection))

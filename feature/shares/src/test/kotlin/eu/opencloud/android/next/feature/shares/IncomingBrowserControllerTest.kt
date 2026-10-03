@@ -1,6 +1,8 @@
 package eu.opencloud.android.next.feature.shares
 
 import eu.opencloud.android.next.core.database.SharedLocalFile
+import eu.opencloud.android.next.core.network.SharedMetadataException
+import eu.opencloud.android.next.core.network.SharedMetadataStage
 import eu.opencloud.android.next.core.sync.SharedDownloadFile
 import eu.opencloud.android.next.core.sync.SharedDownloadRequest
 import eu.opencloud.android.next.core.sync.SharedFolderRequest
@@ -21,6 +23,25 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class IncomingBrowserControllerTest {
+    @Test fun metadataFailureShowsOnlyFixedSupportCodeAlongsideLocalizedError() =
+        runTest {
+            val controller =
+                IncomingBrowserController(
+                    this,
+                    IncomingBrowserBackend { _, _ -> throw SharedMetadataException(SharedMetadataStage.ITEM_IDENTITY) },
+                    StandardTestDispatcher(testScheduler),
+                    errorMessage = { "Localized metadata error" },
+                )
+            controller.load("a")
+            advanceUntilIdle()
+            assertEquals("Localized metadata error [S04]", controller.state.value.error)
+            assertFalse(controller.state.value.loading)
+            assertTrue(
+                controller.state.value.items
+                    .isEmpty(),
+            )
+        }
+
     @Test fun uploadPickerResultCannotTargetAnotherAccountOrChangedFolder() =
         runTest {
             val queued = mutableListOf<SharedFolderRequest>()
@@ -111,6 +132,47 @@ class IncomingBrowserControllerTest {
                     .isEmpty(),
             )
             assertNotNull(controller.state.value.error)
+        }
+
+    @Test fun shortcutRevalidatesNestedScopeAndUsesFreshFolderName() =
+        runTest {
+            var requested: SharedFolderRequest? = null
+            var valid = true
+            val backend =
+                IncomingBrowserBackend { _, folder ->
+                    requested = folder
+                    IncomingBrowserPage(emptyList(), folderName = "Renamed folder") { valid }
+                }
+            val controller = IncomingBrowserController(this, backend, StandardTestDispatcher(testScheduler))
+            controller.load("a")
+            advanceUntilIdle()
+            controller.openShortcut(child)
+            advanceUntilIdle()
+            assertEquals(child.request, requested)
+            assertEquals(
+                "Renamed folder",
+                controller.state.value.trail
+                    .single()
+                    .name,
+            )
+            val saved = IncomingBrowserTrail.save(controller.state.value.trail)
+            assertEquals(child.request, IncomingBrowserTrail.restore("a", saved).single().request)
+            controller.openShortcut(child.copy(request = child.request.copy(account = "b")))
+            advanceUntilIdle()
+            assertEquals(child.request, requested)
+            valid = false
+            controller.refresh()
+            advanceUntilIdle()
+            assertNotNull(controller.state.value.error)
+            assertTrue(
+                controller.state.value.items
+                    .isEmpty(),
+            )
+            assertTrue(controller.back())
+            assertTrue(
+                controller.state.value.trail
+                    .isEmpty(),
+            )
         }
 
     @Test fun restoredTrailIsRevalidatedAndForeignOrBrokenTrailsAreDiscarded() =

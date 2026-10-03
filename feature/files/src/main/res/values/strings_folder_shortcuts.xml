@@ -1,0 +1,17 @@
+<resources>
+    <string name="folder_shortcut_appearance">Shortcut icon</string>
+    <string name="folder_shortcut_preview">Shortcut icon preview</string>
+    <string name="folder_shortcut_badge">Your launcher adds the Raiun badge. Add this folder again to update an existing shortcut.</string>
+    <string name="folder_shortcut_image">Choose image</string>
+    <string name="folder_shortcut_image_error">Could not read that image. Choose an image smaller than 16 MB.</string>
+    <string name="folder_shortcut_default">Default</string>
+    <string name="folder_shortcut_blue">Blue</string>
+    <string name="folder_shortcut_green">Green</string>
+    <string name="folder_shortcut_yellow">Yellow</string>
+    <string name="folder_shortcut_red">Red</string>
+    <string name="folder_shortcut_add">Add to home screen</string>
+    <string name="folder_shortcut_error">Could not add this folder. Check that it is still available and your launcher supports shortcuts.</string>
+    <string name="folder_shortcut_requested">Shortcut requested. Confirm it in your launcher if prompted.</string>
+    <string name="folder_shortcut_unavailable">This folder shortcut is unavailable. Open Raiun and check that the account and folder still exist.</string>
+    <string name="folder_shortcut_close">Close</string>
+</resources>

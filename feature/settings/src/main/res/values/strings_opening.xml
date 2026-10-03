@@ -1,0 +1,10 @@
+<resources>
+    <string name="settings_opening_summary">Previews and default apps</string>
+    <string name="settings_opening_files">Opening files</string>
+    <string name="settings_opening_description">Choose what happens when you tap a file. Android manages your default external apps. Open with always lets you choose an app.</string>
+    <string name="settings_opening_text">Text files</string>
+    <string name="settings_opening_pdf">PDF documents</string>
+    <string name="settings_opening_images">Images</string>
+    <string name="settings_opening_raiun">Raiun preview</string>
+    <string name="settings_opening_external">External app</string>
+</resources>

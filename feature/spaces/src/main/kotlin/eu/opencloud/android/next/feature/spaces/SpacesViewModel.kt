@@ -40,7 +40,11 @@ class SpacesViewModel(
         refreshJob =
             viewModelScope.launch {
                 try {
-                    val spaces = withContext(Dispatchers.IO) { manager.listSpaces(account) }
+                    val spaces =
+                        withContext(Dispatchers.IO) {
+                            manager.refreshMembership(account)
+                            manager.listSpaces(account)
+                        }
                     val memberSpaces = withContext(Dispatchers.IO) { store.spaces(account) }
                     mutableState.value =
                         state.value.copy(
@@ -61,7 +65,10 @@ class SpacesViewModel(
     }
 
     fun load(accountId: String) {
-        if (this.accountId == accountId) return
+        if (this.accountId == accountId) {
+            refresh()
+            return
+        }
         this.accountId = accountId
         observation?.cancel()
         refreshJob?.cancel()

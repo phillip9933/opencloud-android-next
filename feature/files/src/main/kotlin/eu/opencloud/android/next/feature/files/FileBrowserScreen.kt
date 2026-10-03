@@ -14,18 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,7 +26,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -52,10 +44,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OfflinePin
@@ -65,11 +55,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.ViewHeadline
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -83,10 +70,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
@@ -107,6 +92,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -116,13 +102,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -136,13 +120,20 @@ import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.TransferEntity
 import eu.opencloud.android.next.core.database.TransferState
 import eu.opencloud.android.next.core.datastore.FileDisplayOptions
+import eu.opencloud.android.next.core.datastore.SettingsBrowserLayout
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudColor
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.model.ResourceKind
+import eu.opencloud.android.next.core.ui.BrowserAction
+import eu.opencloud.android.next.core.ui.BrowserActionSheet
+import eu.opencloud.android.next.core.ui.BrowserContent
+import eu.opencloud.android.next.core.ui.BrowserEntry
+import eu.opencloud.android.next.core.ui.BrowserToolbar
 import kotlinx.coroutines.launch
 
 @Composable
-@Suppress("FunctionNaming", "LongParameterList", "ktlint:standard:function-naming")
+// Explicit browser action wiring.
+@Suppress("FunctionNaming", "LongParameterList", "LongMethod", "ktlint:standard:function-naming")
 fun FileBrowserRoute(
     accountId: String,
     releaseVersion: String,
@@ -152,6 +143,9 @@ fun FileBrowserRoute(
     modifier: Modifier = Modifier,
     openAddMenuRequest: Int = 0,
     onConsumeAddMenuRequest: () -> Unit = {},
+    sharedShortcut: eu.opencloud.android.next.core.sync.SharedFolderRequest? = null,
+    shortcutFolder: ResourceEntity? = null,
+    onConsumeShortcutFolder: () -> Unit = {},
     viewModel: FileBrowserViewModel = viewModel(key = "files-$accountId"),
     favoritesViewModel: FavoritesViewModel = viewModel(key = "favorites-$accountId"),
 ) {
@@ -162,10 +156,24 @@ fun FileBrowserRoute(
     val openFile = rememberFileOpener(viewModel)
     val uploadLauncher = rememberFileUploadLauncher(viewModel)
     var scanTarget by rememberSaveable(accountId) { mutableStateOf<ArrayList<String>?>(null) }
-    var editorTarget by rememberSaveable(accountId) { mutableStateOf<ArrayList<String>?>(null) }
-    var webAppTarget by remember(accountId) { mutableStateOf<ResourceEntity?>(null) }
+    var previewTarget by remember(accountId) { mutableStateOf<ResourceEntity?>(null) }
+    val openingSettings by remember(context) {
+        eu.opencloud.android.next.core.datastore.SettingsRepository
+            .create(context)
+            .settings
+    }.collectAsStateWithLifecycle(
+        initialValue =
+            eu.opencloud.android.next.core.datastore
+                .UserSettings(),
+    )
     viewModel.load(accountId)
     favoritesViewModel.load(accountId)
+    var folderOpenRequest by remember(accountId) { mutableIntStateOf(0) }
+    ApplyFolderShortcut(shortcutFolder, state.spaces, accountId) {
+        viewModel.browseSharedResource(it)
+        folderOpenRequest++
+        onConsumeShortcutFolder()
+    }
     scanTarget?.let { target ->
         ScannerRoute(target, onClose = { scanTarget = null })
         return
@@ -175,15 +183,26 @@ fun FileBrowserRoute(
             accountId = accountId,
             releaseVersion = releaseVersion,
             openAddMenuRequest = openAddMenuRequest,
+            openFolderRequest = folderOpenRequest,
             onConsumeAddMenuRequest = onConsumeAddMenuRequest,
             state = state,
             favoritesState = favoritesState,
             onSelectSpace = viewModel::selectSpace,
-            onOpen = { if (it.kind == ResourceKind.FOLDER) viewModel.open(it) else openFile(it, ExternalAction.OPEN) },
+            onOpen = {
+                if (it.kind == ResourceKind.FOLDER) {
+                    viewModel.open(it)
+                } else if (openingSettings.fileOpening.usesPreview(
+                        eu.opencloud.android.next.core.datastore
+                            .previewKind(it.name, it.mimeType),
+                    )
+                ) {
+                    previewTarget = it
+                } else {
+                    openFile(it, ExternalAction.OPEN)
+                }
+            },
             onPrepareDetails = viewModel::prepareExternalFile,
             onOpenWith = { openFile(it, ExternalAction.OPEN_WITH) },
-            onOpenWebApp = { webAppTarget = it },
-            onEditText = { editorTarget = arrayListOf(it.spaceId, it.remoteId) },
             onSend = { openFile(it, ExternalAction.SEND) },
             onExport = exportFile,
             onDismissExportStatus = viewModel::dismissExportStatus,
@@ -245,16 +264,21 @@ fun FileBrowserRoute(
             onOpenSettings = destinations.onOpenSettings,
             onOpenAccount = destinations.onOpenAccount,
             onShareResource = destinations.onShareResource,
+            sharedShortcut = sharedShortcut,
+            notifications = { openShares -> ServerNotificationsBell(accountId, openShares) },
             sharesContent = sharesContent,
             onBrowseShare = viewModel::browseSharedResource,
             spacesContent = spacesContent,
         )
-        editorTarget?.let { target ->
-            TextEditorRoute(accountId, target[0], target[1], onClose = { editorTarget = null })
-        }
-        webAppTarget?.let { resource ->
-            androidx.compose.runtime.key(resource.accountId, resource.spaceId, resource.remoteId) {
-                ServerWebAppDialog(resource, onDismiss = { webAppTarget = null })
+        previewTarget?.let { target ->
+            androidx.compose.runtime.key(target.accountId, target.spaceId, target.remoteId) {
+                FileReadingRoute(
+                    target,
+                    viewModel::prepareExternalFile,
+                    viewModel::recordOpened,
+                    { previewTarget = null },
+                    { openFile(target, ExternalAction.OPEN_WITH) },
+                )
             }
         }
     }
@@ -324,16 +348,17 @@ fun FileBrowserScreen(
     onShareResource: (ResourceEntity) -> Unit,
     sharesContent: @Composable (PaddingValues, (ResourceEntity) -> Unit) -> Unit = { _, _ -> },
     spacesContent: @Composable (PaddingValues, (String) -> Unit) -> Unit = { _, _ -> },
+    sharedShortcut: eu.opencloud.android.next.core.sync.SharedFolderRequest? = null,
+    notifications: @Composable (() -> Unit) -> Unit = {},
     modifier: Modifier = Modifier,
     initialDestination: FileBrowserDestination = FileBrowserDestination.Personal,
+    openFolderRequest: Int = 0,
     openAddMenuRequest: Int = 0,
     onConsumeAddMenuRequest: () -> Unit = {},
     operationControls: @Composable () -> Unit = {},
     onOpenWith: (ResourceEntity) -> Unit = {},
-    onOpenWebApp: (ResourceEntity) -> Unit = {},
     onSend: (ResourceEntity) -> Unit = {},
     onPrepareDetails: (suspend (ResourceEntity) -> ResourceEntity)? = null,
-    onEditText: (ResourceEntity) -> Unit = {},
     onRefresh: () -> Unit = {},
     onMoveSelection: () -> Unit = {},
     onCopySelection: () -> Unit = {},
@@ -356,6 +381,17 @@ fun FileBrowserScreen(
     // Keep the in-session tab selection through recomposition, but start a fresh app launch
     // on Personal instead of restoring a previously selected Space.
     var selectedDestination by remember(accountId) { mutableStateOf(initialDestination) }
+    val currentNotifications by rememberUpdatedState(notifications)
+    val notificationContent =
+        remember(accountId) {
+            movableContentOf { currentNotifications { selectedDestination = FileBrowserDestination.Shares } }
+        }
+    LaunchedEffect(sharedShortcut) {
+        if (sharedShortcut != null) selectedDestination = FileBrowserDestination.Shares
+    }
+    LaunchedEffect(openFolderRequest) {
+        if (openFolderRequest > 0) selectedDestination = FileBrowserDestination.Personal
+    }
     var appliedPersonalRequest by remember(accountId) { mutableIntStateOf(0) }
     val currentOnSelectSpace by rememberUpdatedState(onSelectSpace)
     val currentOnConsumeAddMenuRequest by rememberUpdatedState(onConsumeAddMenuRequest)
@@ -465,188 +501,191 @@ fun FileBrowserScreen(
         Scaffold(
             modifier = modifier,
             topBar = {
-                if (selectionMode) {
-                    Column {
-                        SelectionTopAppBar(
-                            selectedCount = state.selectedIds.size,
-                            onClearSelection = onClearSelection,
-                            onDownloadSelection = onDownloadSelection,
-                        )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            SelectionAction(
-                                stringResource(R.string.browser_move),
-                                Icons.AutoMirrored.Filled.DriveFileMove,
-                                stringResource(R.string.browser_move_selected),
-                                onMoveSelection,
+                Column {
+                    if (selectionMode) {
+                        Column {
+                            SelectionTopAppBar(
+                                selectedCount = state.selectedIds.size,
+                                onClearSelection = onClearSelection,
+                                onDownloadSelection = onDownloadSelection,
                             )
-                            SelectionAction(
-                                stringResource(R.string.browser_copy),
-                                Icons.Default.ContentCopy,
-                                stringResource(R.string.browser_copy_selected),
-                                onCopySelection,
-                            )
-                            SelectionAction(
-                                stringResource(R.string.browser_favorite),
-                                Icons.Default.Star,
-                                stringResource(R.string.browser_favorite_selected),
-                                onFavoriteSelection,
-                            )
-                            SelectionAction(
-                                stringResource(R.string.browser_delete),
-                                Icons.Default.Delete,
-                                stringResource(R.string.browser_delete_selected),
-                                onDeleteSelection,
-                            )
-                            if ((state.resources + state.searchResults + state.offlineResources).any {
-                                    it.selectionKey in state.selectedIds &&
-                                        it.hasLocalCopy
-                                }
-                            ) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                 SelectionAction(
-                                    stringResource(R.string.browser_clear_local),
-                                    cleanupIcon(),
-                                    stringResource(R.string.browser_delete_local_copies),
-                                    onRemoveLocalSelection,
+                                    stringResource(R.string.browser_move),
+                                    Icons.AutoMirrored.Filled.DriveFileMove,
+                                    stringResource(R.string.browser_move_selected),
+                                    onMoveSelection,
                                 )
-                            }
-                        }
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.surface,
-                        ) {
-                            Column {
-                                if (browsingProjectSpace) {
-                                    ProjectSpaceHeader(requireNotNull(activeProjectSpace).name, state.folderTrail) {
-                                        onClearSelection()
-                                        selectedDestination = FileBrowserDestination.Spaces
+                                SelectionAction(
+                                    stringResource(R.string.browser_copy),
+                                    Icons.Default.ContentCopy,
+                                    stringResource(R.string.browser_copy_selected),
+                                    onCopySelection,
+                                )
+                                SelectionAction(
+                                    stringResource(R.string.browser_favorite),
+                                    Icons.Default.Star,
+                                    stringResource(R.string.browser_favorite_selected),
+                                    onFavoriteSelection,
+                                )
+                                SelectionAction(
+                                    stringResource(R.string.browser_delete),
+                                    Icons.Default.Delete,
+                                    stringResource(R.string.browser_delete_selected),
+                                    onDeleteSelection,
+                                )
+                                if ((state.resources + state.searchResults + state.offlineResources).any {
+                                        it.selectionKey in state.selectedIds &&
+                                            it.hasLocalCopy
                                     }
-                                }
-                                BrowserSubHeader(
-                                    canNavigateUp = state.folderTrail.isNotEmpty(),
-                                    layout = state.layout,
-                                    sortCriterion = sortCriterion,
-                                    sortAscending = sortAscending,
-                                    showSortMenu = showSortMenu,
-                                    onNavigateUp = onNavigateUp,
-                                    onShowSortMenu = { showSortMenu = true },
-                                    onDismissSortMenu = { showSortMenu = false },
-                                    onSortSelect = { criterion ->
-                                        if (sortCriterion == criterion) {
-                                            sortAscending = !sortAscending
-                                        } else {
-                                            sortCriterion = criterion
-                                            sortAscending = true
-                                        }
-                                        showSortMenu = false
-                                    },
-                                    onToggleLayout = {
-                                        onSetLayout(state.layout.next())
-                                    },
-                                )
-                                TransferSummary(state.transfers, onOpenTransfers)
-                                ExportStatus(state, onDismissExportStatus)
-                            }
-                        }
-                    }
-                } else if (browserDestination) {
-                    Column {
-                        BrowserTopAppBar(
-                            accountId = accountId,
-                            query =
-                                if (selectedDestination == FileBrowserDestination.Favorites) {
-                                    favoritesQuery
-                                } else {
-                                    state.searchQuery
-                                },
-                            onQueryChange =
-                                if (selectedDestination == FileBrowserDestination.Favorites) {
-                                    { favoritesQuery = it }
-                                } else {
-                                    onSearchQueryChange
-                                },
-                            onOpenDrawer = { scope.launch { drawerState.open() } },
-                            onOpenAccount = onOpenAccount,
-                        )
-                        if (selectedDestination in
-                            setOf(FileBrowserDestination.Offline, FileBrowserDestination.Recents)
-                        ) {
-                            Text(
-                                stringResource(selectedDestination.labelResource),
-                                Modifier.padding(horizontal = OpenCloudDimensions.SpacingMd),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                        }
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.surface,
-                        ) {
-                            Column {
-                                if (browsingProjectSpace) {
-                                    ProjectSpaceHeader(requireNotNull(activeProjectSpace).name, state.folderTrail) {
-                                        onClearSelection()
-                                        selectedDestination = FileBrowserDestination.Spaces
-                                    }
-                                }
-                                BrowserSubHeader(
-                                    canNavigateUp =
-                                        selectedDestination == FileBrowserDestination.Personal &&
-                                            state.folderTrail.isNotEmpty(),
-                                    layout = state.layout,
-                                    sortCriterion = sortCriterion,
-                                    sortAscending = sortAscending,
-                                    showSortMenu = showSortMenu,
-                                    onNavigateUp = onNavigateUp,
-                                    onShowSortMenu = { showSortMenu = true },
-                                    onDismissSortMenu = { showSortMenu = false },
-                                    onSortSelect = { criterion ->
-                                        if (sortCriterion == criterion) {
-                                            sortAscending = !sortAscending
-                                        } else {
-                                            sortCriterion = criterion
-                                            sortAscending = true
-                                        }
-                                        showSortMenu = false
-                                    },
-                                    onToggleLayout = {
-                                        onSetLayout(state.layout.next())
-                                    },
-                                )
-                                if (
-                                    selectedDestination == FileBrowserDestination.Personal &&
-                                    state.searchQuery.isNotBlank() &&
-                                    state.isRemoteSearchLoading
                                 ) {
-                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                }
-                                if (selectedDestination == FileBrowserDestination.Personal) {
-                                    TransferSummary(state.transfers, onOpenTransfers)
-                                    ExportStatus(state, onDismissExportStatus)
-                                    state.discoveryError?.let { message ->
-                                        Text(
-                                            stringResource(R.string.browser_refresh_failed, message),
-                                            modifier = Modifier.padding(horizontal = OpenCloudDimensions.SpacingMd),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                }
-                                if (selectedDestination == FileBrowserDestination.Favorites) {
-                                    FavoritesSyncNotice(
-                                        favoritesState.syncStatus,
-                                        onRefreshFavorites,
-                                        favoritesState.refreshError,
+                                    SelectionAction(
+                                        stringResource(R.string.browser_clear_local),
+                                        cleanupIcon(),
+                                        stringResource(R.string.browser_delete_local_copies),
+                                        onRemoveLocalSelection,
                                     )
                                 }
                             }
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surface,
+                            ) {
+                                Column {
+                                    if (browsingProjectSpace) {
+                                        ProjectSpaceHeader(requireNotNull(activeProjectSpace).name, state.folderTrail) {
+                                            onClearSelection()
+                                            selectedDestination = FileBrowserDestination.Spaces
+                                        }
+                                    }
+                                    BrowserSubHeader(
+                                        canNavigateUp = state.folderTrail.isNotEmpty(),
+                                        layout = state.layout,
+                                        sortCriterion = sortCriterion,
+                                        sortAscending = sortAscending,
+                                        showSortMenu = showSortMenu,
+                                        onNavigateUp = onNavigateUp,
+                                        onShowSortMenu = { showSortMenu = true },
+                                        onDismissSortMenu = { showSortMenu = false },
+                                        onSortSelect = { criterion ->
+                                            if (sortCriterion == criterion) {
+                                                sortAscending = !sortAscending
+                                            } else {
+                                                sortCriterion = criterion
+                                                sortAscending = true
+                                            }
+                                            showSortMenu = false
+                                        },
+                                        onToggleLayout = {
+                                            onSetLayout(state.layout.next())
+                                        },
+                                    )
+                                    ExportStatus(state, onDismissExportStatus)
+                                }
+                            }
                         }
+                    } else if (browserDestination) {
+                        Column {
+                            BrowserTopAppBar(
+                                accountId = accountId,
+                                query =
+                                    if (selectedDestination == FileBrowserDestination.Favorites) {
+                                        favoritesQuery
+                                    } else {
+                                        state.searchQuery
+                                    },
+                                onQueryChange =
+                                    if (selectedDestination == FileBrowserDestination.Favorites) {
+                                        { favoritesQuery = it }
+                                    } else {
+                                        onSearchQueryChange
+                                    },
+                                onOpenDrawer = { scope.launch { drawerState.open() } },
+                                onOpenAccount = onOpenAccount,
+                                notifications = notificationContent,
+                            )
+                            if (selectedDestination in
+                                setOf(FileBrowserDestination.Offline, FileBrowserDestination.Recents)
+                            ) {
+                                Text(
+                                    stringResource(selectedDestination.labelResource),
+                                    Modifier.padding(horizontal = OpenCloudDimensions.SpacingMd),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surface,
+                            ) {
+                                Column {
+                                    if (browsingProjectSpace) {
+                                        ProjectSpaceHeader(requireNotNull(activeProjectSpace).name, state.folderTrail) {
+                                            onClearSelection()
+                                            selectedDestination = FileBrowserDestination.Spaces
+                                        }
+                                    }
+                                    BrowserSubHeader(
+                                        canNavigateUp =
+                                            selectedDestination == FileBrowserDestination.Personal &&
+                                                state.folderTrail.isNotEmpty(),
+                                        layout = state.layout,
+                                        sortCriterion = sortCriterion,
+                                        sortAscending = sortAscending,
+                                        showSortMenu = showSortMenu,
+                                        onNavigateUp = onNavigateUp,
+                                        onShowSortMenu = { showSortMenu = true },
+                                        onDismissSortMenu = { showSortMenu = false },
+                                        onSortSelect = { criterion ->
+                                            if (sortCriterion == criterion) {
+                                                sortAscending = !sortAscending
+                                            } else {
+                                                sortCriterion = criterion
+                                                sortAscending = true
+                                            }
+                                            showSortMenu = false
+                                        },
+                                        onToggleLayout = {
+                                            onSetLayout(state.layout.next())
+                                        },
+                                    )
+                                    if (
+                                        selectedDestination == FileBrowserDestination.Personal &&
+                                        state.searchQuery.isNotBlank() &&
+                                        state.isRemoteSearchLoading
+                                    ) {
+                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                    }
+                                    if (selectedDestination == FileBrowserDestination.Personal) {
+                                        ExportStatus(state, onDismissExportStatus)
+                                        state.discoveryError?.let { message ->
+                                            Text(
+                                                stringResource(R.string.browser_refresh_failed, message),
+                                                modifier = Modifier.padding(horizontal = OpenCloudDimensions.SpacingMd),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                    }
+                                    if (selectedDestination == FileBrowserDestination.Favorites) {
+                                        FavoritesSyncNotice(
+                                            favoritesState.syncStatus,
+                                            onRefreshFavorites,
+                                            favoritesState.refreshError,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        DestinationTopAppBar(
+                            title = stringResource(selectedDestination.labelResource),
+                            accountId = accountId,
+                            onOpenDrawer = { scope.launch { drawerState.open() } },
+                            onOpenAccount = onOpenAccount,
+                            notifications = notificationContent,
+                        )
                     }
-                } else {
-                    DestinationTopAppBar(
-                        title = stringResource(selectedDestination.labelResource),
-                        accountId = accountId,
-                        onOpenDrawer = { scope.launch { drawerState.open() } },
-                        onOpenAccount = onOpenAccount,
-                    )
+                    TransferSummary(state.transfers, onOpenTransfers)
                 }
             },
             bottomBar = {
@@ -672,7 +711,11 @@ fun FileBrowserScreen(
                 }
             },
             floatingActionButton = {
-                if (!selectionMode) {
+                if (selectedDestination == FileBrowserDestination.Spaces) {
+                    FloatingActionButton(onClick = { dialog = BrowserDialog.CreateSpace }) {
+                        Icon(Icons.Default.Add, stringResource(R.string.browser_create_space))
+                    }
+                } else if (!selectionMode && selectedDestination != FileBrowserDestination.Shares) {
                     Column(
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
@@ -914,15 +957,6 @@ fun FileBrowserScreen(
             },
             onDelete = { onDelete(resource) },
             sheetState = sheetState,
-            onEditText =
-                if (canEditText(resource)) {
-                    {
-                        onDismissActions()
-                        onEditText(resource)
-                    }
-                } else {
-                    null
-                },
             onOpenWith =
                 if (resource.kind ==
                     ResourceKind.FILE
@@ -944,15 +978,6 @@ fun FileBrowserScreen(
                             onSend(resource)
                         }
                     )
-                } else {
-                    null
-                },
-            onOpenWebApp =
-                if (resource.kind == ResourceKind.FILE) {
-                    {
-                        onDismissActions()
-                        onOpenWebApp(resource)
-                    }
                 } else {
                     null
                 },
@@ -1050,6 +1075,7 @@ private fun BrowserTopAppBar(
     onQueryChange: (String) -> Unit,
     onOpenDrawer: () -> Unit,
     onOpenAccount: () -> Unit,
+    notifications: @Composable () -> Unit,
 ) = TopAppBar(
     title = {
         TextField(
@@ -1082,6 +1108,7 @@ private fun BrowserTopAppBar(
         }
     },
     actions = {
+        notifications()
         Box(
             modifier = Modifier.padding(end = OpenCloudDimensions.SpacingMd),
             contentAlignment = Alignment.Center,
@@ -1116,6 +1143,7 @@ private fun DestinationTopAppBar(
     accountId: String,
     onOpenDrawer: () -> Unit,
     onOpenAccount: () -> Unit,
+    notifications: @Composable () -> Unit,
 ) = TopAppBar(
     title = { Text(title) },
     navigationIcon = {
@@ -1123,7 +1151,10 @@ private fun DestinationTopAppBar(
             Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.browser_open_navigation_drawer))
         }
     },
-    actions = { AccountAvatar(accountId, onOpenAccount) },
+    actions = {
+        notifications()
+        AccountAvatar(accountId, onOpenAccount)
+    },
     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
 )
 
@@ -1188,21 +1219,12 @@ private fun BrowserSubHeader(
     onSortSelect: (BrowserSortCriterion) -> Unit,
     onToggleLayout: () -> Unit,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = OpenCloudDimensions.SpacingXs),
-        verticalAlignment = Alignment.CenterVertically,
+    BrowserToolbar(
+        canNavigateUp,
+        SettingsBrowserLayout.valueOf(layout.name),
+        onNavigateUp,
+        onToggleLayout,
     ) {
-        if (canNavigateUp) {
-            IconButton(onClick = onNavigateUp) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.browser_navigate_up),
-                )
-            }
-        }
         Box {
             TextButton(onClick = onShowSortMenu) {
                 Text(stringResource(sortCriterion.labelResource))
@@ -1236,15 +1258,7 @@ private fun BrowserSubHeader(
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
-        IconButton(onClick = onToggleLayout) {
-            Icon(
-                imageVector = layout.nextIcon(),
-                contentDescription = layout.nextContentDescription(),
-            )
-        }
     }
-    HorizontalDivider()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1543,130 +1557,18 @@ private fun BrowserList(
     onToggleSelection: (String) -> Unit,
     onShowActions: (ResourceEntity) -> Unit,
     display: FileDisplayOptions = FileDisplayOptions(),
-) = LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    contentPadding =
-        PaddingValues(
-            top = contentPadding.calculateTopPadding(),
-            bottom =
-                contentPadding.calculateBottomPadding() + OpenCloudDimensions.ContentBottomClearance,
-        ),
-) {
-    items(resources, key = { it.selectionKey }) { resource ->
-        BrowserListItem(
-            keptOffline = isKeptOffline(resource, offlinePins),
-            display = display,
-            resource = resource,
-            selected = resource.selectionKey in selectedIds,
-            selectionMode = selectionMode,
-            condensed = condensed,
-            onOpen = { onOpen(resource) },
-            onSelect = { onToggleSelection(resource.selectionKey) },
-            onActions = { onShowActions(resource) },
-        )
-    }
-    item { FolderSummary(resources) }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-@Suppress("LongParameterList")
-private fun BrowserListItem(
-    keptOffline: Boolean,
-    resource: ResourceEntity,
-    selected: Boolean,
-    selectionMode: Boolean,
-    condensed: Boolean,
-    onOpen: () -> Unit,
-    onSelect: () -> Unit,
-    onActions: () -> Unit,
-    display: FileDisplayOptions = FileDisplayOptions(),
-) {
-    if (condensed) {
-        CompactBrowserListItem(keptOffline, resource, selected, selectionMode, onOpen, onSelect, onActions, display)
-    } else {
-        ListItem(
-            headlineContent = { ResourceName(resource, display = display) },
-            supportingContent = { ResourceMetadata(resource, keptOffline, display) },
-            leadingContent = { BadgedResourceThumbnail(resource) },
-            trailingContent = {
-                if (selectionMode) {
-                    SelectionCircle(selected = selected, resourceName = resource.name, onSelect = onSelect)
-                } else {
-                    IconButton(onClick = onActions) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.browser_actions_for, resource.name),
-                        )
-                    }
-                }
-            },
-            colors =
-                ListItemDefaults.colors(
-                    containerColor =
-                        if (selected) MaterialTheme.colorScheme.secondaryContainer else OpenCloudColor.Transparent,
-                ),
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        onClick = { if (selectionMode) onSelect() else onOpen() },
-                        onLongClick = onSelect,
-                    ),
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-@Suppress("LongParameterList")
-private fun CompactBrowserListItem(
-    keptOffline: Boolean,
-    resource: ResourceEntity,
-    selected: Boolean,
-    selectionMode: Boolean,
-    onOpen: () -> Unit,
-    onSelect: () -> Unit,
-    onActions: () -> Unit,
-    display: FileDisplayOptions = FileDisplayOptions(),
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = OpenCloudDimensions.CondensedRowHeight)
-                .background(
-                    if (selected) MaterialTheme.colorScheme.secondaryContainer else OpenCloudColor.Transparent,
-                ).combinedClickable(
-                    onClick = { if (selectionMode) onSelect() else onOpen() },
-                    onLongClick = onSelect,
-                ).padding(horizontal = OpenCloudDimensions.SpacingXs),
-        horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingXs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BadgedResourceThumbnail(resource, Modifier.size(OpenCloudDimensions.IconMedium))
-        Column(Modifier.weight(1f)) {
-            ResourceName(resource, display = display)
-            FileMetadataText(resource, display = display)
-        }
-        LocalAvailabilityIcon(resource, keptOffline)
-        if (selectionMode) {
-            SelectionCircle(
-                selected = selected,
-                resourceName = resource.name,
-                onSelect = onSelect,
-                modifier = Modifier.size(OpenCloudDimensions.CondensedRowHeight),
-            )
-        } else {
-            IconButton(onClick = onActions, modifier = Modifier.size(OpenCloudDimensions.CondensedRowHeight)) {
-                Icon(
-                    Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.browser_actions_for, resource.name),
-                )
-            }
-        }
-    }
-}
+) = ResourceBrowserContent(
+    offlinePins,
+    resources,
+    selectedIds,
+    selectionMode,
+    if (condensed) SettingsBrowserLayout.CONDENSED_TABLE else SettingsBrowserLayout.DEFAULT_TABLE,
+    contentPadding,
+    onOpen,
+    onToggleSelection,
+    onShowActions,
+    display,
+)
 
 @Composable
 @Suppress("LongParameterList")
@@ -1680,101 +1582,81 @@ private fun BrowserGrid(
     onToggleSelection: (String) -> Unit,
     onShowActions: (ResourceEntity) -> Unit,
     display: FileDisplayOptions = FileDisplayOptions(),
-) = LazyVerticalGrid(
-    columns = GridCells.Fixed(2),
-    modifier = Modifier.fillMaxSize(),
-    contentPadding =
-        PaddingValues(
-            start = OpenCloudDimensions.SpacingMd,
-            top = contentPadding.calculateTopPadding() + OpenCloudDimensions.SpacingMd,
-            end = OpenCloudDimensions.SpacingMd,
-            bottom = contentPadding.calculateBottomPadding() + OpenCloudDimensions.ContentBottomClearance,
-        ),
-    horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingMd),
-    verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingMd),
-) {
-    items(resources, key = { it.selectionKey }) { resource ->
-        BrowserGridItem(
-            keptOffline = isKeptOffline(resource, offlinePins),
-            display = display,
-            resource = resource,
-            selected = resource.selectionKey in selectedIds,
-            selectionMode = selectionMode,
-            onOpen = { onOpen(resource) },
-            onSelect = { onToggleSelection(resource.selectionKey) },
-            onActions = { onShowActions(resource) },
-        )
-    }
-    item(span = {
-        androidx.compose.foundation.lazy.grid
-            .GridItemSpan(maxLineSpan)
-    }) { FolderSummary(resources) }
-}
+) = ResourceBrowserContent(
+    offlinePins,
+    resources,
+    selectedIds,
+    selectionMode,
+    SettingsBrowserLayout.TILES,
+    contentPadding,
+    onOpen,
+    onToggleSelection,
+    onShowActions,
+    display,
+)
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 @Suppress("LongParameterList")
-private fun BrowserGridItem(
-    keptOffline: Boolean,
-    resource: ResourceEntity,
-    selected: Boolean,
+private fun ResourceBrowserContent(
+    offlinePins: List<ResourceEntity>,
+    resources: List<ResourceEntity>,
+    selectedIds: Set<String>,
     selectionMode: Boolean,
-    onOpen: () -> Unit,
-    onSelect: () -> Unit,
-    onActions: () -> Unit,
-    display: FileDisplayOptions = FileDisplayOptions(),
-) = Card(
-    modifier =
-        Modifier.aspectRatio(1f).combinedClickable(
-            onClick = { if (selectionMode) onSelect() else onOpen() },
-            onLongClick = onSelect,
-        ),
-    colors =
-        CardDefaults.cardColors(
-            containerColor =
-                if (selected) {
-                    MaterialTheme.colorScheme.secondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainer
-                },
-        ),
+    layout: SettingsBrowserLayout,
+    contentPadding: PaddingValues,
+    onOpen: (ResourceEntity) -> Unit,
+    onToggleSelection: (String) -> Unit,
+    onShowActions: (ResourceEntity) -> Unit,
+    display: FileDisplayOptions,
 ) {
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = OpenCloudDimensions.SpacingSm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                displayFileName(resource, display),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (selectionMode) {
-                SelectionCircle(selected = selected, resourceName = resource.name, onSelect = onSelect)
-            } else {
-                IconButton(onClick = onActions) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.browser_actions_for, resource.name),
+    BrowserContent(
+        resources,
+        { it.selectionKey },
+        layout,
+        padding = contentPadding,
+        footer = { FolderSummary(resources) },
+    ) { item ->
+        val selected = item.selectionKey in selectedIds
+        BrowserEntry(
+            layout = layout,
+            selected = selected,
+            onOpen = { if (selectionMode) onToggleSelection(item.selectionKey) else onOpen(item) },
+            onLongClick = { onToggleSelection(item.selectionKey) },
+            name = {
+                if (layout == SettingsBrowserLayout.TILES) {
+                    Text(
+                        displayFileName(item, display),
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    ResourceName(item, display = display)
+                }
+            },
+            thumbnail = { modifier ->
+                Box(modifier, contentAlignment = Alignment.Center) {
+                    BadgedResourceThumbnail(
+                        item,
+                        if (layout == SettingsBrowserLayout.TILES && !item.isImagePreview()) {
+                            Modifier.size(OpenCloudDimensions.TouchTarget)
+                        } else {
+                            Modifier.fillMaxSize()
+                        },
                     )
                 }
-            }
-        }
-        Box(Modifier.fillMaxWidth().weight(1f).clipToBounds(), contentAlignment = Alignment.Center) {
-            BadgedResourceThumbnail(
-                resource,
-                if (resource.isImagePreview()) {
-                    Modifier.fillMaxSize()
+            },
+            metadata = { ResourceMetadata(item, isKeptOffline(item, offlinePins), display) },
+            actions = {
+                if (selectionMode) {
+                    SelectionCircle(selected, item.name, { onToggleSelection(item.selectionKey) })
                 } else {
-                    Modifier.size(
-                        OpenCloudDimensions.TouchTarget,
-                    )
-                },
-            )
-        }
-        Box(Modifier.padding(OpenCloudDimensions.SpacingSm)) { ResourceMetadata(resource, keptOffline, display) }
+                    IconButton(onClick = { onShowActions(item) }) {
+                        Icon(Icons.Default.MoreVert, stringResource(R.string.browser_actions_for, item.name))
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -1887,26 +1769,12 @@ private fun ResourceMetadata(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SheetAction(
+internal fun SheetAction(
     label: String,
     icon: ImageVector,
     color: Color = MaterialTheme.colorScheme.onSurface,
     onClick: () -> Unit,
-) = Row(
-    modifier =
-        Modifier
-            .fillMaxWidth()
-            .clickable(
-                role = Role.Button,
-                onClick = onClick,
-            ).padding(horizontal = OpenCloudDimensions.SpacingMd)
-            .heightIn(min = OpenCloudDimensions.CompactMenuRowHeight),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingMd),
-) {
-    Icon(icon, contentDescription = null, tint = color)
-    Text(label, color = color)
-}
+) = BrowserAction(label, icon, color = color, onClick = onClick)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1923,109 +1791,84 @@ fun ResourceActionSheet(
     onShare: (() -> Unit)? = null,
     sheetState: androidx.compose.material3.SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     onOpenWith: (() -> Unit)? = null,
-    onOpenWebApp: (() -> Unit)? = null,
-    onEditText: (() -> Unit)? = null,
     onDetails: (() -> Unit)? = null,
     onSend: (() -> Unit)? = null,
     onExport: ((Boolean) -> Unit)? = null,
     onRemoveLocalCopy: () -> Unit = {},
     keptOffline: Boolean = resource.offlinePinned,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(
-                        rememberScrollState(),
-                    ).padding(bottom = OpenCloudDimensions.SpacingMd),
-        ) {
-            Text(
-                resource.name,
-                modifier = Modifier.padding(OpenCloudDimensions.SpacingMd),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            onOpenWith?.let {
-                SheetAction(
-                    stringResource(R.string.browser_open_with),
-                    Icons.AutoMirrored.Filled.OpenInNew,
-                    onClick = it,
-                )
-            }
-            onOpenWebApp?.let {
-                SheetAction(stringResource(R.string.browser_open_in_web_app), Icons.Default.Language, onClick = it)
-            }
-            onEditText?.let {
-                SheetAction(
-                    stringResource(R.string.browser_edit_text),
-                    Icons.Default.Edit,
-                    onClick = it,
-                )
-            }
-            onSend?.let {
-                SheetAction(
-                    stringResource(R.string.browser_send),
-                    Icons.AutoMirrored.Filled.Send,
-                    onClick = it,
-                )
-            }
-            onShare?.let { SheetAction(stringResource(R.string.browser_share), Icons.Outlined.People, onClick = it) }
-            onDetails?.let { SheetAction(stringResource(R.string.browser_details), Icons.Default.Info, onClick = it) }
-            ActionGroupDivider()
-            SheetAction(stringResource(R.string.browser_rename), Icons.Default.Edit, onClick = onRename)
+    BrowserActionSheet(resource.name, onDismiss, sheetState = sheetState) {
+        onOpenWith?.let {
             SheetAction(
-                stringResource(R.string.browser_move_to),
-                Icons.AutoMirrored.Filled.DriveFileMove,
-                onClick = onMove,
-            )
-            SheetAction(stringResource(R.string.browser_copy_to), Icons.Default.ContentCopy, onClick = onCopy)
-            SheetAction(
-                if (resource.isFavorite) {
-                    stringResource(
-                        R.string.browser_remove_from_favorites,
-                    )
-                } else {
-                    stringResource(R.string.browser_add_to_favorites)
-                },
-                Icons.Default.Star,
-                onClick = onToggleFavorite,
-            )
-            ActionGroupDivider()
-            if (!keptOffline) {
-                SheetAction(
-                    stringResource(R.string.browser_make_available_offline),
-                    Icons.Default.OfflinePin,
-                    onClick = onDownloadForOffline,
-                )
-            }
-            if (resource.hasLocalCopy || keptOffline) {
-                SheetAction(
-                    if (resource.kind ==
-                        ResourceKind.FOLDER
-                    ) {
-                        stringResource(R.string.browser_stop_keeping_offline)
-                    } else {
-                        stringResource(R.string.browser_delete_local_copy)
-                    },
-                    cleanupIcon(),
-                    onClick = onRemoveLocalCopy,
-                )
-            }
-            onExport?.let { export ->
-                SheetAction(
-                    stringResource(R.string.browser_copy_to_device),
-                    Icons.Default.ContentCopy,
-                    onClick = { export(false) },
-                )
-            }
-            ActionGroupDivider()
-            SheetAction(
-                stringResource(R.string.browser_delete),
-                Icons.Default.Delete,
-                MaterialTheme.colorScheme.error,
-                onDelete,
+                stringResource(R.string.browser_open_with),
+                Icons.AutoMirrored.Filled.OpenInNew,
+                onClick = it,
             )
         }
+        onSend?.let {
+            SheetAction(
+                stringResource(R.string.browser_send),
+                Icons.AutoMirrored.Filled.Send,
+                onClick = it,
+            )
+        }
+        onShare?.let { SheetAction(stringResource(R.string.browser_share), Icons.Outlined.People, onClick = it) }
+        onDetails?.let { SheetAction(stringResource(R.string.browser_details), Icons.Default.Info, onClick = it) }
+        FolderShortcutAction(resource)
+        ActionGroupDivider()
+        SheetAction(stringResource(R.string.browser_rename), Icons.Default.Edit, onClick = onRename)
+        SheetAction(
+            stringResource(R.string.browser_move_to),
+            Icons.AutoMirrored.Filled.DriveFileMove,
+            onClick = onMove,
+        )
+        SheetAction(stringResource(R.string.browser_copy_to), Icons.Default.ContentCopy, onClick = onCopy)
+        SheetAction(
+            if (resource.isFavorite) {
+                stringResource(
+                    R.string.browser_remove_from_favorites,
+                )
+            } else {
+                stringResource(R.string.browser_add_to_favorites)
+            },
+            Icons.Default.Star,
+            onClick = onToggleFavorite,
+        )
+        ActionGroupDivider()
+        if (!keptOffline) {
+            SheetAction(
+                stringResource(R.string.browser_make_available_offline),
+                Icons.Default.OfflinePin,
+                onClick = onDownloadForOffline,
+            )
+        }
+        if (resource.hasLocalCopy || keptOffline) {
+            SheetAction(
+                if (resource.kind ==
+                    ResourceKind.FOLDER
+                ) {
+                    stringResource(R.string.browser_stop_keeping_offline)
+                } else {
+                    stringResource(R.string.browser_delete_local_copy)
+                },
+                cleanupIcon(),
+                onClick = onRemoveLocalCopy,
+            )
+        }
+        onExport?.let { export ->
+            SheetAction(
+                stringResource(R.string.browser_copy_to_device),
+                Icons.Default.ContentCopy,
+                onClick = { export(false) },
+            )
+        }
+        ActionGroupDivider()
+        SheetAction(
+            stringResource(R.string.browser_delete),
+            Icons.Default.Delete,
+            MaterialTheme.colorScheme.error,
+            onDelete,
+        )
     }
 }
 
@@ -2459,21 +2302,6 @@ private fun BrowserLayout.next(): BrowserLayout =
         BrowserLayout.TILES -> BrowserLayout.DEFAULT_TABLE
     }
 
-private fun BrowserLayout.nextIcon(): ImageVector =
-    when (this) {
-        BrowserLayout.DEFAULT_TABLE -> Icons.Default.ViewHeadline
-        BrowserLayout.CONDENSED_TABLE -> Icons.Default.GridView
-        BrowserLayout.TILES -> Icons.AutoMirrored.Filled.FormatListBulleted
-    }
-
-@Composable
-private fun BrowserLayout.nextContentDescription(): String =
-    when (this) {
-        BrowserLayout.DEFAULT_TABLE -> stringResource(R.string.browser_accessibility_layout_compact)
-        BrowserLayout.CONDENSED_TABLE -> stringResource(R.string.browser_accessibility_layout_grid)
-        BrowserLayout.TILES -> stringResource(R.string.browser_accessibility_layout_regular)
-    }
-
 enum class FileBrowserDestination(
     @androidx.annotation.StringRes val labelResource: Int,
     val icon: ImageVector,
@@ -2484,4 +2312,19 @@ enum class FileBrowserDestination(
     Spaces(R.string.browser_spaces, Icons.Default.Apps),
     Offline(R.string.browser_offline, Icons.Default.Smartphone),
     Recents(R.string.browser_recents, Icons.Default.History),
+}
+
+@Composable
+private fun ApplyFolderShortcut(
+    resource: ResourceEntity?,
+    spaces: List<eu.opencloud.android.next.core.database.SpaceEntity>,
+    accountId: String,
+    open: (ResourceEntity) -> Unit,
+) {
+    val currentOpen by rememberUpdatedState(open)
+    LaunchedEffect(resource, spaces) {
+        resource
+            ?.takeIf { it.accountId == accountId && spaces.any { space -> space.driveId == it.spaceId } }
+            ?.let(currentOpen)
+    }
 }

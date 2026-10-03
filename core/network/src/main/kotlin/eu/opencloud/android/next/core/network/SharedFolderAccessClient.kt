@@ -21,7 +21,7 @@ class SharedFolderAccessClient(
             .build()
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Mount discovery supplies identity only; fresh item metadata still supplies the address and rights. */
+    /** Fresh graph permissions and a verified DAV identity are required independently of mount state. */
     fun resolveWithMounts(
         serverUrl: String,
         authorization: String,
@@ -42,14 +42,28 @@ class SharedFolderAccessClient(
                             ),
                     ),
             )
-        return resolve(serverUrl, authorization, identified)
+        return resolve(serverUrl, authorization, identified) {
+            SharedFolderMountClient(client, endpoints)
+                .remoteTarget(serverUrl, authorization, remote.id)
+                ?.takeIf { it.driveId == null || sameDrive(it.driveId, driveId) }
+                ?.webDavUrl
+                ?: endpoints
+                    .endpoint(serverUrl, allowQuery = false)
+                    .newBuilder()
+                    .addPathSegments("dav/spaces")
+                    .addPathSegment(remote.id)
+                    .addPathSegment("")
+                    .build()
+                    .toString()
+        }
     }
 
-    @Suppress("ReturnCount") // Stop before using missing identities or unavailable remote items.
+    @Suppress("ReturnCount", "ThrowsCount") // Fail closed with distinct safe identity diagnostics.
     fun resolve(
         serverUrl: String,
         authorization: String,
         share: IncomingSharedItem,
+        discoverRoot: () -> String? = { null },
     ): SharedFolderResolution {
         val driveId = share.remoteItem.parentReference?.driveId
         if (driveId.isNullOrBlank()) return SharedFolderResolution.Unresolved(SharedFolderMissing.IDENTITY)
@@ -59,7 +73,8 @@ class SharedFolderAccessClient(
         val url =
             origin
                 .newBuilder()
-                .addPathSegments("graph/v1beta1/drives")
+                // The beta item route addresses share-jail entries, not the remote folder itself.
+                .addPathSegments("graph/v1.0/drives")
                 .addPathSegment(driveId)
                 .addPathSegment("items")
                 .addPathSegment(share.remoteItem.id)
@@ -84,7 +99,19 @@ class SharedFolderAccessClient(
                 if (source.buffer.size > MAX_ITEM_BYTES) invalid()
                 decode(source.readUtf8())
             }
-        if (item.id != share.remoteItem.id || item.parentReference?.driveId?.let { it != driveId } == true) invalid()
+        if (item.id != share.remoteItem.id) throw SharedMetadataException(SharedMetadataStage.ITEM_IDENTITY)
+        // Share discovery formats the drive as a root resource ID; item metadata uses a storage ID.
+        if (item.parentReference?.driveId?.let { !sameDrive(it, driveId) } == true) {
+            throw SharedMetadataException(SharedMetadataStage.PARENT_IDENTITY)
+        }
+        if (item.needsRoot()) {
+            val root = share.remoteItem.webDavUrl ?: discoverRoot()
+            if (root != null) {
+                requireTrustedRoot(origin.toString(), root)
+                RemoteDiscoveryClient(client).requireCollectionIdentity(root, authorization, item.id)
+                return resolveItem(origin.toString(), driveId, item.copy(webDavUrl = root))
+            }
+        }
         return resolveItem(origin.toString(), driveId, item)
     }
 
@@ -99,15 +126,28 @@ class SharedFolderAccessClient(
             return SharedFolderResolution.Unresolved(SharedFolderMissing.FOLDER)
         }
         val root = item.webDavUrl ?: return SharedFolderResolution.Unresolved(SharedFolderMissing.DAV_ROOT)
+        val dav = requireTrustedRoot(serverUrl, root)
+        val actions =
+            item.effectiveActions
+                ?: return SharedFolderResolution.Unresolved(SharedFolderMissing.EFFECTIVE_ACCESS)
+        return SharedFolderResolution.Resolved(driveId, item.id, dav.toString(), SharedFolderAccess(actions))
+    }
+
+    private fun requireTrustedRoot(
+        serverUrl: String,
+        root: String,
+    ): okhttp3.HttpUrl {
         val dav = endpoints.endpoint(root, allowQuery = false)
         val origin = endpoints.endpoint(serverUrl)
         if (dav.scheme != origin.scheme || dav.host != origin.host || dav.port != origin.port) {
             throw OpenCloudException(OpenCloudError.Trust)
         }
-        val actions =
-            item.effectiveActions
-                ?: return SharedFolderResolution.Unresolved(SharedFolderMissing.EFFECTIVE_ACCESS)
-        return SharedFolderResolution.Resolved(driveId, item.id, dav.toString(), SharedFolderAccess(actions))
+        return dav
+    }
+
+    private fun SharedFolderMetadata.needsRoot(): Boolean {
+        if (webDavUrl != null || folder == null) return false
+        return deleted == null && effectiveActions != null
     }
 
     private fun decode(body: String): SharedFolderMetadata =
@@ -123,12 +163,17 @@ class SharedFolderAccessClient(
         if (value.isBlank() || value == "." || value == "..") invalid()
     }
 
-    private fun invalid(): Nothing = throw OpenCloudException(OpenCloudError.InvalidResponse)
+    private fun invalid(): Nothing = throw SharedMetadataException(SharedMetadataStage.ITEM_FORMAT)
 
     private companion object {
         const val MAX_ITEM_BYTES = 1024 * 1024L
     }
 }
+
+private fun sameDrive(
+    first: String?,
+    second: String,
+): Boolean = !first.isNullOrBlank() && first.substringBefore('!') == second.substringBefore('!')
 
 sealed interface SharedFolderResolution {
     data class Resolved(

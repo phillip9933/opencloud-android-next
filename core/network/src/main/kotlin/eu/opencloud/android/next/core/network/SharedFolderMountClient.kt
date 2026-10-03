@@ -26,7 +26,13 @@ class SharedFolderMountClient(
         serverUrl: String,
         authorization: String,
         itemId: String,
-    ): String? {
+    ): String? = remoteTarget(serverUrl, authorization, itemId)?.driveId
+
+    fun remoteTarget(
+        serverUrl: String,
+        authorization: String,
+        itemId: String,
+    ): SharedMountTarget? {
         if (itemId.isBlank()) invalid()
         val initial =
             endpoints
@@ -37,7 +43,7 @@ class SharedFolderMountClient(
                 .build()
         val visited = mutableSetOf<String>()
         val identities = mutableSetOf<String>()
-        val matches = mutableSetOf<String?>()
+        val matches = mutableSetOf<SharedMountTarget>()
         var remainingBytes = 16 * MAX_PAGE_BYTES
         var next: HttpUrl? = initial
         while (next != null) {
@@ -50,12 +56,8 @@ class SharedFolderMountClient(
             page.value.forEach { mount ->
                 if (mount.id.isBlank() || !identities.add(mount.id) || identities.size > 100_000) invalid()
                 if (mount.matches(itemId)) {
-                    matches +=
-                        mount.root
-                            ?.remoteItem
-                            ?.parentReference
-                            ?.driveId
-                            ?.takeIf(String::isNotBlank)
+                    val remote = mount.root?.remoteItem
+                    matches += SharedMountTarget(remote?.parentReference?.driveId, remote?.webDavUrl)
                 }
             }
             next = page.nextLink?.let { endpoints.endpoint(url.resolve(it)?.toString() ?: invalid()) }
@@ -110,12 +112,17 @@ class SharedFolderMountClient(
         }
     }
 
-    private fun invalid(): Nothing = throw OpenCloudException(OpenCloudError.InvalidResponse)
+    private fun invalid(): Nothing = throw SharedMetadataException(SharedMetadataStage.MOUNT)
 
     private companion object {
         const val MAX_PAGE_BYTES = 1024 * 1024L
     }
 }
+
+data class SharedMountTarget(
+    val driveId: String?,
+    val webDavUrl: String?,
+)
 
 @Serializable
 private data class MountPage(

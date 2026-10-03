@@ -621,6 +621,30 @@ class SharedFolderBrowserTest {
             assertEquals(listOf(child), valid.open("a", "one").items)
         }
 
+    @Test fun folderDetailsUseValidatedIdentityAndFreshAccessInsteadOfDiscoveryClaims() =
+        runBlocking {
+            val browser = SharedFolderBrowser(access) { _, _, _ -> emptyList() }
+            val root = browser.open("a", "one")
+            val metadata =
+                one.copy(
+                    effectiveActions = setOf("libre.graph/driveItem/upload/create"),
+                    parentReference =
+                        eu.opencloud.android.next.core.network
+                            .SharedParentReference("recipient"),
+                    size = 123,
+                )
+            val details = describeIncomingFolder(root, metadata, root.location.rootItemId)
+            assertEquals("https://example.test/f/remote-one", details.permanentLink)
+            assertTrue(details.access.canBrowse)
+            assertFalse(details.access.canUpload)
+            assertTrue(details.canChangeVisibility)
+            val child = browser.list(root.location, "/Child")
+            val childDetails = describeIncomingFolder(child, metadata, "child-id")
+            assertEquals("https://example.test/f/child-id", childDetails.permanentLink)
+            assertFalse(childDetails.canChangeVisibility)
+            assertNull(childDetails.size)
+        }
+
     private fun item(id: String) =
         IncomingSharedItem(
             id,

@@ -82,6 +82,13 @@ class FileBrowserGoldenTest {
         composeRule.onAllNodesWithContentDescription("Scan").assertCountEquals(0)
     }
 
+    @Test fun spacesOverviewOnlyOffersCreateSpace() {
+        render(browserState(), initialDestination = FileBrowserDestination.Spaces)
+        composeRule.onAllNodesWithContentDescription("New").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Create space").assertIsDisplayed()
+        composeRule.onAllNodesWithContentDescription("Upload file").assertCountEquals(0)
+    }
+
     @Test fun accountAvatarUsesProfileNameInsteadOfInternalId() {
         val context = composeRule.activity.applicationContext
         context
@@ -620,6 +627,39 @@ class FileBrowserGoldenTest {
             filePath = "src/test/snapshots/rendered/offline_storage_selection.png",
             roborazziOptions = browserRoborazziOptions(),
         )
+    }
+
+    @Test fun sharedTransfersUseTheSameVisibleProgressAndQueueNavigation() {
+        var opened = false
+        val transfer =
+            searchFailureState().transfers.single().copy(
+                state = TransferState.RUNNING.name,
+                locationKind = "SHARED_FOLDER",
+                bytesTotal = 100000000,
+                bytesTransferred = 40000000,
+                displayName = "Large.apk",
+            )
+        render(
+            browserState(transfers = listOf(transfer)),
+            initialDestination = FileBrowserDestination.Shares,
+            onOpenTransfers = { opened = true },
+        )
+        composeRule.onNodeWithText("Large.apk", substring = true).assertIsDisplayed().performClick()
+        assertEquals(true, opened)
+        composeRule.onAllNodesWithText("Preparing").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("New").assertCountEquals(0)
+        composeRule.onRoot().captureRoboImage("src/test/snapshots/rendered/shared_transfer_progress.png")
+    }
+
+    @Test fun spacesTransfersAlsoShowTheCommonQueueStatus() {
+        var opened = false
+        render(
+            searchFailureState(),
+            initialDestination = FileBrowserDestination.Spaces,
+            onOpenTransfers = { opened = true },
+        )
+        composeRule.onNodeWithText("Transfer failed:", substring = true).assertIsDisplayed().performClick()
+        assertEquals(true, opened)
     }
 
     private fun browserRoborazziOptions() =

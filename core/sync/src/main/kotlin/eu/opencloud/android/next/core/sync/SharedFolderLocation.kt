@@ -19,6 +19,11 @@ class SharedFolderLocation private constructor(
     val rootWebDavUrl get() = server.webDavUrl
     val name get() = share.name
     val access get() = server.access
+    val hidden: Boolean get() =
+        kotlinx.serialization.json
+            .Json { ignoreUnknownKeys = true }
+            .decodeFromString<eu.opencloud.android.next.core.network.IncomingSharedItem>(share.metadataJson)
+            .hidden
 
     fun parentPath(path: String): String? {
         requireSharedPath(path)

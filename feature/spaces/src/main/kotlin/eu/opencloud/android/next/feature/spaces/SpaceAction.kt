@@ -6,14 +6,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import eu.opencloud.android.next.core.database.SpaceEntity
+import eu.opencloud.android.next.core.ui.BrowserAction
+import eu.opencloud.android.next.core.ui.BrowserActionSheet
 import java.math.BigDecimal
 
 enum class SpaceAction(
@@ -37,6 +40,8 @@ enum class SpaceAction(
     OPEN(R.string.spaces_open),
     TRASH(R.string.spaces_trash),
     DETAILS(R.string.spaces_details),
+    MEMBERS(R.string.spaces_members),
+    DOWNLOAD(R.string.spaces_download),
     RENAME(R.string.spaces_rename),
     SUBTITLE(R.string.spaces_subtitle),
     QUOTA(R.string.spaces_quota),
@@ -47,6 +52,7 @@ enum class SpaceAction(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 internal fun SpaceActionsMenu(
     space: SpaceEntity,
     busy: Boolean,
@@ -58,43 +64,53 @@ internal fun SpaceActionsMenu(
         IconButton(enabled = !busy, onClick = { expanded = true }) {
             Icon(Icons.Default.MoreVert, stringResource(R.string.spaces_actions, space.name))
         }
-        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-            val actions =
-                if (space.isDisabled) {
-                    listOf(SpaceAction.DETAILS, SpaceAction.ENABLE, SpaceAction.DELETE, SpaceAction.WEB)
-                } else {
-                    listOf(
-                        SpaceAction.OPEN,
-                        SpaceAction.TRASH,
-                        SpaceAction.DETAILS,
-                        SpaceAction.RENAME,
-                        SpaceAction.SUBTITLE,
-                        SpaceAction.QUOTA,
-                        SpaceAction.DISABLE,
-                        SpaceAction.WEB,
-                    )
-                }
-            actions.filter { browsable || it !in listOf(SpaceAction.OPEN, SpaceAction.TRASH) }.forEach { action ->
-                if (action == SpaceAction.RENAME || action == SpaceAction.WEB) HorizontalDivider()
-                DropdownMenuItem(
-                    text = { Text(stringResource(action.label)) },
-                    leadingIcon = {
-                        Icon(
-                            when (action) {
-                                SpaceAction.OPEN -> Icons.Default.FolderOpen
-                                SpaceAction.TRASH, SpaceAction.DELETE -> Icons.Default.DeleteOutline
-                                SpaceAction.DETAILS -> Icons.Default.Info
-                                SpaceAction.WEB -> Icons.Default.OpenInBrowser
-                                else -> Icons.Default.Edit
-                            },
-                            null,
+        if (expanded) {
+            BrowserActionSheet(space.name, onDismiss = { expanded = false }) {
+                val actions =
+                    if (space.isDisabled) {
+                        listOf(SpaceAction.DETAILS, SpaceAction.ENABLE, SpaceAction.DELETE)
+                    } else {
+                        listOf(
+                            SpaceAction.OPEN,
+                            SpaceAction.MEMBERS,
+                            SpaceAction.DOWNLOAD,
+                            SpaceAction.TRASH,
+                            SpaceAction.DETAILS,
+                            SpaceAction.RENAME,
+                            SpaceAction.SUBTITLE,
+                            SpaceAction.QUOTA,
+                            SpaceAction.DISABLE,
                         )
-                    },
-                    onClick = {
-                        expanded = false
-                        onAction(action)
-                    },
-                )
+                    }
+                actions
+                    .filter {
+                        browsable ||
+                            it !in
+                            listOf(
+                                SpaceAction.OPEN,
+                                SpaceAction.TRASH,
+                                SpaceAction.DOWNLOAD,
+                            )
+                    }.forEach { action ->
+                        if (action == SpaceAction.RENAME) HorizontalDivider()
+                        BrowserAction(
+                            label = stringResource(action.label),
+                            icon =
+                                when (action) {
+                                    SpaceAction.OPEN -> Icons.Default.FolderOpen
+                                    SpaceAction.TRASH, SpaceAction.DELETE -> Icons.Default.DeleteOutline
+                                    SpaceAction.DETAILS -> Icons.Default.Info
+                                    SpaceAction.MEMBERS -> Icons.Default.Group
+                                    SpaceAction.DOWNLOAD -> Icons.Default.Download
+                                    SpaceAction.WEB -> Icons.Default.OpenInBrowser
+                                    else -> Icons.Default.Edit
+                                },
+                            onClick = {
+                                expanded = false
+                                onAction(action)
+                            },
+                        )
+                    }
             }
         }
     }

@@ -23,7 +23,7 @@
         <item quantity="one">%1$d day</item>
         <item quantity="other">%1$d days</item>
     </plurals>
-    <string name="settings_backup_security">Backup &amp; security</string>
+    <string name="settings_backup_security">Data and Security</string>
     <string name="settings_folder_camera_backup">Folder &amp; camera backup</string>
     <string name="settings_manage_automatic_uploads">Set up and manage automatic uploads</string>
     <string name="settings_open_backup_configuration">Open backup configuration</string>

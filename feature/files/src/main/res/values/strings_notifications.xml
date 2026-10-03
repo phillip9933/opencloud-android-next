@@ -1,0 +1,8 @@
+<resources>
+<string name="notifications_title">Notifications</string>
+<string name="notifications_refresh">Refresh notifications</string>
+<string name="notifications_empty">No new notifications</string>
+<string name="notifications_read_all">Mark all read</string>
+<string name="notifications_read">Mark read</string>
+<string name="notifications_open_shares">Shared with me</string>
+</resources>

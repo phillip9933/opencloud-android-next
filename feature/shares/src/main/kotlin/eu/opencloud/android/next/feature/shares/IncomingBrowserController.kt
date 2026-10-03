@@ -3,6 +3,7 @@ package eu.opencloud.android.next.feature.shares
 import eu.opencloud.android.next.core.database.SharedLocalFile
 import eu.opencloud.android.next.core.network.OpenCloudError
 import eu.opencloud.android.next.core.network.OpenCloudException
+import eu.opencloud.android.next.core.network.SharedMetadataException
 import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.network.toOpenCloudError
 import eu.opencloud.android.next.core.sync.SharedDownloadRequest
@@ -21,12 +22,13 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-internal sealed interface IncomingBrowserItem {
+sealed interface IncomingBrowserItem {
     val name: String
 
     data class Folder(
         override val name: String,
         val request: SharedFolderRequest,
+        val hidden: Boolean = false,
     ) : IncomingBrowserItem
 
     data class File(
@@ -42,10 +44,11 @@ internal class IncomingBrowserPage(
     val unavailable: Int = 0,
     val copies: Flow<List<SharedLocalFile>> = emptyFlow(),
     val uploadDestination: SharedFolderRequest? = null,
+    val folderName: String? = null,
     val current: suspend () -> Boolean,
 )
 
-internal enum class SharedCopyAction { KEEP, TEMPORARY, REMOVE }
+enum class SharedCopyAction { KEEP, TEMPORARY, REMOVE }
 
 internal fun interface IncomingBrowserBackend {
     suspend fun upload(
@@ -59,7 +62,7 @@ internal fun interface IncomingBrowserBackend {
     ): IncomingBrowserPage
 }
 
-internal data class IncomingBrowserState(
+data class IncomingBrowserState(
     val account: String? = null,
     val trail: List<IncomingBrowserItem.Folder> = emptyList(),
     val items: List<IncomingBrowserItem> = emptyList(),
@@ -105,6 +108,11 @@ internal class IncomingBrowserController(
         if (state.value.trail.isEmpty()) return false
         navigate(state.value.copy(trail = state.value.trail.dropLast(1)))
         return true
+    }
+
+    fun openShortcut(folder: IncomingBrowserItem.Folder) {
+        if (folder.request.account != state.value.account) return
+        navigate(state.value.copy(trail = listOf(folder)))
     }
 
     fun refresh() = navigate(state.value)
@@ -156,6 +164,14 @@ internal class IncomingBrowserController(
                     if (ticket == revision) {
                         mutableState.value =
                             state.value.copy(
+                                trail =
+                                    state.value.trail.mapIndexed { index, folder ->
+                                        if (index == state.value.trail.lastIndex && page.folderName != null) {
+                                            folder.copy(name = page.folderName)
+                                        } else {
+                                            folder
+                                        }
+                                    },
                                 items = page.items,
                                 unavailable = page.unavailable,
                                 loading = false,
@@ -171,7 +187,9 @@ internal class IncomingBrowserController(
                             state.value.copy(
                                 items = emptyList(),
                                 loading = false,
-                                error = errorMessage(failure.toOpenCloudError()),
+                                error =
+                                    errorMessage(failure.toOpenCloudError()) +
+                                        ((failure as? SharedMetadataException)?.let { " [${it.stage.code}]" } ?: ""),
                                 uploadDestination = null,
                             )
                     }

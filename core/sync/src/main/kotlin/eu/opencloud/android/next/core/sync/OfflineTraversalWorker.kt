@@ -134,7 +134,7 @@ internal fun scheduleOfflineTraversal(
     val request =
         OneTimeWorkRequestBuilder<OfflineTraversalWorker>()
             .setInputData(workDataOf(OfflineTraversalWorker.RUN_ID to runId))
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.NOT_REQUIRED).build())
             .build()
     WorkManager
         .getInstance(context)

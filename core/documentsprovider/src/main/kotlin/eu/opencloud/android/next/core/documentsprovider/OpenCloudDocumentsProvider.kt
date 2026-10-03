@@ -15,6 +15,7 @@ import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.model.ResourceKind
 import eu.opencloud.android.next.core.model.resourceCacheDirectory
 import eu.opencloud.android.next.core.model.validatedCachedFile
+import eu.opencloud.android.next.core.sync.ProviderFolderOperations
 import eu.opencloud.android.next.core.sync.TransferManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -27,11 +28,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.FileNotFoundException
-import java.nio.charset.StandardCharsets
-import java.util.Base64
 
 class OpenCloudDocumentsProvider : DocumentsProvider() {
     private val openScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -42,6 +42,11 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
     }
     private val transfers by lazy { TransferManager(requireNotNull(context), store) }
     private val writeAccess by lazy { DocumentWriteAccess(requireNotNull(context), store) }
+    private val folders by lazy { ProviderFolderOperations(requireNotNull(context), store) }
+    private val freshness by lazy {
+        eu.opencloud.android.next.core.sync
+            .ExternalFileFreshness(requireNotNull(context), store)
+    }
     private val sharedFiles by lazy { SharedProviderFiles(requireNotNull(context)) }
     private val sharedRoots by lazy { SharedRootRows.create(requireNotNull(context)) }
 
@@ -62,7 +67,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
                         .add(Root.COLUMN_TITLE, "Raiun")
                         .add(Root.COLUMN_SUMMARY, "Unlock to browse files")
                         .add(Root.COLUMN_ICON, requireNotNull(context).applicationInfo.icon)
-                        .add(Root.COLUMN_FLAGS, 0)
+                        .add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_IS_CHILD or Root.FLAG_SUPPORTS_CREATE)
                         .add(Root.COLUMN_MIME_TYPES, "*/*")
                 }
             }
@@ -130,9 +135,13 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
             val columns = (projection ?: DEFAULT_DOCUMENT_PROJECTION).map { it }.toTypedArray()
             when (id) {
                 is DocumentId.Account -> accountChildren(id.accountId, columns)
-                is DocumentId.Space -> childCursor(id, id.accountId, id.spaceId, null, columns)
+                is DocumentId.Space -> {
+                    refreshProviderFolder(id.accountId, id.spaceId, null)
+                    childCursor(id, id.accountId, id.spaceId, null, columns)
+                }
                 is DocumentId.Resource -> {
                     require(store.resource(id.accountId, id.spaceId, id.resourceId)?.kind == ResourceKind.FOLDER)
+                    refreshProviderFolder(id.accountId, id.spaceId, id.resourceId)
                     childCursor(id, id.accountId, id.spaceId, id.resourceId, columns)
                 }
             }
@@ -199,7 +208,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
                 .beginDocumentRead()
         signal?.throwIfCanceled()
         val id = DocumentId.decode(documentId) as? DocumentId.Resource ?: throw FileNotFoundException("Not a file.")
-        val resource =
+        var resource =
             databaseCall {
                 requireAvailable(id)
                 store.resource(id.accountId, id.spaceId, id.resourceId)
@@ -207,6 +216,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
                 ?: throw FileNotFoundException("Document not found.")
         require(resource.kind == ResourceKind.FILE) { "Folders cannot be opened as files." }
         if (mode != "r") return openForEdit(resource, mode, signal)
+        resource = databaseCall { freshness.current(folders.settled(resource, readPermit), readPermit) }
         val cache = resourceCacheDirectory(requireNotNull(context).filesDir, id.accountId, id.spaceId)
         val localCopy =
             validatedCachedFile(cache, resource.localPath?.takeIf { resource.hasLocalCopy }, resource.sizeBytes)
@@ -247,13 +257,16 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
         if (!editPreparationSlots.tryAcquire()) throw FileNotFoundException("Too many documents are currently opening.")
         try {
             return databaseCall {
-                val original = prepareEdit(resource, permit, signal)
-                DocumentWriteSession(
-                    eu.opencloud.android.next.core.sync
-                        .DocumentEditStore(requireNotNull(context)),
-                    openScope,
-                    authorized = { writeAccess.authorized(resource, permit) },
-                ).open(resource, original, mode, signal)
+                ProviderFolderOperations.namespaceGate.withLock {
+                    val current = freshness.current(folders.settled(resource, permit), permit)
+                    val original = prepareEdit(current, permit, signal)
+                    DocumentWriteSession(
+                        eu.opencloud.android.next.core.sync
+                            .DocumentEditStore(requireNotNull(context)),
+                        openScope,
+                        authorized = { writeAccess.authorized(current, permit) },
+                    ).open(current, original, mode, signal)
+                }
             }
         } finally {
             editPreparationSlots.release()
@@ -298,7 +311,54 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
     }
 
     private fun writeFlags(resource: ResourceEntity): Int =
-        if (writeAccess.editable(resource)) Document.FLAG_SUPPORTS_WRITE else 0
+        if (resource.kind == ResourceKind.FOLDER) {
+            Document.FLAG_DIR_SUPPORTS_CREATE
+        } else if (writeAccess.editable(resource)) {
+            Document.FLAG_SUPPORTS_WRITE or Document.FLAG_SUPPORTS_RENAME or Document.FLAG_SUPPORTS_DELETE
+        } else {
+            0
+        }
+
+    private val mutations by lazy {
+        ProviderMutations(requireNotNull(context), store, folders, ::requireUnlocked) { requireAvailable(it) }
+    }
+
+    override fun createDocument(
+        parentDocumentId: String,
+        mimeType: String,
+        displayName: String,
+    ): String = mutations.createDocument(parentDocumentId, mimeType, displayName)
+
+    override fun renameDocument(
+        documentId: String,
+        displayName: String,
+    ): String = mutations.renameDocument(documentId, displayName)
+
+    override fun deleteDocument(documentId: String) {
+        mutations.deleteDocument(documentId)
+        revokeDocumentPermission(documentId)
+    }
+
+    private fun documentPermit(): () -> Boolean =
+        eu.opencloud.android.next.core.security
+            .AppLock(requireNotNull(context))
+            .beginDocumentEdit()
+
+    // Failed discovery preserves cached browsing; mutations perform their own strict checks.
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun refreshProviderFolder(
+        account: String,
+        space: String,
+        parent: String?,
+    ) {
+        try {
+            folders.refresh(account, space, parent, documentPermit())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            requireUnlocked()
+        }
+    }
 
     // Pipe errors are local; cancellation still escapes unchanged.
     @Suppress("TooGenericExceptionCaught", "ThrowsCount")
@@ -448,7 +508,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
         columns: Array<String>,
     ): Cursor =
         MatrixCursor(columns).apply {
-            store.spaces(account).filterNot { it.isDisabled || it.isDeleted }.forEach { addSpace(it) }
+            store.spaces(account).filter { it.isPickerSpace() }.forEach { addSpace(it) }
             addSharedCollection(account)
         }
 
@@ -518,19 +578,25 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
             .add(Root.COLUMN_TITLE, "Raiun")
             .add(Root.COLUMN_ICON, requireNotNull(context).applicationInfo.icon)
             .add(Root.COLUMN_SUMMARY, "${account.displayName} · ${android.net.Uri.parse(account.serverUrl).host}")
-            .add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_SEARCH)
-            .add(Root.COLUMN_MIME_TYPES, "*/*")
+            .add(
+                Root.COLUMN_FLAGS,
+                Root.FLAG_SUPPORTS_SEARCH or Root.FLAG_SUPPORTS_IS_CHILD or Root.FLAG_SUPPORTS_CREATE,
+            ).add(Root.COLUMN_MIME_TYPES, "*/*")
     }
 
     private fun MatrixCursor.addAccount(account: AccountEntity) {
-        addDirectory(DocumentId.Account(account.id).encode(), account.displayName)
+        addDirectory(
+            DocumentId.Account(account.id).encode(),
+            account.displayName,
+            Document.FLAG_DIR_BLOCKS_OPEN_DOCUMENT_TREE,
+        )
     }
 
     private fun MatrixCursor.addSharedCollection(account: String) {
         val values =
             mapOf<String, Any?>(
                 Document.COLUMN_DOCUMENT_ID to SharedCollectionId(account).encode(),
-                Document.COLUMN_DISPLAY_NAME to "Shared folders",
+                Document.COLUMN_DISPLAY_NAME to "Shared with me",
                 Document.COLUMN_MIME_TYPE to Document.MIME_TYPE_DIR,
                 Document.COLUMN_FLAGS to Document.FLAG_DIR_BLOCKS_OPEN_DOCUMENT_TREE,
             )
@@ -547,6 +613,7 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
             } else {
                 space.name
             },
+            Document.FLAG_DIR_SUPPORTS_CREATE,
         )
     }
 
@@ -565,21 +632,14 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
     private fun MatrixCursor.addDirectory(
         id: String,
         name: String,
+        flags: Int = Document.FLAG_DIR_BLOCKS_OPEN_DOCUMENT_TREE,
     ) {
         newRow()
             .add(Document.COLUMN_DOCUMENT_ID, id)
             .add(Document.COLUMN_DISPLAY_NAME, name)
             .add(Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR)
-            .add(Document.COLUMN_FLAGS, 0)
+            .add(Document.COLUMN_FLAGS, flags)
     }
-
-    private fun ResourceEntity.documentMimeType() =
-        if (kind == ResourceKind.FOLDER) {
-            Document.MIME_TYPE_DIR
-        } else {
-            eu.opencloud.android.next.core.model
-                .fileMimeType(name, mimeType)
-        }
 
     private fun requireUnlocked() {
         val context = requireNotNull(context)
@@ -608,60 +668,6 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
 
     private fun <T> databaseCall(block: suspend () -> T): T = runBlocking { withContext(Dispatchers.IO) { block() } }
 
-    private sealed interface DocumentId {
-        data class Account(
-            val accountId: String,
-        ) : DocumentId
-
-        data class Space(
-            val accountId: String,
-            val spaceId: String,
-        ) : DocumentId
-
-        data class Resource(
-            val accountId: String,
-            val spaceId: String,
-            val resourceId: String,
-        ) : DocumentId
-
-        fun encode(): String {
-            val raw =
-                when (this) {
-                    is Account -> listOf(VERSION, "account", accountId)
-                    is Space -> listOf(VERSION, "space", accountId, spaceId)
-                    is Resource -> listOf(VERSION, "resource", accountId, spaceId, resourceId)
-                }.joinToString("\u0000")
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray(StandardCharsets.UTF_8))
-        }
-
-        companion object {
-            fun decode(encoded: String): DocumentId {
-                if (encoded.length !in 1..4096) invalidDocumentId()
-                val values =
-                    runCatching {
-                        String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8).split("\u0000")
-                    }.getOrElse { invalidDocumentId() }
-                if (values.firstOrNull() != VERSION) invalidDocumentId("Unsupported document ID.")
-                val count =
-                    when (values.getOrNull(1)) {
-                        "account" -> 3
-                        "space" -> 4
-                        "resource" -> 5
-                        else -> invalidDocumentId()
-                    }
-                if (values.size != count) invalidDocumentId()
-                return when (values.getOrNull(1)) {
-                    "account" -> Account(values.required(2))
-                    "space" -> Space(values.required(2), values.required(3))
-                    "resource" -> Resource(values.required(2), values.required(3), values.required(4))
-                    else -> invalidDocumentId()
-                }
-            }
-
-            private const val VERSION = "v1"
-        }
-    }
-
     private companion object {
         val DEFAULT_ROOT_PROJECTION =
             arrayOf(
@@ -685,7 +691,13 @@ class OpenCloudDocumentsProvider : DocumentsProvider() {
     }
 }
 
-private fun List<String>.required(index: Int): String =
-    getOrNull(index)?.takeIf(String::isNotBlank) ?: invalidDocumentId()
+// Incoming shares use their own checked catalog; virtual drives are server containers.
+private fun SpaceEntity.isPickerSpace(): Boolean = !isDisabled && !isDeleted && type in setOf("personal", "project")
 
-private fun invalidDocumentId(message: String = "Invalid document ID."): Nothing = throw FileNotFoundException(message)
+private fun ResourceEntity.documentMimeType() =
+    if (kind == ResourceKind.FOLDER) {
+        Document.MIME_TYPE_DIR
+    } else {
+        eu.opencloud.android.next.core.model
+            .fileMimeType(name, mimeType)
+    }

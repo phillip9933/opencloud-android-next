@@ -15,6 +15,33 @@ import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsRepositoryTest {
+    @Test fun `file opening preferences persist independently and default to preview`() =
+        runTest {
+            val dataStore = InMemoryDataStore()
+            val repository = SettingsRepository.create(dataStore)
+            assertEquals(FileOpening(), repository.settings.first().fileOpening)
+            repository.setFileOpening(FileOpening(externalPdf = true))
+            repository.setAppearance(Appearance.DARK)
+            val reloaded =
+                SettingsRepository
+                    .create(dataStore)
+                    .settings
+                    .first()
+                    .fileOpening
+            assertEquals(true, reloaded.usesPreview(PreviewKind.TEXT))
+            assertEquals(false, reloaded.usesPreview(PreviewKind.PDF))
+            assertEquals(true, reloaded.usesPreview(PreviewKind.IMAGE))
+            assertEquals(false, reloaded.usesPreview(null))
+        }
+
+    @Test fun `preview detection covers common server mime and filename variants`() {
+        assertEquals(PreviewKind.TEXT, previewKind("notes", "text/plain; charset=utf-8"))
+        assertEquals(PreviewKind.TEXT, previewKind("NOTES.MD", "application/octet-stream"))
+        assertEquals(PreviewKind.PDF, previewKind("Scan.PDF", null))
+        assertEquals(PreviewKind.IMAGE, previewKind("photo.HEIC", null))
+        assertNull(previewKind("backup.zip", "application/zip"))
+    }
+
     @Test fun `appearance survives unrelated settings and a repository reload`() =
         runTest {
             val dataStore = InMemoryDataStore()

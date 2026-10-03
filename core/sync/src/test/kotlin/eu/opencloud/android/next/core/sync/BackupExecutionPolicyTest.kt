@@ -36,14 +36,14 @@ class BackupExecutionPolicyTest {
     @Test
     fun `debug work request has no strict backup constraints`() {
         val constraints = backupConstraints(debug = true)
-        assertEquals(NetworkType.CONNECTED, constraints.requiredNetworkType)
+        assertEquals(NetworkType.NOT_REQUIRED, constraints.requiredNetworkType)
         assertFalse(constraints.requiresCharging())
     }
 
     @Test
     fun `release scanner does not impose charging or wifi on unrestricted pairs`() {
         val constraints = backupConstraints(debug = false)
-        assertEquals(NetworkType.CONNECTED, constraints.requiredNetworkType)
+        assertEquals(NetworkType.NOT_REQUIRED, constraints.requiredNetworkType)
         assertFalse(constraints.requiresCharging())
     }
 

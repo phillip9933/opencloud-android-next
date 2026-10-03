@@ -1,12 +1,14 @@
 package eu.opencloud.android.next
 
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.opencloud.android.next.core.database.SpaceEntity
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudTheme
@@ -44,7 +46,7 @@ class SpaceMenusTest {
         compose.onNodeWithContentDescription("Actions for Second").performClick()
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()
-        compose.onNode(isPopup()).captureRoboImage("src/test/snapshots/rendered/space_context_menu.png")
+        compose.onNode(isDialog()).captureRoboImage("src/test/snapshots/rendered/space_context_menu.png")
         compose.onNodeWithText("Open recycle bin").performClick()
         assertEquals("two" to SpaceAction.TRASH, action)
         assertEquals(null, opened)
@@ -92,6 +94,44 @@ class SpaceMenusTest {
         compose.onNodeWithText("Empty recycle bin").assertDoesNotExist()
         compose.onNodeWithText("Project Mars").performClick()
         assertEquals("project", selected)
+    }
+
+    @Test fun emptyAndPopulatedSpacesCanRefreshBySwipeAndButton() {
+        val rows = androidx.compose.runtime.mutableStateOf(emptyList<SpaceEntity>())
+        var refreshes = 0
+        compose.setContent {
+            OpenCloudTheme {
+                SpacesScreen(SpacesUiState(spaces = rows.value, loading = false), {}, onRefresh = { refreshes++ })
+            }
+        }
+        compose.onRoot().performTouchInput { swipeDown(startY = centerY / 2, endY = height * 0.9f) }
+        compose.waitForIdle()
+        assertEquals(1, refreshes)
+        compose.onNodeWithContentDescription("Refresh").performClick()
+        assertEquals(2, refreshes)
+        compose.runOnIdle { rows.value = listOf(space("new", "New space")) }
+        compose.onRoot().performTouchInput { swipeDown(startY = centerY / 2, endY = height * 0.9f) }
+        compose.waitForIdle()
+        assertEquals(3, refreshes)
+    }
+
+    @Test fun membersAndDownloadTargetTheSelectedSpace() {
+        var selected: Pair<String, SpaceAction>? = null
+        compose.setContent {
+            OpenCloudTheme {
+                SpacesScreen(
+                    SpacesUiState(spaces = listOf(space("team", "Team")), loading = false),
+                    {},
+                    onAction = { space, action -> selected = space.driveId to action },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Actions for Team").performClick()
+        compose.onNodeWithText("Members").performClick()
+        assertEquals("team" to SpaceAction.MEMBERS, selected)
+        compose.onNodeWithContentDescription("Actions for Team").performClick()
+        compose.onNodeWithText("Download space").performClick()
+        assertEquals("team" to SpaceAction.DOWNLOAD, selected)
     }
 
     private fun space(

@@ -311,6 +311,7 @@ class FeatureGoldenTest {
                 )
             }
         }
+        composeRule.onNodeWithContentDescription("Actions for Design review").performClick()
         composeRule.onNodeWithText("Details").performClick()
         composeRule.onNodeWithText("Share name").assertIsDisplayed()
         composeRule.onNodeWithText("/Projects/Campaign").assertIsDisplayed()

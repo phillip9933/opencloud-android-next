@@ -1,0 +1,25 @@
+<resources>
+<string name="incoming_open_folder">Open folder</string>
+<string name="incoming_copy_link">Copy permanent link</string>
+<string name="incoming_link_copied">Link copied. Existing access is required to open it.</string>
+<string name="incoming_hide_share">Hide share</string>
+<string name="incoming_unhide_share">Unhide share</string>
+<string name="incoming_hide_explanation">This changes visibility in your Shared with me list, including on the web. It does not delete the folder or change anyone’s access. Use Show hidden shares to find hidden folders.</string>
+<string name="incoming_show_hidden">Show hidden shares</string>
+<string name="incoming_hide_hidden">Hide hidden shares</string>
+<string name="incoming_hidden">Hidden share</string>
+<string name="incoming_folder_location">Location</string>
+<string name="incoming_folder_owner">Owner</string>
+<string name="incoming_folder_shared_by">Shared by</string>
+<string name="incoming_folder_shared_at">Shared on</string>
+<string name="incoming_folder_expires">Expires</string>
+<string name="incoming_folder_modified">Modified</string>
+<string name="incoming_folder_size">Size</string>
+<string name="incoming_folder_visible_items">Visible items in this folder</string>
+<string name="incoming_folder_access">Your access to the shared root</string>
+<string name="incoming_access_browse">Browse folders</string>
+<string name="incoming_access_download">Download files</string>
+<string name="incoming_access_upload">Upload files</string>
+<string name="incoming_access_create">Create folders</string>
+<string name="incoming_access_scope">Access to individual items is checked by the server.</string>
+</resources>

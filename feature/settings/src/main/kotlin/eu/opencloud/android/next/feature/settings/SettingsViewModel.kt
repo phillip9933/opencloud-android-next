@@ -84,6 +84,10 @@ class SettingsViewModel(
         viewModelScope.launch { repository.setTemporaryCopyRetentionHours(hours) }
     }
 
+    fun setFileOpening(options: eu.opencloud.android.next.core.datastore.FileOpening) {
+        viewModelScope.launch { repository.setFileOpening(options) }
+    }
+
     fun setFileDisplay(options: eu.opencloud.android.next.core.datastore.FileDisplayOptions) {
         viewModelScope.launch { repository.setFileDisplay(options) }
     }
@@ -138,6 +142,7 @@ fun SettingsRoute(
         onSetAppearance = viewModel::setAppearance,
         onOpenSecurity = onOpenSecurity,
         onFileDisplay = viewModel::setFileDisplay,
+        onFileOpening = viewModel::setFileOpening,
         onClearTemporary = viewModel::clearTemporaryCopies,
         languageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags(),
         onLanguage = { AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(it)) },
@@ -167,10 +172,20 @@ fun SettingsScreen(
     onClearTemporary: () -> Unit = {},
     languageTag: String = "",
     onLanguage: (String) -> Unit = {},
+    onFileOpening: (eu.opencloud.android.next.core.datastore.FileOpening) -> Unit = {},
 ) {
     var appearanceOpen by rememberSaveable { mutableStateOf(false) }
+    var openingFiles by rememberSaveable { mutableStateOf(false) }
     BackHandler {
-        if (appearanceOpen) appearanceOpen = false else onNavigateBack()
+        when {
+            openingFiles -> openingFiles = false
+            appearanceOpen -> appearanceOpen = false
+            else -> onNavigateBack()
+        }
+    }
+    if (openingFiles) {
+        OpeningFilesScreen(state.fileOpening, onFileOpening) { openingFiles = false }
+        return
     }
     if (appearanceOpen) {
         AppearanceSettingsScreen(
@@ -219,6 +234,7 @@ fun SettingsScreen(
                 diagnostics,
                 onOpenSecurity,
                 onClearTemporary,
+                { openingFiles = true },
             )
         }
     }

@@ -158,7 +158,7 @@ class FileOperationManager(
                 val request =
                     OneTimeWorkRequestBuilder<FileOperationWorker>()
                         .setInputData(workDataOf("operationId" to operation.id))
-                        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.NOT_REQUIRED).build())
                         .addTag(accountWorkTag(operation.accountId))
                         .build()
                 WorkManager

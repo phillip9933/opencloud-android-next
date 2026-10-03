@@ -14,6 +14,7 @@ android {
             .toInt()
 
     defaultConfig {
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk =
             libs.versions.minSdk
                 .get()
@@ -24,6 +25,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 
     kotlin {
         compilerOptions {
@@ -33,6 +35,11 @@ android {
 }
 
 dependencies {
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    implementation(project(":core:datastore"))
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(project(":core:sync"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(project(":core:designsystem"))

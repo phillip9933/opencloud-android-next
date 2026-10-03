@@ -54,6 +54,7 @@ jobs:
             :app:connectedDebugAndroidTest
             :core:database:connectedDebugAndroidTest
             :core:documentsprovider:connectedDebugAndroidTest
+            :core:ui:connectedDebugAndroidTest
             :feature:files:connectedDebugAndroidTest
             --no-daemon
 

@@ -77,7 +77,7 @@ class PendingPinWorker(
 internal fun schedulePendingPins(context: Context) {
     val request =
         OneTimeWorkRequestBuilder<PendingPinWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.NOT_REQUIRED).build())
             .build()
     WorkManager
         .getInstance(

@@ -40,11 +40,11 @@ internal object IncomingBrowserTrail {
         path: String,
         previous: String?,
     ): Boolean {
-        if (previous == null) return path == "/"
+        if (previous == null && path == "/") return true
         val segments = path.split('/').drop(1)
         val safe = path.startsWith('/') && segments.none(::invalidSegment)
         val parent = path.substringBeforeLast('/').ifEmpty { "/" }
-        return safe && path != "/" && parent == previous
+        return safe && path != "/" && (previous == null || parent == previous)
     }
 
     private fun invalidSegment(value: String): Boolean {

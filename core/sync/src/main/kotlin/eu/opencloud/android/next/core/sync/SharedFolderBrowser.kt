@@ -8,6 +8,8 @@ import eu.opencloud.android.next.core.network.OpenCloudException
 import eu.opencloud.android.next.core.network.RemoteDiscoveryClient
 import eu.opencloud.android.next.core.network.RemoteFolderSnapshot
 import eu.opencloud.android.next.core.network.RemoteResource
+import eu.opencloud.android.next.core.network.SharedMetadataException
+import eu.opencloud.android.next.core.network.SharedMetadataStage
 import eu.opencloud.android.next.core.security.TlsPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -111,7 +113,7 @@ class SharedFolderBrowser(
             requireSharedPath(item.path)
             val parent = item.path.substringBeforeLast('/').ifEmpty { "/" }
             if (item.path == "/" || parent != path || invalidIdentity(item, ids, paths)) {
-                throw OpenCloudException(OpenCloudError.InvalidResponse)
+                throw SharedMetadataException(SharedMetadataStage.CHILDREN)
             }
         }
     }
@@ -131,10 +133,10 @@ class SharedFolderBrowser(
             try {
                 requireSharedPath(excluded)
             } catch (_: OpenCloudException) {
-                throw OpenCloudException(OpenCloudError.InvalidResponse)
+                throw SharedMetadataException(SharedMetadataStage.CHILDREN)
             }
             if (exclusionConflictsWithListing(path, excluded, items)) {
-                throw OpenCloudException(OpenCloudError.InvalidResponse)
+                throw SharedMetadataException(SharedMetadataStage.CHILDREN)
             }
         }
     }

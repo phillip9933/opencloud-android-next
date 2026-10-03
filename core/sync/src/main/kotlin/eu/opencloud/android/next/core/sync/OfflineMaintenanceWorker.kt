@@ -84,7 +84,7 @@ internal fun scheduleOfflineMaintenance(
 ) {
     val request =
         OneTimeWorkRequestBuilder<OfflineMaintenanceWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.NOT_REQUIRED).build())
             .setInputData(
                 workDataOf(
                     "recovery" to recovery,

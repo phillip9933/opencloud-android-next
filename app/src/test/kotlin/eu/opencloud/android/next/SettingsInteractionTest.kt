@@ -30,6 +30,25 @@ import org.robolectric.annotation.Config
 class SettingsInteractionTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun openingPreferencesChangeOnlyTheSelectedFileType() {
+        val state = mutableStateOf(UserSettings())
+        compose.setContent {
+            OpenCloudTheme {
+                SettingsScreen(state.value, {}, {}, {}, onFileOpening = {
+                    state.value =
+                        state.value.copy(fileOpening = it)
+                })
+            }
+        }
+        compose.onAllNodesWithText("PDF documents").assertCountEquals(0)
+        compose.onNodeWithText("Opening files").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("PDF documents").performScrollTo().performClick()
+        compose.onNodeWithText("External app").performClick()
+        assertEquals(true, state.value.fileOpening.externalPdf)
+        assertEquals(false, state.value.fileOpening.externalText)
+        assertEquals(false, state.value.fileOpening.externalImages)
+    }
+
     @Test fun appearanceChoicesUpdateTheSelectedMode() {
         val state = mutableStateOf(UserSettings())
         compose.setContent {

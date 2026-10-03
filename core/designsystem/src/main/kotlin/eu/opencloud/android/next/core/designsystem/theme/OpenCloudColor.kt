@@ -3,6 +3,7 @@ package eu.opencloud.android.next.core.designsystem.theme
 import androidx.compose.ui.graphics.Color
 
 object OpenCloudColor {
+    val DocumentPaper = Color(0xFFFFFFFF)
     val Background = Color(0xFFFFFFFF)
     val Chrome = Color(0xFF20434F)
     val BrandMark = Color(0xFFA9B8E8)

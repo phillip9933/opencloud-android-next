@@ -38,7 +38,21 @@ class TransferRecoveryTest {
         store = FileBrowserStore(database)
         WorkManagerTestInitHelper.initializeTestWorkManager(
             context,
-            Configuration.Builder().setExecutor(SynchronousExecutor()).build(),
+            Configuration
+                .Builder()
+                .setExecutor(SynchronousExecutor())
+                .setWorkerFactory(
+                    object : androidx.work.WorkerFactory() {
+                        override fun createWorker(
+                            appContext: android.content.Context,
+                            workerClassName: String,
+                            workerParameters: androidx.work.WorkerParameters,
+                        ): androidx.work.ListenableWorker =
+                            object : androidx.work.Worker(appContext, workerParameters) {
+                                override fun doWork(): Result = Result.retry()
+                            }
+                    },
+                ).build(),
         )
         workManager = WorkManager.getInstance(context)
         manager = TransferManager(context, store, workManager)

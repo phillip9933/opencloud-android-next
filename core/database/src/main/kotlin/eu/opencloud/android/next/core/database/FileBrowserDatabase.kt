@@ -1419,6 +1419,8 @@ class FileBrowserStore(
             true
         }
 
+    suspend fun invalidateFileContent(resource: ResourceEntity) = invalidateFileContent(database, resource)
+
     suspend fun clearLocalCopy(resource: ResourceEntity) =
         database.withTransaction {
             setOfflinePinned(resource, false)

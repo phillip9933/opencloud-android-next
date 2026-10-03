@@ -23,7 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -67,12 +69,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import eu.opencloud.android.next.core.database.AccountEntity
 import eu.opencloud.android.next.core.database.ResourceEntity
 import eu.opencloud.android.next.core.database.ShareEntity
+import eu.opencloud.android.next.core.datastore.SettingsBrowserLayout
 import eu.opencloud.android.next.core.designsystem.theme.OpenCloudDimensions
 import eu.opencloud.android.next.core.network.OcsShareType
 import eu.opencloud.android.next.core.network.ShareRecipient
 import eu.opencloud.android.next.core.network.safeMessage
 import eu.opencloud.android.next.core.sync.ShareManager
 import eu.opencloud.android.next.core.sync.TransientPublicLink
+import eu.opencloud.android.next.core.ui.BrowserAction
+import eu.opencloud.android.next.core.ui.BrowserActionSheet
+import eu.opencloud.android.next.core.ui.BrowserContent
+import eu.opencloud.android.next.core.ui.BrowserEntry
+import eu.opencloud.android.next.core.ui.BrowserToolbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -133,14 +141,32 @@ fun SharesRoute(
 }
 
 @Composable
+@Suppress("LongParameterList") // Account navigation, optional shortcut and injected view model.
 fun TopLevelSharesRoute(
     accountId: String,
     modifier: Modifier = Modifier,
+    initialFolder: eu.opencloud.android.next.core.sync.SharedFolderRequest? = null,
+    onConsumeInitialFolder: () -> Unit = {},
     onBrowseResource: ((ResourceEntity) -> Unit)? = null,
     viewModel: SharesViewModel = viewModel(key = "shares-$accountId"),
 ) {
+    val context = LocalContext.current
+    val owner = rememberCoroutineScope()
+    val settings =
+        remember(context) {
+            eu.opencloud.android.next.core.datastore.SettingsRepository
+                .create(context)
+        }
+    val preferences by settings.settings.collectAsState(
+        initial =
+            eu.opencloud.android.next.core.datastore
+                .UserSettings(),
+    )
     val state by viewModel.controller.state.collectAsState()
     LaunchedEffect(accountId) { viewModel.controller.load(accountId) }
+    LaunchedEffect(initialFolder) {
+        if (initialFolder != null) viewModel.controller.selectCategory(ShareCategory.WITH_ME)
+    }
     SharesContent(
         state = state,
         onCategory = viewModel.controller::selectCategory,
@@ -150,7 +176,9 @@ fun TopLevelSharesRoute(
         onDismissNotice = viewModel.controller::dismissNotice,
         modifier = modifier,
         onBrowseResource = onBrowseResource,
-        incomingContent = { IncomingBrowserRoute(accountId) },
+        layout = preferences.browserLayout,
+        onLayout = { value -> owner.launch { settings.setBrowserLayout(value) } },
+        incomingContent = { IncomingBrowserRoute(accountId, initialFolder, onConsumeInitialFolder) },
     )
 }
 
@@ -235,6 +263,8 @@ fun SharesContent(
     showRefreshAction: Boolean = true,
     onBrowseResource: ((ResourceEntity) -> Unit)? = null,
     incomingContent: (@Composable () -> Unit)? = null,
+    layout: SettingsBrowserLayout = SettingsBrowserLayout.DEFAULT_TABLE,
+    onLayout: (SettingsBrowserLayout) -> Unit = {},
 ) {
     val visible =
         when (state.category) {
@@ -258,19 +288,23 @@ fun SharesContent(
         }
         return
     }
-    PullToRefreshBox(isRefreshing = state.saving, onRefresh = onRefresh, modifier = modifier.fillMaxSize()) {
+    PullToRefreshBox(
+        isRefreshing = state.loading || state.saving,
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize(),
+    ) {
         Column(Modifier.fillMaxSize()) {
-            if (showRefreshAction) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
+            ShareCategoryTabs(state.category, onCategory)
+            BrowserToolbar(false, layout, {}, {
+                onLayout(SettingsBrowserLayout.entries[(layout.ordinal + 1) % SettingsBrowserLayout.entries.size])
+            }) {
+                Text(stringResource(state.category.labelRes), Modifier.weight(1f), maxLines = 1)
+                if (showRefreshAction) {
                     IconButton(onClick = onRefresh) {
-                        Icon(Icons.Default.Refresh, stringResource(R.string.shares_refresh))
+                        Icon(Icons.Default.Refresh, stringResource(R.string.incoming_refresh_folder))
                     }
                 }
             }
-            ShareCategoryTabs(state.category, onCategory)
             if (state.loading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -279,9 +313,9 @@ fun SharesContent(
                     CircularProgressIndicator()
                 }
             } else if (visible.isEmpty()) {
-                ShareEmpty(state.category)
+                LazyColumn(Modifier.fillMaxSize()) { item { ShareEmpty(state.category) } }
             } else {
-                ShareList(visible, onUpdatePermissions, onRevoke, onBrowseResource)
+                ShareList(visible, onUpdatePermissions, onRevoke, onBrowseResource, layout)
             }
         }
     }
@@ -503,31 +537,27 @@ private fun ShareList(
     onUpdatePermissions: (ShareEntity, Int) -> Unit,
     onRevoke: (ShareEntity) -> Unit,
     onBrowseResource: ((ResourceEntity) -> Unit)?,
-) = LazyColumn {
-    items(values, key = { it.remoteId }) { share ->
-        ShareRow(share, onUpdatePermissions, onRevoke, onBrowseResource)
-    }
+    layout: SettingsBrowserLayout,
+) = BrowserContent(values, { it.remoteId }, layout) { share ->
+    ShareRow(share, onUpdatePermissions, onRevoke, onBrowseResource, layout)
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ShareRow(
     share: ShareEntity,
     onUpdatePermissions: (ShareEntity, Int) -> Unit,
     onRevoke: (ShareEntity) -> Unit,
     onBrowseResource: ((ResourceEntity) -> Unit)? = null,
+    layout: SettingsBrowserLayout = SettingsBrowserLayout.DEFAULT_TABLE,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
     var copying by remember { mutableStateOf(false) }
     var copyError by remember { mutableStateOf<String?>(null) }
     var editing by rememberSaveable(share.remoteId) { mutableStateOf(false) }
-    val title =
-        if (share.shareType == OcsShareType.PUBLIC_LINK.value) {
-            share.label?.takeIf(String::isNotBlank)
-                ?: share.path.substringAfterLast('/').ifBlank { stringResource(R.string.shares_public_link_fallback) }
-        } else {
-            share.displayName ?: share.label ?: share.shareWith ?: share.path.substringAfterLast('/')
-        }
+    val title = shareRowTitle(share)
     val expiration =
         if (share.expiresAtEpochMillis !=
             null
@@ -537,58 +567,63 @@ private fun ShareRow(
             ""
         }
     val copyFailureMessage = stringResource(R.string.shares_copy_link_failed)
-    ListItem(
-        modifier =
-            Modifier.clickable(enabled = share.shareType == OcsShareType.PUBLIC_LINK.value && !copying) {
-                copying = true
-                scope.launch {
-                    try {
-                        val link =
-                            withContext(
-                                Dispatchers.IO,
-                            ) { ShareManager(context).publicLink(share.accountId, share.remoteId) }
-                        context.copyPublicLink(link)
-                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        copyError = copyFailureMessage
-                    } finally {
-                        copying = false
-                    }
-                }
-            },
-        headlineContent = { Text(title) },
-        supportingContent = {
-            Column {
-                Text(sharedItemSummary(share))
-                Text(
-                    stringResource(
-                        R.string.shares_row_metadata,
-                        shareTypeLabel(share),
-                        permissionLabel(share.permissions),
-                        expiration,
-                    ),
+    val copyLink = {
+        copying = true
+        scope.launch {
+            try {
+                val link =
+                    withContext(
+                        Dispatchers.IO,
+                    ) { ShareManager(context).publicLink(share.accountId, share.remoteId) }
+                context.copyPublicLink(link)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                copyError = copyFailureMessage
+            } finally {
+                copying = false
+            }
+        }
+    }
+    BrowserEntry(
+        layout,
+        onOpen = { editing = true },
+        name = { Text(title, maxLines = 1) },
+        metadata = { Text(sharedItemSummary(share) + expiration, maxLines = 2) },
+        thumbnail = { modifier ->
+            Box(modifier, contentAlignment = Alignment.Center) {
+                Icon(
+                    if (share.shareType ==
+                        OcsShareType.PUBLIC_LINK.value
+                    ) {
+                        Icons.Default.Link
+                    } else {
+                        Icons.Default.Group
+                    },
+                    null,
                 )
             }
         },
-        leadingContent = {
-            Icon(
-                if (share.shareType == 1) {
-                    Icons.Default.Group
-                } else if (share.shareType == OcsShareType.PUBLIC_LINK.value) {
-                    Icons.Default.Link
-                } else {
-                    Icons.Default.Person
-                },
-                null,
-            )
-        },
-        trailingContent = {
-            TextButton(onClick = { editing = true }) {
-                Text(stringResource(R.string.shares_details))
+        actions = {
+            IconButton(onClick = { menu = true }) {
+                Icon(Icons.Default.MoreVert, stringResource(R.string.shares_actions_for_file, title))
             }
         },
     )
+    if (menu) {
+        BrowserActionSheet(title, { menu = false }) {
+            BrowserAction(stringResource(R.string.incoming_details), Icons.Default.Info) {
+                menu = false
+                editing = true
+            }
+            if (share.shareType == OcsShareType.PUBLIC_LINK.value && !copying) {
+                BrowserAction(stringResource(R.string.shares_copy_link), Icons.Default.Link) {
+                    menu = false
+                    copyLink()
+                }
+            }
+        }
+    }
     if (editing) {
         ManageShareDialog(
             share = share,
@@ -892,27 +927,6 @@ private fun Int.toggle(
 ) = if (enabled) this or flag else this and flag.inv()
 
 @Composable
-private fun shareTypeLabel(share: ShareEntity) =
-    when (share.shareType) {
-        1 -> stringResource(R.string.shares_recipient_group)
-        3 -> stringResource(R.string.shares_public_link_fallback)
-        else ->
-            stringResource(
-                if (share.sharedWithMe) R.string.shares_shared_with_you else R.string.shares_recipient_user,
-            )
-    }
-
-@Composable
-private fun permissionLabel(value: Int): String {
-    val labels = mutableListOf(stringResource(R.string.shares_permission_read))
-    if (value and 2 != 0) labels += stringResource(R.string.shares_permission_update)
-    if (value and 4 != 0) labels += stringResource(R.string.shares_permission_create)
-    if (value and 8 != 0) labels += stringResource(R.string.shares_permission_delete)
-    if (value and 16 != 0) labels += stringResource(R.string.shares_permission_share)
-    return labels.joinToString(", ")
-}
-
-@Composable
 private fun ShareEmpty(category: ShareCategory) =
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -976,3 +990,12 @@ private fun Context.copyPublicLink(link: TransientPublicLink) {
     getSystemService(ClipboardManager::class.java)
         .setPrimaryClip(ClipData.newPlainText(getString(R.string.shares_clipboard_label), link.valueForClipboard()))
 }
+
+@Composable
+private fun shareRowTitle(share: ShareEntity): String =
+    if (share.shareType == OcsShareType.PUBLIC_LINK.value) {
+        share.label?.takeIf(String::isNotBlank)
+            ?: share.path.substringAfterLast('/').ifBlank { stringResource(R.string.shares_public_link_fallback) }
+    } else {
+        share.displayName ?: share.label ?: share.shareWith ?: share.path.substringAfterLast('/')
+    }

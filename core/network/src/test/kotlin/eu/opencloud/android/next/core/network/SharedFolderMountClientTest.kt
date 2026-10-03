@@ -93,7 +93,7 @@ class SharedFolderMountClientTest {
         assertEquals(server.url("/authoritative/").toString(), result.webDavUrl)
         server.takeRequest()
         assertEquals(
-            "/prefix/graph/v1beta1/drives/remote-drive/items/item",
+            "/prefix/graph/v1.0/drives/remote-drive/items/item",
             server.takeRequest().requestUrl?.encodedPath,
         )
     }
@@ -108,7 +108,7 @@ class SharedFolderMountClientTest {
             )
         assertEquals(SharedFolderResolution.Unavailable, result)
         assertEquals(1, server.requestCount)
-        assertEquals("/prefix/graph/v1beta1/drives/drive/items/item", server.takeRequest().requestUrl?.encodedPath)
+        assertEquals("/prefix/graph/v1.0/drives/drive/items/item", server.takeRequest().requestUrl?.encodedPath)
     }
 
     private fun resolve() = client.remoteDriveId(server.url("/prefix/").toString(), "Bearer token", "item")

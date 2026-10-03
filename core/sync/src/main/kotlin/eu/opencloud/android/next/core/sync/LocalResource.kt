@@ -26,7 +26,11 @@ suspend fun prepareLocalResource(
                 value.localPath?.takeIf { value.hasLocalCopy },
                 value.sizeBytes,
             )?.also { it.setLastModified(System.currentTimeMillis()) } != null
-        val current = requireNotNull(store.resource(resource.accountId, resource.spaceId, resource.remoteId))
+        val permit =
+            eu.opencloud.android.next.core.security
+                .AppLock(context)
+                .beginAppAction()
+        val current = ExternalFileFreshness(context, store).current(resource, permit)
         if (cached(current)) return@withContext current
         if (!AndroidNetworkStatus(context).isConnected()) throw OpenCloudException(OpenCloudError.Connectivity)
         val id = TransferManager(context, store).enqueueDownload(current, offlinePin = false)

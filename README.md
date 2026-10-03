@@ -21,6 +21,9 @@ Making it public does not mean it is a polished production product or suitable f
 - Personal files and project Spaces, search, favorites, recents and offline access.
 - Uploads, downloads, copy/move, sharing links and Android file-picker integration.
 - Folder/camera backup, local cache controls and optional biometric/device locking.
+- Cloud folders for other apps, built-in text/PDF/image viewers and file version history.
+- Home screen folder shortcuts with color choices and custom images.
+- Shared-folder downloads, server notifications and Space member management.
 - English and German, with an independent app-language choice and grouped Appearance settings.
 - PDF/JPEG scanning through a pinned, separately versioned [offline scanner SDK](https://github.com/phillip9933/open-android-doc-scanner).
 
@@ -43,6 +46,7 @@ Translations use Android resource files. Missing translations fall back to Engli
 
 ## Known beta limitations
 
+- End-to-end encrypted Spaces are not currently supported. Raiun does not implement their client-side encryption, decryption or key management.
 - Large transfers across mobile/Wi-Fi changes can restart or require retry; HTTP 502/timeouts have been observed on some server/network paths.
 - External editor, Office/server integrations and broader device/provider combinations have incomplete acceptance coverage.
 - Scanner pages not yet exported may be lost if Android kills the capture process.

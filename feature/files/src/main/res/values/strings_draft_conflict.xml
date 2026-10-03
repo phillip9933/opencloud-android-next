@@ -1,0 +1,5 @@
+<resources>
+    <string name="document_server_changed">This file has changed since you started editing. Your draft has been kept separately. Saving it may require resolving a conflict.</string>
+    <string name="document_view_current">View current file</string>
+    <string name="document_resume_draft">Resume draft</string>
+</resources>

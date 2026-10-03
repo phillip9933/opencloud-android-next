@@ -57,7 +57,7 @@ class TextEditorGoldenTest {
             }
         }
         composeRule.onNodeWithText("Save to server").assertIsNotEnabled()
-        composeRule.onNodeWithText("Discard draft").assertIsNotEnabled()
+        composeRule.onNodeWithText("Discard draft").assertDoesNotExist()
         composeRule.onRoot().captureRoboImage("src/test/snapshots/images/text_editor_queued_dark.png")
     }
 

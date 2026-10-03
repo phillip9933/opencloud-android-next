@@ -1,0 +1,12 @@
+<resources>
+    <string name="spaces_heading">Spaces</string>
+    <string name="spaces_members">Members</string>
+    <string name="spaces_download">Download space</string>
+    <string name="spaces_refresh">Refresh</string>
+    <string name="spaces_member_add">Add member</string>
+    <string name="spaces_member_remove">Remove member</string>
+    <string name="spaces_member_remove_confirmation">Remove %1$s from this Space?</string>
+    <string name="spaces_member_search">Find people or groups</string>
+    <string name="spaces_members_scope">Memberships visible to your account. The server checks whether you can add, change or remove members.</string>
+    <string name="spaces_custom_role">Custom role</string>
+</resources>

@@ -30,6 +30,12 @@ import java.util.Base64
 class ProviderAccessTest {
     @Test fun cachedReadAccess() {
         val context = RuntimeEnvironment.getApplication()
+        val connectivity =
+            org.robolectric.Shadows.shadowOf(
+                context.getSystemService(android.net.ConnectivityManager::class.java),
+            )
+        connectivity.setActiveNetworkInfo(null)
+        connectivity.clearAllNetworks()
         val database = FileBrowserDatabase.create(context)
         val space =
             SpaceEntity("a", "s", "Space", "project", null, null, "root", "https://cloud.example/dav/s", null, null)
@@ -102,7 +108,9 @@ class ProviderAccessTest {
         provider.queryDocument(id, null).use {
             it.moveToFirst()
             assertEquals(
-                android.provider.DocumentsContract.Document.FLAG_SUPPORTS_WRITE,
+                android.provider.DocumentsContract.Document.FLAG_SUPPORTS_WRITE or
+                    android.provider.DocumentsContract.Document.FLAG_SUPPORTS_RENAME or
+                    android.provider.DocumentsContract.Document.FLAG_SUPPORTS_DELETE,
                 it.getInt(it.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_FLAGS)),
             )
         }

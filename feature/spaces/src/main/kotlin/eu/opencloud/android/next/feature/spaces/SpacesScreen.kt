@@ -6,17 +6,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -83,23 +87,33 @@ fun SpacesRoute(
         },
     )
     selected?.let { (space, action) ->
-        SpaceActionDialog(space, action, onDismiss = { selected = null }, onSubmit = { value ->
-            selected = null
-            if (action == SpaceAction.WEB) {
-                scope.launch {
-                    try {
-                        val url = viewModel.webUrl(space)
-                        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (failure: Exception) {
-                        viewModel.reportError(failure.toOpenCloudError().safeMessage(context))
-                    }
-                }
-            } else {
-                viewModel.perform(space, action, value)
+        if (action == SpaceAction.MEMBERS) {
+            SpaceMembersDialog(space) { selected = null }
+        } else if (action == SpaceAction.DOWNLOAD) {
+            eu.opencloud.android.next.core.ui.FolderDownloadDialog(space.name, { selected = null }) { progress ->
+                eu.opencloud.android.next.core.sync
+                    .FolderDownloads(context)
+                    .space(accountId, space.driveId, progress)
             }
-        })
+        } else {
+            SpaceActionDialog(space, action, onDismiss = { selected = null }, onSubmit = { value ->
+                selected = null
+                if (action == SpaceAction.WEB) {
+                    scope.launch {
+                        try {
+                            val url = viewModel.webUrl(space)
+                            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            viewModel.reportError(failure.toOpenCloudError().safeMessage(context))
+                        }
+                    }
+                } else {
+                    viewModel.perform(space, action, value)
+                }
+            })
+        }
     }
     state.error?.let { error ->
         AlertDialog(
@@ -122,30 +136,53 @@ fun SpacesScreen(
     onRefresh: () -> Unit = {},
     onAction: (SpaceEntity, SpaceAction) -> Unit = { _, _ -> },
 ) {
-    PullToRefreshBox(isRefreshing = state.loading, onRefresh = onRefresh, modifier = modifier.fillMaxSize()) {
-        if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        when {
-            state.loading && state.spaces.isEmpty() ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            state.spaces.isEmpty() -> SpacesMessage(stringResource(R.string.spaces_none_available))
-            else ->
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(OpenCloudDimensions.SpacingMd),
-                    verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
-                ) {
-                    items(state.spaces, key = { it.driveId }) { space ->
-                        SpaceCard(
-                            space = space,
-                            busy = state.busy || state.loading,
-                            browsable = state.browsableIds?.contains(space.driveId) != false,
-                            onOpen = { onOpenSpace(space.driveId) },
-                            onAction = { onAction(space, it) },
-                        )
+    Column(modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = OpenCloudDimensions.SpacingMd),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.spaces_heading),
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            IconButton(onClick = onRefresh, enabled = !state.loading && !state.busy) {
+                Icon(Icons.Default.Refresh, stringResource(R.string.spaces_refresh))
+            }
+        }
+        PullToRefreshBox(isRefreshing = state.loading, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+            if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            when {
+                state.loading && state.spaces.isEmpty() ->
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
                     }
-                }
+                state.spaces.isEmpty() ->
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        item {
+                            SpacesMessage(
+                                stringResource(R.string.spaces_none_available),
+                                Modifier.fillParentMaxSize(),
+                            )
+                        }
+                    }
+                else ->
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(OpenCloudDimensions.SpacingMd),
+                        verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
+                    ) {
+                        items(state.spaces, key = { it.driveId }) { space ->
+                            SpaceCard(
+                                space = space,
+                                busy = state.busy || state.loading,
+                                browsable = state.browsableIds?.contains(space.driveId) != false,
+                                onOpen = { onOpenSpace(space.driveId) },
+                                onAction = { onAction(space, it) },
+                            )
+                        }
+                    }
+            }
         }
     }
 }

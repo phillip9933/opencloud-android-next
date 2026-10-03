@@ -58,6 +58,11 @@ class SpaceManagementManager private constructor(
         return spaces
     }
 
+    suspend fun refreshMembership(accountId: String) {
+        val session = session(accountId)
+        session.repository.synchronize(accountId, session.account.serverUrl, session.authorization)
+    }
+
     suspend fun update(
         accountId: String,
         driveId: String,

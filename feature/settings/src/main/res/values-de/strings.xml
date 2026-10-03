@@ -22,7 +22,7 @@
         <item quantity="one">%1$d Tag</item>
         <item quantity="other">%1$d Tage</item>
     </plurals>
-    <string name="settings_backup_security">Sicherung &amp; Sicherheit</string>
+    <string name="settings_backup_security">Daten und Sicherheit</string>
     <string name="settings_folder_camera_backup">Ordner- &amp; Kamerasicherung</string>
     <string name="settings_manage_automatic_uploads">Automatische Uploads einrichten und verwalten</string>
     <string name="settings_open_backup_configuration">Sicherungskonfiguration öffnen</string>

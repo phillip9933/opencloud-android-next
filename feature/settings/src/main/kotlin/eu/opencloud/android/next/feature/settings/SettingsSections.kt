@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
@@ -51,6 +52,7 @@ internal fun SettingsSections(
     diagnostics: SettingsDiagnostics,
     onSecurity: () -> Unit,
     onClearTemporary: () -> Unit,
+    onFileOpening: () -> Unit,
 ) {
     val retentionOptions =
         listOf(
@@ -64,6 +66,7 @@ internal fun SettingsSections(
         Modifier.padding(OpenCloudDimensions.SpacingMd),
         verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingMd),
     ) {
+        Text(stringResource(R.string.settings_appearance_defaults), style = MaterialTheme.typography.titleSmall)
         Card(onClick = onOpenAppearance, modifier = Modifier.fillMaxWidth()) {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.settings_appearance)) },
@@ -73,28 +76,14 @@ internal fun SettingsSections(
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
             )
         }
-        Text(stringResource(R.string.settings_local_storage), style = MaterialTheme.typography.titleSmall)
-        Card {
+        Card(onClick = onFileOpening, modifier = Modifier.fillMaxWidth()) {
             ListItem(
-                headlineContent = { Text(stringResource(R.string.settings_delete_temporary_copies)) },
-                leadingContent = { Icon(Icons.Default.History, null) },
-                supportingContent = { Text(stringResource(R.string.settings_temporary_copy_retention_description)) },
+                headlineContent = { Text(stringResource(R.string.settings_opening_files)) },
+                supportingContent = { Text(stringResource(R.string.settings_opening_summary)) },
+                leadingContent = { Icon(Icons.Default.FolderOpen, null) },
+                trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
-                trailingContent = {
-                    SettingsChoice(
-                        stringResource(R.string.settings_change_copy_retention),
-                        retentionOptions.first { it.first == state.temporaryCopyRetentionHours }.second,
-                        retentionOptions.map { it.second },
-                    ) {
-                        onRetention(retentionOptions.first { entry -> entry.second == it }.first)
-                    }
-                },
             )
-            Box(
-                Modifier.padding(horizontal = OpenCloudDimensions.SpacingMd, vertical = OpenCloudDimensions.SpacingXs),
-            ) {
-                TemporaryCleanupButton(onClearTemporary)
-            }
         }
         Text(stringResource(R.string.settings_backup_security), style = MaterialTheme.typography.titleSmall)
         Card(onClick = onBackup, modifier = Modifier.fillMaxWidth()) {
@@ -124,6 +113,28 @@ internal fun SettingsSections(
                 },
                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
             )
+        }
+        Card {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_delete_temporary_copies)) },
+                leadingContent = { Icon(Icons.Default.History, null) },
+                supportingContent = { Text(stringResource(R.string.settings_temporary_copy_retention_description)) },
+                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                trailingContent = {
+                    SettingsChoice(
+                        stringResource(R.string.settings_change_copy_retention),
+                        retentionOptions.first { it.first == state.temporaryCopyRetentionHours }.second,
+                        retentionOptions.map { it.second },
+                    ) {
+                        onRetention(retentionOptions.first { entry -> entry.second == it }.first)
+                    }
+                },
+            )
+            Box(
+                Modifier.padding(horizontal = OpenCloudDimensions.SpacingMd, vertical = OpenCloudDimensions.SpacingXs),
+            ) {
+                TemporaryCleanupButton(onClearTemporary)
+            }
         }
         Text(stringResource(R.string.settings_troubleshooting), style = MaterialTheme.typography.titleSmall)
         DiagnosticsCard(state, diagnostics)

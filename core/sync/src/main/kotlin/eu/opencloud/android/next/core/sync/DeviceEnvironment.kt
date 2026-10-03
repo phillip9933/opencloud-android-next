@@ -19,10 +19,18 @@ class AndroidNetworkStatus(
     private val connectivity = context.applicationContext.getSystemService(ConnectivityManager::class.java)
 
     override fun isConnected(): Boolean =
-        connectivity
-            .getNetworkCapabilities(connectivity.activeNetwork)
-            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        supportsServerTraffic(connectivity.getNetworkCapabilities(connectivity.activeNetwork)) ||
+            connectivity.allNetworks.any { supportsServerTraffic(connectivity.getNetworkCapabilities(it)) }
 }
+
+internal fun supportsServerTraffic(capabilities: NetworkCapabilities?): Boolean =
+    capabilities != null &&
+        (
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+        )
 
 class AndroidStorageSpaceProvider(
     context: Context,

@@ -1,0 +1,17 @@
+<resources>
+    <string name="file_versions_title">Version history</string>
+    <string name="file_versions_loading">Loading versions…</string>
+    <string name="file_versions_empty">No earlier versions are available for this file.</string>
+    <string name="file_versions_unavailable">Version history is unavailable for this file or server.</string>
+    <string name="file_versions_error">Could not load versions. Check your connection and access, then retry.</string>
+    <string name="file_versions_restore">Restore</string>
+    <string name="file_versions_restoring">Restoring…</string>
+    <string name="file_versions_confirm">Replace the current contents of “%1$s” with this version? Server retention settings determine which versions remain available.</string>
+    <string name="file_versions_restore_error">Restore could not be confirmed. Refresh the file before retrying. Check for pending edits or uploads and confirm you still have write access.</string>
+    <string name="file_versions_restored">Version restored. The file listing will refresh.</string>
+    <string name="file_versions_retry">Retry</string>
+    <string name="file_versions_close">Close</string>
+    <string name="file_versions_cancel">Cancel</string>
+    <string name="file_versions_unknown_date">Date unavailable</string>
+    <string name="file_versions_unknown_size">Size unavailable</string>
+</resources>

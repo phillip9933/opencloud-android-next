@@ -33,6 +33,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:ui"))
     implementation(libs.androidx.work.runtime.ktx)
     implementation(project(":core:database"))
     implementation(project(":core:network"))

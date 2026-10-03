@@ -1,0 +1,12 @@
+<resources>
+    <string name="incoming_preparing">Preparing file…</string>
+    <string name="incoming_cancel">Cancel</string>
+    <string name="incoming_close">Close</string>
+    <string name="incoming_open_with">Open with</string>
+    <string name="incoming_send">Send file</string>
+    <string name="incoming_details">Details</string>
+    <string name="incoming_layout">Change layout</string>
+    <string name="incoming_layout_list">List</string>
+    <string name="incoming_layout_compact">Compact list</string>
+    <string name="incoming_layout_tiles">Tiles</string>
+</resources>

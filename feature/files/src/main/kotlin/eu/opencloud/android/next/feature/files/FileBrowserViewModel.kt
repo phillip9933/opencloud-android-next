@@ -653,6 +653,7 @@ class FileBrowserViewModel(
             current = current.parentId?.let { store.resource(account, spaceId, it) }
         }
         val restored = trail.asReversed().takeIf { current == null }.orEmpty()
+        if (activeLocation.value != null) return // A shortcut or user navigation superseded saved-location loading.
         reduce { copy(currentFolderId = restored.lastOrNull()?.id, folderTrail = restored) }
         setActiveLocation(spaceId, restored.lastOrNull()?.id)
     }

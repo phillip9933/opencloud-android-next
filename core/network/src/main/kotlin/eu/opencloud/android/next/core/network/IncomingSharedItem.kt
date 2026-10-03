@@ -12,6 +12,10 @@ data class IncomingSharedItem(
     val name: String? = null,
     val folder: JsonObject? = null,
     val file: JsonObject? = null,
+    val parentReference: SharedParentReference? = null,
+    val size: Long? = null,
+    val lastModifiedDateTime: String? = null,
+    @SerialName("@UI.Hidden") val hidden: Boolean = false,
     @SerialName("@client.synchronize") val synchronized: Boolean? = null,
     @SerialName("@libre.graph.permissions.actions.allowedValues") val effectiveActions: Set<String>? = null,
 )
@@ -26,6 +30,7 @@ data class SharedRemoteItem(
     val eTag: String? = null,
     val parentReference: SharedParentReference? = null,
     val permissions: List<SharedItemGrant>? = null,
+    val createdBy: SharedGrantRecipient? = null,
 )
 
 @Serializable
@@ -41,6 +46,9 @@ data class SharedItemGrant(
     val roles: Set<String> = emptySet(),
     @SerialName("@libre.graph.permissions.actions") val actions: Set<String> = emptySet(),
     val grantedToV2: SharedGrantRecipient? = null,
+    val invitation: SharedInvitation? = null,
+    val createdDateTime: String? = null,
+    val expirationDateTime: String? = null,
 )
 
 @Serializable
@@ -52,4 +60,10 @@ data class SharedGrantRecipient(
 @Serializable
 data class SharedGrantIdentity(
     val id: String,
+    val displayName: String? = null,
+)
+
+@Serializable
+data class SharedInvitation(
+    val invitedBy: SharedGrantRecipient? = null,
 )

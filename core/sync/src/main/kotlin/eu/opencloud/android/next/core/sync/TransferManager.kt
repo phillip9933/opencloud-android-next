@@ -507,7 +507,10 @@ class TransferManager(
             val name = "transfer-${current.id}"
             val existing = workManager.getWorkInfosForUniqueWork(name).get().firstOrNull { !it.state.isFinished }
             val matchesIntent = current.workId == null || existing?.id?.toString() == current.workId
-            if (existing != null && matchesIntent) {
+            val obsoleteConstraint =
+                existing?.constraints?.requiredNetworkType == NetworkType.CONNECTED &&
+                    existing.state != androidx.work.WorkInfo.State.RUNNING
+            if (existing != null && matchesIntent && !obsoleteConstraint) {
                 store.recordScheduledWork(current, existing.id.toString(), clock.epochMillis())
                 return@withLock
             }
@@ -554,7 +557,7 @@ class TransferManager(
             }
         return Constraints
             .Builder()
-            .setRequiredNetworkType(if (pairs.any { it.wifiOnly }) NetworkType.UNMETERED else NetworkType.CONNECTED)
+            .setRequiredNetworkType(if (pairs.any { it.wifiOnly }) NetworkType.UNMETERED else NetworkType.NOT_REQUIRED)
             .setRequiresCharging(pairs.any { it.chargingOnly })
             .build()
     }
@@ -647,7 +650,9 @@ internal fun ensureBackupCollections(
     return created
 }
 
-private fun networkConstraints() = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+// WorkManager CONNECTED requires internet validation on modern Android; a LAN server needs only a route.
+// Workers probe connectivity and use the existing retry/backoff policy when the server is unreachable.
+private fun networkConstraints() = Constraints.Builder().setRequiredNetworkType(NetworkType.NOT_REQUIRED).build()
 
 internal fun String.mutationChildUrl(path: String): String =
     toHttpUrl()
@@ -666,7 +671,7 @@ internal fun backupConstraints(
 ): Constraints =
     Constraints
         .Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
         .build()
 
 internal fun conflictCopyPath(path: String): String {
