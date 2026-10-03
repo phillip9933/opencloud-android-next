@@ -8,7 +8,7 @@ Start with [README](../README.md) for installation and current beta limits, and 
 | [Scanner SDK](OFFLINE-SCANNER-SDK.md) | Pinned dependency setup and host ownership |
 | [Screenshot testing](SCREENSHOT_TESTING.md) | Golden ownership and review |
 | [Release procedure](RELEASING.md) | Packaging, signing continuity and release checks |
-| [Beta release notes](RELEASE-NOTES-0.8.0-beta.1.md) | Version-specific behavior and limitations |
+| [Release notes](RELEASE-NOTES-0.8.1.md) | Version-specific behavior and limitations |
 | [Security](../SECURITY.md) and [Privacy](../PRIVACY.md) | Reporting and data-handling boundaries |
 | [Third-party notices](../THIRD-PARTY-NOTICES.md) | Dependency declarations and retained evidence |
 | [Phase 0 architecture proposal](ARCHITECTURE.md) | Historical design intent, not the current module inventory |

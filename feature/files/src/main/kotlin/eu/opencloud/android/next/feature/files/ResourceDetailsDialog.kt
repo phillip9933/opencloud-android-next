@@ -101,6 +101,11 @@ private fun ResourceDetailsContent(
                 verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
             ) {
                 BasicResourceDetails(resource)
+                eu.opencloud.android.next.core.ui.ItemActivitiesAction(
+                    resource.accountId,
+                    resource.remoteId,
+                    resource.name,
+                )
                 if (resource.kind == eu.opencloud.android.next.core.model.ResourceKind.FILE) {
                     TextButton(onClick = onVersions) { Text(stringResource(R.string.file_versions_title)) }
                 }

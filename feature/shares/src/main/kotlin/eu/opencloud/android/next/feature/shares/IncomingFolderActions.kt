@@ -80,7 +80,13 @@ internal fun IncomingFolderActions(
                 .shared(folder.request, progress)
         }
     } else if (showDetails && details != null) {
-        IncomingFolderDetailsDialog(requireNotNull(details), onClose)
+        IncomingFolderDetailsDialog(requireNotNull(details), onClose) {
+            eu.opencloud.android.next.core.ui.ItemActivitiesAction(
+                folder.request.account,
+                folder.request.remoteId,
+                folder.name,
+            )
+        }
     } else if (confirmVisibility && details != null) {
         val hidden = requireNotNull(details).hidden
         AlertDialog(
@@ -206,6 +212,7 @@ fun IncomingFolderActionSheet(
 fun IncomingFolderDetailsDialog(
     details: IncomingFolderDetails,
     onClose: () -> Unit,
+    activities: @Composable () -> Unit = {},
 ) {
     val context = LocalContext.current
     AlertDialog(onDismissRequest = onClose, title = { Text(details.name) }, text = {
@@ -213,6 +220,7 @@ fun IncomingFolderDetailsDialog(
             Modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm),
         ) {
+            activities()
             DetailValue(
                 R.string.incoming_folder_location,
                 details.shareName + if (details.path == "/") "" else details.path,

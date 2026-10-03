@@ -14,6 +14,7 @@ Making it public does not mean it is a polished production product or suitable f
 - Uploads, downloads, copy/move, sharing links and Android file-picker integration.
 - Folder/camera backup, local cache controls and optional biometric/device locking.
 - Cloud folders for other apps, built-in text/PDF/image viewers and file version history.
+- File and folder activities showing changes reported by the server.
 - Home screen folder shortcuts with color choices and custom images.
 - Shared-folder downloads, server notifications and Space member management.
 - English and German, with an independent app-language choice and grouped Appearance settings.

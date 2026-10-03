@@ -46,6 +46,11 @@ internal fun rememberIncomingFileActions(
     details?.let { file ->
         AlertDialog(onDismissRequest = { details = null }, title = { Text(file.name) }, text = {
             Column {
+                eu.opencloud.android.next.core.ui.ItemActivitiesAction(
+                    file.request.accountId,
+                    file.request.file.remoteId,
+                    file.name,
+                )
                 Text(fileMimeType(file.name, file.mimeType))
                 Text(
                     android.text.format.Formatter

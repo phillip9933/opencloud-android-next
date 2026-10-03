@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(project(":core:sync"))
+    implementation(project(":core:network"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))

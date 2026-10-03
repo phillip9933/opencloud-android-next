@@ -1,0 +1,11 @@
+<resources>
+    <string name="activities_title">Activities</string>
+    <string name="activities_empty">No activities</string>
+    <string name="activities_loading">Loading activities</string>
+    <string name="activities_unavailable">Activities are not available on this server or for this item.</string>
+    <string name="activities_error">Could not load activities. Check your connection and access, then retry.</string>
+    <string name="activities_limit">Showing up to 200 recent activities.</string>
+    <string name="activities_retry">Retry</string>
+    <string name="activities_refresh">Refresh</string>
+    <string name="activities_back">Back to details</string>
+</resources>

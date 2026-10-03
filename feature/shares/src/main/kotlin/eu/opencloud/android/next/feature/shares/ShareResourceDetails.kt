@@ -50,6 +50,10 @@ internal fun ShareResourceDetails(
     }
     Column(verticalArrangement = Arrangement.spacedBy(OpenCloudDimensions.SpacingSm)) {
         ShareScopeMetadata(share, resource)
+        share.resourceId?.takeIf { it.isNotBlank() }?.let { itemId ->
+            eu.opencloud.android.next.core.ui
+                .ItemActivitiesAction(share.accountId, itemId, share.label ?: share.path)
+        }
         if (onBrowseResource != null) ShareBrowseAction(share.isFolder, resource, loading, onBrowseResource)
     }
 }
